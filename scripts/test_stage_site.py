@@ -26,7 +26,7 @@ class StageSiteTests(unittest.TestCase):
             data = json.loads(page.split('<script type="application/ld+json">')[1].split('</script>')[0])
             self.assertEqual(data['url'], DEFAULT_URL)
             self.assertIn(f'href="{DEFAULT_URL}"', page)
-            self.assertIn('https://github.com/BenchUp3D/editor/releases/latest', page)
+            self.assertIn('https://github.com/BenchUp3D/benchup/releases/latest', page)
             locations = ET.parse(target / 'sitemap.xml').findall('{*}url/{*}loc')
             self.assertEqual([node.text for node in locations], [DEFAULT_URL])
             self.assertIn(DEFAULT_URL + 'sitemap.xml', (target / 'robots.txt').read_text())

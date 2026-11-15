@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub const DOWNLOAD_URL: &str = "https://github.com/BenchUp3D/editor/releases/latest";
+pub const DOWNLOAD_URL: &str = "https://github.com/BenchUp3D/benchup/releases/latest";
 
 #[cfg(target_os = "macos")]
 const BUNDLE_ID: &str = "io.github.BenchUp3D.BenchUp";

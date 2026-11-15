@@ -1109,6 +1109,9 @@ impl Mesh {
                     .chunks(faces.len().div_ceil(workers))
                     .map(|chunk| {
                         let mut mesh = Self::new(&self.joint_surfaces.camera, self.size);
+                        // Faces and overlays must use the same scene clip planes.
+                        // Rebuilding the default view puts them in different depth ranges.
+                        mesh.view = self.view.clone();
                         mesh.display = self.display.clone();
                         (chunk, mesh)
                     })
@@ -1293,6 +1296,7 @@ impl Mesh {
     #[cfg(not(target_arch = "wasm32"))]
     fn overlay_worker(&self, read_outlines: bool) -> Self {
         let mut mesh = Self::new(&self.joint_surfaces.camera, self.size);
+        mesh.view = self.view.clone();
         mesh.display = self.display.clone();
         mesh.pixels_per_point = self.pixels_per_point;
         mesh.gpu_edge_occlusion = self.gpu_edge_occlusion;
@@ -2160,7 +2164,7 @@ impl Mesh {
                         .len()
                         .div_ceil(crate::viewport_workers::parallelism()),
                 )
-                .map(|chunk| (chunk, self.joint_surfaces.camera.view(self.size)))
+                .map(|chunk| (chunk, self.view.clone()))
                 .collect();
             let display = &self.display;
             let size = self.size;
@@ -4444,7 +4448,7 @@ mod tests {
         use super::*;
         let camera = Camera::default();
         let size = DVec2::splat(512.);
-        let inverse = camera.matrix(size).inverse();
+        let inverse = camera.matrix_with_clip_planes(size, 0.5, 100.).inverse();
         let world = |x, y, z| inverse.project_point3(DVec3::new(x / 256. - 1., 1. - y / 256., z));
         let mut model = Model::default();
         for i in 0..96 {
@@ -4464,6 +4468,8 @@ mod tests {
         for antialias in [false, true] {
             let build = |parallel: bool| {
                 let mut mesh = Mesh::new(&camera, size);
+                mesh.set_scene_clip_planes(&camera, model.bounds());
+                assert_ne!(mesh.view.matrix(), camera.matrix(size));
                 mesh.display.fog = true;
                 mesh.display.shadow_antialiasing = antialias;
                 // An existing prefix checks both vertex and index offsets.
@@ -4480,6 +4486,8 @@ mod tests {
             };
             let serial = build(false);
             let parallel = build(true);
+            assert!(!serial.vertices.is_empty());
+            if antialias { assert!(!serial.shadow_vertices.is_empty()); }
             assert_eq!(serial.indices, parallel.indices);
             assert_eq!(serial.triangle_ranges, parallel.triangle_ranges);
             assert_eq!(bytemuck::cast_slice::<_, u8>(&serial.vertices), bytemuck::cast_slice::<_, u8>(&parallel.vertices));
@@ -4490,6 +4498,47 @@ mod tests {
                 let other = &parallel.edge_surfaces[key];
                 surfaces.iter().map(|s| (s.gradient, s.inward)).eq(other.iter().map(|s| (s.gradient, s.inward)))
             }));
+        }
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn parallel_faces_and_grain_share_scene_depth_in_both_projections() {
+        use super::*;
+        for projection in [benchup_core::Projection::Perspective, benchup_core::Projection::Parallel] {
+            let camera = Camera { projection, distance: 4., ..Default::default() };
+            let size = DVec2::splat(512.);
+            let mut model = Model::default();
+            for i in 0..96 {
+                let x = f64::from(i % 12) * 0.1;
+                let y = f64::from(i / 12) * 0.1;
+                let points = [DVec3::new(x, y, 0.), DVec3::new(x + 0.08, y, 0.),
+                    DVec3::new(x, y + 0.08, 0.)];
+                for j in 0..3 { model.add_edge(points[j], points[(j + 1) % 3]).unwrap(); }
+            }
+            let mut cache = FaceCache::default();
+            cache.update(&model);
+            assert_eq!(model.faces.len(), 96);
+            let faces: Vec<_> = model.faces.values().map(|face| FaceDraw {
+                face, cached: cache.get(face.id), color: Color32::WHITE,
+                surface: None, smooth: None, shadow: None,
+            }).collect();
+            let mut mesh = Mesh::new(&camera, size);
+            mesh.set_scene_clip_planes(&camera, model.bounds());
+            mesh.enable_gpu_edge_occlusion();
+            mesh.draw_faces(&faces);
+            let base = mesh.vertices.len();
+            assert!(base >= 96 * 3);
+            for face in &faces {
+                mesh.surface_grain(face.cached, DVec3::X, 0.85, Color32::BLACK, true);
+            }
+            mesh.normalize_parallel_depth();
+            assert_eq!(mesh.vertices[..base].iter().map(|v| v.position).collect::<Vec<_>>(),
+                mesh.vertices[base..].iter().map(|v| v.position).collect::<Vec<_>>(),
+                "batched surfaces and their grain must have identical GPU depths: {projection:?}");
+            let worker = mesh.overlay_worker(false);
+            assert_eq!(mesh.view.matrix(), worker.view.matrix(),
+                "batched edges and joint guides must share the surfaces' depth range");
         }
     }
 

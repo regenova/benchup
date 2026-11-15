@@ -1,5 +1,35 @@
 [
   {
+    "version": "0.7.3",
+    "date": "2026-11-15",
+    "title": "Clearer tools, flexible sidebars, and viewport fixes",
+    "sections": [
+      {
+        "title": "Workspace and tools",
+        "changes": [
+          "Resize the left tool rail and right inspector by dragging their dividers, with widths remembered across sessions.",
+          "Read wrapped tool labels more easily and find tool flyouts with clearer arrows and larger hover targets.",
+          "Use translated placement instructions for the Image tool."
+        ]
+      },
+      {
+        "title": "Viewport and desktop fixes",
+        "changes": [
+          "Keep wood grain, surfaces, edges, and joint guides aligned in depth when rendering complex models on desktop.",
+          "See construction guides highlighted in red when they are marked for deletion with the Eraser.",
+          "Use a correctly sized BenchUp icon in the macOS Dock and app switcher."
+        ]
+      },
+      {
+        "title": "Website and documentation",
+        "changes": [
+          "Explore refreshed woodworking screenshots, clearer website typography, and an AI agent modeling example.",
+          "Follow updated repository, download, and website links from the app and documentation."
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.7.2",
     "date": "2026-11-14",
     "title": "Pocket joinery, cutting previews, and tools for AI agents",

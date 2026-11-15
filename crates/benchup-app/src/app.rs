@@ -444,6 +444,7 @@ pub struct BenchUpApp {
     viewports: viewports::Workspace,
     inspector: bool,
     inspector_width: f32,
+    tool_rail_width: f32,
     inspector_preferences: sidebar::InspectorPreferences,
     time_estimates: time_estimates::Settings,
     joinery_rates: time_estimates::JoineryRates,
@@ -641,6 +642,7 @@ impl BenchUpApp {
             viewports: viewports::Workspace::default(),
             inspector: true,
             inspector_width: 300.,
+            tool_rail_width: 76.,
             inspector_preferences: sidebar::InspectorPreferences::default(),
             time_estimates: Default::default(),
             joinery_rates: Default::default(),
@@ -3220,12 +3222,12 @@ impl BenchUpApp {
                                 ui.close();
                             }
                             if ui.add(Self::menu_item_button(ui, tr!("app.github"), None)).clicked() {
-                                ctx.open_url(egui::OpenUrl::new_tab("https://github.com/BenchUp3D/editor"));
+                                ctx.open_url(egui::OpenUrl::new_tab("https://github.com/BenchUp3D/benchup"));
                                 ui.close();
                             }
                             ui.separator();
                             if ui.add(Self::menu_item_button(ui, tr!("app.download_desktop_app"), Some("import"))).clicked() {
-                                ctx.open_url(egui::OpenUrl::new_tab("https://benchup3d.github.io/editor/"));
+                                ctx.open_url(egui::OpenUrl::new_tab("https://benchup3d.github.io/benchup/"));
                                 ui.close();
                             }
                             if ui.add(Self::menu_item_button(ui, tr!("app.release_notes"), None)).clicked() {
@@ -3564,15 +3566,15 @@ impl BenchUpApp {
 
     fn tool_rail(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);
-        egui::Panel::left("tools")
-            .exact_size(76.)
+        let panel = egui::Panel::left("tools")
+            .exact_size(self.tool_rail_width)
             .resizable(false)
+            .show_separator_line(true)
             .frame(
-                egui::Frame::new()
-                    .fill(colors.paper)
-                    .inner_margin(egui::Margin::symmetric(10, 18)),
+                egui::Frame::new().fill(colors.paper),
             )
             .show(ui, |ui| {
+                let sidebar_right = ui.max_rect().right();
                 let scroll = sidebar::restored_scroll_area(
                     ui,
                     "sidebar_left",
@@ -3581,14 +3583,49 @@ impl BenchUpApp {
                         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden),
                 )
                 .show(ui, |ui| {
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(10, 18))
+                        .show(ui, |ui| {
                     // Reserve a shape behind every button, then resolve the final selection
                     // after clicks and nested menus have activated their tool this frame.
                     let selection_shape = ui.painter().add(egui::Shape::Noop);
                     let content_top = ui.cursor().top();
-                    let regular_height = (55. + 5. + ui.spacing().item_spacing.y)
-                        * Tool::RAIL.len() as f32;
+                    let button_width = ui.available_width();
+                    let label_painter = ui.painter().clone();
+                    let label_layout = |tool: Tool| {
+                        let mut job = egui::text::LayoutJob::simple(
+                            if tool == Tool::TapeMeasure {
+                                tr!("app.tape").to_owned()
+                            } else {
+                                tool.label().to_owned()
+                            },
+                            FontId::proportional(10.),
+                            colors.ink,
+                            button_width - 4.,
+                        );
+                        job.halign = egui::Align::Center;
+                        label_painter.layout_job(job)
+                    };
+                    let label_heights: Vec<_> = self.tool_rail_order.iter().map(|&rail_tool| {
+                        let tool = rail_tool;
+                        let tool = match tool {
+                            Tool::Line => self.drawing_tool,
+                            Tool::Dimensions => self.measurement_tool,
+                            Tool::Union => self.solid_tool,
+                            tool => tool,
+                        };
+                        (rail_tool, label_layout(tool).size().y)
+                    }).collect();
+                    let regular_height: f32 = label_heights.iter().map(|(_, height)| {
+                        55_f32.max(34. + height + 4.) + 5. + ui.spacing().item_spacing.y
+                    }).sum();
                     let compact = ui.available_height() < regular_height;
-                    let (button_height, gap) = if compact { (48., 2.) } else { (55., 5.) };
+                    let gap = if compact { 2. } else { 5. };
+                    let button_height = |tool: Tool| {
+                        let height = label_heights.iter().find(|(rail, _)| *rail == tool)
+                            .map_or(0., |(_, height)| *height);
+                        (if compact { 48_f32 } else { 55_f32 }).max(34. + height + 4.)
+                    };
                     if compact {
                         ui.spacing_mut().item_spacing.y = 4.;
                     }
@@ -3599,15 +3636,22 @@ impl BenchUpApp {
                     if let Some(dragged) = dragged.as_ref() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
                         if let Some(pointer) = ui.input(|i| i.pointer.hover_pos()) {
-                            let stride = button_height + gap + ui.spacing().item_spacing.y;
+                            let spacing = gap + ui.spacing().item_spacing.y;
+                            let total_height: f32 = preview_order.iter()
+                                .map(|&tool| button_height(tool) + spacing).sum();
                             let bounds = Rect::from_min_size(
                                 ui.cursor().min,
-                                egui::vec2(56., stride * preview_order.len() as f32 - gap),
+                                egui::vec2(button_width, total_height - gap),
                             ).intersect(ui.clip_rect());
                             drop_inside = bounds.contains(pointer);
                             if drop_inside {
-                                let insertion = ((pointer.y - content_top - button_height * 0.5)
-                                    / stride).ceil().max(0.) as usize;
+                                let mut top = content_top;
+                                let insertion = preview_order.iter().position(|&tool| {
+                                    let height = button_height(tool);
+                                    let before_center = pointer.y <= top + height * 0.5;
+                                    top += height + spacing;
+                                    before_center
+                                }).unwrap_or(preview_order.len());
                                 if let Some(from) = preview_order.iter().position(|tool| tool == dragged.as_ref()) {
                                     let insertion = insertion.min(preview_order.len());
                                     preview_order.remove(from);
@@ -3636,7 +3680,7 @@ impl BenchUpApp {
                         } else {
                             tr!("app.tool_with_shortcut", tool = tool.label(), shortcut = shortcut)
                         };
-                        let size = egui::vec2(56., button_height);
+                        let size = egui::vec2(button_width, button_height(rail_tool));
                         let (_, target) = ui.allocate_space(size);
                         // Animate content-relative positions so scrolling stays immediate.
                         // Stable slot IDs keep each icon and label together while reordering.
@@ -3652,8 +3696,13 @@ impl BenchUpApp {
                                 rect, 8, Stroke::new(2., colors.accent), egui::StrokeKind::Inside,
                             );
                         }
+                        let hit_rect = if nested {
+                            Rect::from_min_max(rect.min, egui::pos2(sidebar_right, rect.bottom()))
+                        } else {
+                            rect
+                        };
                         let response = ui.interact(
-                            rect,
+                            hit_rect,
                             ui.scope_id().with(("tool_rail_slot", rail_tool as usize)),
                             if placeholder { Sense::hover() } else { Sense::click_and_drag() },
                         );
@@ -3685,36 +3734,37 @@ impl BenchUpApp {
                         icons::ui_tool(
                             ui.painter(),
                             Rect::from_center_size(
-                                rect.center() - egui::vec2(if nested { 4. } else { 0. }, 8.),
+                                egui::pos2(rect.center().x, rect.top() + 17.),
                                 egui::vec2(27., 27.),
                             ),
                             tool,
                         );
-                        ui.painter().text(
-                            egui::pos2(rect.center().x, rect.bottom() - 10.),
-                            Align2::CENTER_CENTER,
-                            if tool == Tool::TapeMeasure {
-                                tr!("app.tape")
-                            } else {
-                                tool.label()
-                            },
-                            FontId::proportional(
-                                if matches!(
-                                    tool,
-                                    Tool::Protractor | Tool::Dimensions | Tool::OuterShell
-                                ) {
-                                    9.
-                                } else {
-                                    10.
-                                },
+                        let label = label_layout(tool);
+                        ui.painter().galley_with_override_text_color(
+                            egui::pos2(
+                                rect.center().x - label.rect.center().x,
+                                rect.top() + 34.
+                                    + (rect.height() - 38. - label.size().y) * 0.5,
                             ),
+                            label,
                             color,
                         );
                         if nested {
-                            let tip = rect.right_center() + egui::vec2(-5., -8.);
-                            ui.painter().add(egui::Shape::line(
-                                vec![tip + egui::vec2(-4., -4.), tip, tip + egui::vec2(-4., 4.)],
-                                Stroke::new(1.8, color),
+                            // A separate indicator area makes the flyout affordance
+                            // visible without competing with the tool icon or label.
+                            let indicator = Rect::from_min_size(
+                                egui::pos2(sidebar_right - 10., rect.top()),
+                                egui::vec2(10., rect.height()),
+                            );
+                            let center = indicator.center() - egui::vec2(3., 0.);
+                            ui.painter().add(egui::Shape::convex_polygon(
+                                vec![
+                                    center + egui::vec2(-2.5, -4.),
+                                    center + egui::vec2(2.5, 0.),
+                                    center + egui::vec2(-2.5, 4.),
+                                ],
+                                color,
+                                Stroke::NONE,
                             ));
                         }
                         if nested && !placeholder {
@@ -3817,11 +3867,12 @@ impl BenchUpApp {
                             ]),
                         );
                     }
+                    });
                 });
                 // Use measured content so resizing and UI scaling immediately
                 // restore normal scrolling whenever the full tool list overflows.
                 if scroll.content_size.y <= scroll.inner_rect.height()
-                    && ui.rect_contains_pointer(ui.max_rect().expand2(egui::vec2(10., 18.)))
+                    && ui.rect_contains_pointer(ui.max_rect())
                 {
                     // Use wheel events, not inertial smoothing, for one tool change
                     // per wheel input when the rail needs no scrolling.
@@ -3863,6 +3914,25 @@ impl BenchUpApp {
                 }
                 sidebar::remember_scroll(ui.ctx(), "sidebar_left", scroll.state.clamped_offset());
             });
+        let edge = panel.response.rect;
+        let grab = ui.style().interaction.resize_grab_radius_side;
+        let handle = Rect::from_min_max(
+            egui::pos2(edge.right() - grab, edge.top()),
+            egui::pos2(edge.right() + grab, edge.bottom()),
+        );
+        let resize = ui.interact(
+            handle,
+            ui.scope_id().with("tool_rail_resize"),
+            Sense::click_and_drag(),
+        );
+        if resize.hovered() || resize.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        if resize.dragged() {
+            self.tool_rail_width = (self.tool_rail_width
+                + ui.input(|input| input.pointer.delta().x)).clamp(76., 320.);
+            ui.ctx().request_repaint();
+        }
     }
     fn paint_instructions(&self) -> &'static str {
         match self.paint_target {
@@ -4306,10 +4376,10 @@ impl BenchUpApp {
             return;
         }
         if ui.available_width() >= 900. || fasteners_open || self.joinery.open {
+            let maximum_width = (ui.available_width() * 0.5).max(260.);
             let panel = egui::Panel::right("inspector")
-                .default_size(self.inspector_width)
-                .size_range(260. ..=ui.available_width() * 0.5)
-                .resizable(true)
+                .exact_size(self.inspector_width.clamp(260., maximum_width))
+                .resizable(false)
                 .frame(egui::Frame::new().fill(colors.paper))
                 .show(ui, |ui| {
                     ui.spacing_mut().scroll.bar_outer_margin = 0.;
@@ -4322,6 +4392,25 @@ impl BenchUpApp {
                     }
                 });
             self.inspector_width = panel.response.rect.width();
+            let edge = panel.response.rect;
+            let grab = ui.style().interaction.resize_grab_radius_side;
+            let handle = Rect::from_min_max(
+                egui::pos2(edge.left() - grab, edge.top()),
+                egui::pos2(edge.left() + grab, edge.bottom()),
+            );
+            let resize = ui.interact(
+                handle,
+                ui.scope_id().with("inspector_resize"),
+                Sense::click_and_drag(),
+            );
+            if resize.hovered() || resize.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            }
+            if resize.dragged() {
+                self.inspector_width = (self.inspector_width
+                    - ui.input(|input| input.pointer.delta().x)).clamp(260., maximum_width);
+                ui.ctx().request_repaint();
+            }
         } else {
             let mut open = true;
             egui::Window::new(tr!("app.inspector"))

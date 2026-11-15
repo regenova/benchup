@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import shutil
 
-DEFAULT_URL = "https://benchup3d.github.io/editor/"
+DEFAULT_URL = "https://benchup3d.github.io/benchup/"
 FILES = ("index.html", "styles.css", "llms.txt", "robots.txt", "sitemap.xml")
 
 
@@ -12,6 +12,7 @@ def stage(source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for name in FILES:
         shutil.copy2(source / name, destination / name)
+    shutil.copytree(source / "fonts", destination / "fonts", dirs_exist_ok=True)
     for directory in ("branding", "screenshots"):
         shutil.copytree(source.parent / "assets" / directory,
                         destination / "assets" / directory, dirs_exist_ok=True)

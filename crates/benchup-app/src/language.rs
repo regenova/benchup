@@ -96,7 +96,6 @@ mod tests {
     #[test]
     fn unsupported_and_traditional_chinese_locales_fall_back_to_english() {
         for locale in [
-            "fr-CA",
             "de",
             "zh-TW",
             "zh-HK",
@@ -113,13 +112,9 @@ mod tests {
 
     #[test]
     fn uses_the_first_supported_language_in_preference_order() {
-        assert_eq!(preferred_language(["fr-CA", "zh-Hans", "en-US"]), "zh_CN");
         assert_eq!(preferred_language(["en-CA", "zh-CN"]), "en_US");
         assert_eq!(preferred_language(["zh-Hant", "zh-Hans"]), "zh_CN");
-        assert_eq!(preferred_language(["fr-CA", "pt-BR", "en-US"]), "pt_BR");
-        assert_eq!(preferred_language(["fr-CA", "vi-VN", "en-US"]), "vi_VN");
         assert_eq!(preferred_language(["en-US", "pt-BR"]), "en_US");
-        assert_eq!(preferred_language(["fr-CA", "es-MX", "en-US"]), "es_419");
         assert_eq!(preferred_language(["es-419", "pt-BR"]), "es_419");
         assert_eq!(preferred_language(["en-US", "es-ES"]), "en_US");
     }

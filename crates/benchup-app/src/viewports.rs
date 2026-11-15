@@ -939,12 +939,14 @@ impl BenchUpApp {
             }
             if *id == self.viewports.active {
                 self.paint_tool_cursor(&ctx, response);
-                ui.painter().rect_stroke(
-                    *rect,
-                    0,
-                    Stroke::new(1., Palette::for_ui(ui).accent.gamma_multiply(0.5)),
-                    egui::StrokeKind::Inside,
-                );
+                if views.len() > 1 {
+                    ui.painter().rect_stroke(
+                        *rect,
+                        0,
+                        Stroke::new(1., Palette::for_ui(ui).accent.gamma_multiply(0.5)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
             } else if inactive_gesture.is_some() {
                 self.gesture = inactive_gesture;
             }
