@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import shutil
 
-DEFAULT_URL = "https://benchup3d.github.io/editor/"
+DEFAULT_URL = "https://benchup3d.github.io/benchup/"
 FILES = ("index.html", "styles.css", "llms.txt", "robots.txt", "sitemap.xml")
 
 

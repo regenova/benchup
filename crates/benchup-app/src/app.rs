@@ -3210,7 +3210,7 @@ impl BenchUpApp {
                             }
                             ui.separator();
                             if ui.add(Self::menu_item_button(ui, tr!("app.download_desktop_app"), Some("import"))).clicked() {
-                                ctx.open_url(egui::OpenUrl::new_tab("https://benchup3d.github.io/editor/"));
+                                ctx.open_url(egui::OpenUrl::new_tab("https://benchup3d.github.io/benchup/"));
                                 ui.close();
                             }
                             if ui.add(Self::menu_item_button(ui, tr!("app.release_notes"), None)).clicked() {

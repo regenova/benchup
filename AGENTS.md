@@ -11,7 +11,7 @@ Every future user-facing option, setting, tool choice, and expandable section th
 
 # Website URLs
 
-Keep all public website URLs under `https://benchup3d.github.io/editor/`. Do not synchronize README or website links with the checkout repository, GitHub Pages configuration, or custom domains.
+Keep all public website URLs under `https://benchup3d.github.io/benchup/`. Do not synchronize README or website links with the checkout repository, GitHub Pages configuration, or custom domains.
 
 # Release workflow
 
