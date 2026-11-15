@@ -69,6 +69,22 @@ pub(crate) fn catalog_message(language: &str, key: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn image_tool_name_and_instructions_follow_the_selected_language() {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                super::set_language("en_US");
+            }
+        }
+        let _reset = Reset;
+        for language in ["en_US", "zh_CN", "pt_BR", "vi_VN", "es_419", "it_IT"] {
+            super::set_language(language);
+            assert_eq!(crate::Tool::Image.label(), super::catalog_message(language, "image_tools.image"));
+            assert_eq!(crate::Tool::Image.instructions(), super::catalog_message(language, "tools.image_instructions"));
+        }
+    }
+
+    #[test]
     fn language_switches_labels_formats_and_plurals_without_restart() {
         struct Reset;
         impl Drop for Reset {

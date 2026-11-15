@@ -2233,5 +2233,6 @@
   "sidebar.floating_dimension_input": "Caixa de medidas flutuante",
   "cli.agent_edit": "Edição do agente",
   "agent_tools.split_face.invalid_line": "A linha deve atravessar a face selecionada e estar sobre ela.",
-  "agent_tools.split_face.line_hint": "Use dois pontos distintos na face selecionada, de uma borda à outra."
+  "agent_tools.split_face.line_hint": "Use dois pontos distintos na face selecionada, de uma borda à outra.",
+  "tools.image_instructions": "Clique em dois cantos opostos e escolha uma imagem local. As teclas de seta travam o plano de desenho; insira largura, altura para posicionar com precisão."
 }

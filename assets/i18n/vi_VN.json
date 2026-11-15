@@ -2214,5 +2214,6 @@
   "sidebar.floating_dimension_input": "Ô nhập kích thước nổi",
   "cli.agent_edit": "Chỉnh sửa của tác nhân",
   "agent_tools.split_face.invalid_line": "Đường thẳng phải cắt qua và nằm trên mặt đã chọn.",
-  "agent_tools.split_face.line_hint": "Dùng hai điểm khác nhau trên mặt đã chọn, từ cạnh này đến cạnh kia."
+  "agent_tools.split_face.line_hint": "Dùng hai điểm khác nhau trên mặt đã chọn, từ cạnh này đến cạnh kia.",
+  "tools.image_instructions": "Nhấp vào hai góc đối diện, sau đó chọn hình ảnh cục bộ. Các phím mũi tên khóa mặt phẳng vẽ; nhập chiều rộng, chiều cao để đặt chính xác."
 }

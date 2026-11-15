@@ -3551,6 +3551,7 @@ impl BenchUpApp {
         let panel = egui::Panel::left("tools")
             .exact_size(self.tool_rail_width)
             .resizable(false)
+            .show_separator_line(true)
             .frame(
                 egui::Frame::new().fill(colors.paper),
             )

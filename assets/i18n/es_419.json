@@ -2214,5 +2214,6 @@
   "sidebar.floating_dimension_input": "Cuadro de medidas flotante",
   "cli.agent_edit": "Edición del agente",
   "agent_tools.split_face.invalid_line": "La línea debe atravesar la cara seleccionada y estar sobre ella.",
-  "agent_tools.split_face.line_hint": "Usa dos puntos distintos sobre la cara seleccionada, de un borde al otro."
+  "agent_tools.split_face.line_hint": "Usa dos puntos distintos sobre la cara seleccionada, de un borde al otro.",
+  "tools.image_instructions": "Haz clic en dos esquinas opuestas y luego elige una imagen local. Las flechas bloquean el plano de dibujo; ingresa ancho, alto para colocarla con precisión."
 }

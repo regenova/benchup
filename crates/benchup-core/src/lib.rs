@@ -200,7 +200,7 @@ impl Tool {
             Self::Select => tr!("tools.select"),
             Self::Line => tr!("tools.line"),
             Self::Rectangle => tr!("tools.rectangle"),
-            Self::Image => "Image",
+            Self::Image => tr!("image_tools.image"),
             Self::Circle => tr!("tools.circle"),
             Self::Polygon => tr!("tools.polygon"),
             Self::Freehand => tr!("tools.freehand"),
@@ -265,7 +265,7 @@ impl Tool {
                 tr!("tools.click_to_start_a_line_arrow_keys_lock")
             }
             Self::Rectangle => tr!("tools.click_two_opposite_corners_arrow_keys_lock_the"),
-            Self::Image => "Click two opposite corners, then choose a local image. Arrow keys lock the drawing plane; enter width, height for precise placement.",
+            Self::Image => tr!("tools.image_instructions"),
             Self::Circle => {
                 tr!("tools.click_the_center_then_a_point_on_the")
             }

@@ -2233,5 +2233,6 @@
   "sidebar.floating_dimension_input": "Floating Dimension Input",
   "cli.agent_edit": "Agent edit",
   "agent_tools.split_face.invalid_line": "The line must cross the selected face and lie on it.",
-  "agent_tools.split_face.line_hint": "Use two distinct points on the selected face, from edge to edge."
+  "agent_tools.split_face.line_hint": "Use two distinct points on the selected face, from edge to edge.",
+  "tools.image_instructions": "Click two opposite corners, then choose a local image. Arrow keys lock the drawing plane; enter width, height for precise placement."
 }
