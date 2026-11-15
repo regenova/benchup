@@ -205,6 +205,7 @@ pub(super) struct GeneralSettings {
     pub auto_group_new_shapes: bool,
     pub show_fps: bool,
     pub default_units: benchup_core::UnitSettings,
+    pub volume: super::printer_volume::Settings,
     pub tool_keys: Vec<String>,
     pub stock: stock_settings::Settings,
     pub export_scale: export_scale::Preferences,
@@ -229,6 +230,7 @@ impl Default for GeneralSettings {
             auto_group_new_shapes: false,
             show_fps: false,
             default_units: Default::default(),
+            volume: Default::default(),
             stock: Default::default(),
             export_scale: Default::default(),
             tool_keys: TOOLS.iter().map(|(_, key)| key.to_string()).collect(),
@@ -293,6 +295,7 @@ impl GeneralSettings {
         self.space_mouse.normalize();
         self.stock.normalize();
         self.export_scale.normalize();
+        self.volume.sanitize();
         // Earlier builds saved bare codes; every catalog now uses language_REGION.
         match self.language.as_str() {
             "en" => self.language = "en_US".into(),
@@ -645,6 +648,81 @@ impl BenchUpApp {
                     tr!("settings.automatically_group_new_shapes"),
                 )
                 .on_hover_text(tr!("settings.group_new_shapes_outside_existing_objects"));
+                ui.separator();
+                ui.text_label(RichText::new(tr!("settings.printer_and_tool_volume")).strong());
+                ui.text_weak(tr!("settings.a_locked_reference_box_for_a_printer_s_build"));
+                if ui
+                    .checkbox(
+                        &mut self.general_settings.volume.show_button,
+                        tr!("settings.show_the_toggle_on_the_viewport_toolbar"),
+                    )
+                    .on_hover_text(tr!("settings.hide_the_toggle_when_you_never_use_the"))
+                    .changed()
+                {
+                    // Hiding the only control must not strand a visible box.
+                    self.general_settings.volume.enforce();
+                }
+                // Present and accept the size in the workspace's display units, while
+                // the stored value stays in metres like all other geometry.
+                let units = self.doc.display.units;
+                let length = units.length;
+                let factor = length.factor();
+                let decimals = units.precision.length.unwrap_or(3) as usize;
+                for (index, label) in [
+                    (0, tr!("settings.width_x")),
+                    (1, tr!("settings.depth_y")),
+                    (2, tr!("settings.height_z")),
+                ] {
+                    inspector_field(ui, ("settings_volume_axis", index), label, |ui| {
+                        let volume = &self.general_settings.volume;
+                        let mut shown = volume.axis_in(index, length);
+                        let response = ui.add(
+                            egui::DragValue::new(&mut shown)
+                                .speed(1.)
+                                .max_decimals(decimals)
+                                .range(
+                                    super::printer_volume::MIN_M / factor
+                                        ..=super::printer_volume::MAX_M / factor,
+                                )
+                                .suffix(format!(" {}", length.symbol())),
+                        );
+                        if response.changed() {
+                            self.general_settings.volume.set_axis_from(index, shown, length);
+                        }
+                        response
+                    });
+                }
+                inspector_field(ui, "settings_volume_hotkey", tr!("settings.toggle_shortcut"), |ui| {
+                    ui.horizontal(|ui| {
+                        let shown = self
+                            .general_settings
+                            .volume
+                            .hotkey
+                            .clone()
+                            .unwrap_or_else(|| tr!("common.none").to_string());
+                        if let Some(key) =
+                            shortcut_input(ui, "settings_volume_key", &shown, 96.)
+                        {
+                            self.general_settings.volume.hotkey = Some(key);
+                        }
+                        if self.general_settings.volume.hotkey.is_some() {
+                            let clear = ui
+                                .small_button("✕")
+                                .on_hover_text(tr!("settings.clear_the_toggle_shortcut"));
+                            clear.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::Role::Button,
+                                    true,
+                                    tr!("settings.clear_the_toggle_shortcut"),
+                                )
+                            });
+                            if clear.clicked() {
+                                self.general_settings.volume.hotkey = None;
+                            }
+                        }
+                    })
+                    .response
+                });
             }
             Section::Rendering => {
                 ui.checkbox(&mut self.doc.display.shadow_antialiasing, tr!("settings.shadow_antialiasing"))
@@ -847,6 +925,47 @@ fn color_row(ui: &mut egui::Ui, label: &str, color: &mut [u8; 3]) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn printer_volume_persists_and_defaults_for_older_saves() {
+        // Preferences saved before this feature must still load.
+        let older: GeneralSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            older.volume,
+            printer_volume::Settings::default(),
+            "missing volume settings fall back to the defaults"
+        );
+
+        let mut settings = GeneralSettings::default();
+        settings.volume.visible = true;
+        settings.volume.show_button = false;
+        settings.volume.size_m = [0.3, 0.25, 0.4];
+        settings.volume.hotkey = Some("V".into());
+
+        let saved = serde_json::to_string(&settings).unwrap();
+        let restored: GeneralSettings = serde_json::from_str(&saved).unwrap();
+        assert!(restored.volume.visible);
+        assert!(!restored.volume.show_button);
+        assert_eq!(restored.volume.size_m, [0.3, 0.25, 0.4]);
+        assert_eq!(restored.volume.hotkey.as_deref(), Some("V"));
+    }
+
+    #[test]
+    fn normalize_keeps_valid_volume_and_clamps_damaged_values() {
+        let mut settings = GeneralSettings::default();
+        // A zero width is repaired, a non-finite depth falls back, an absurd
+        // height clamps: each axis is handled independently.
+        settings.volume.size_m = [0., f64::INFINITY, 1e12];
+        settings.normalize();
+        assert_eq!(
+            settings.volume.size_m,
+            [
+                printer_volume::MIN_M,
+                printer_volume::Settings::default().size_m[1],
+                printer_volume::MAX_M
+            ]
+        );
+    }
+
     fn rendered_text(shapes: &[egui::epaint::ClippedShape]) -> Vec<String> {
         fn collect(shape: &egui::Shape, text: &mut Vec<String>) {
             match shape {
@@ -1305,4 +1424,50 @@ mod tests {
         assert!(text.iter().any(|label| label == "Language"));
         assert!(text.iter().any(|label| label == "English"));
     }
+    #[test]
+    fn normalize_hides_a_volume_saved_with_a_hidden_button() {
+        // Preferences written by an earlier build could hold visible=true with the
+        // toggle hidden, which strands the box on screen.
+        let mut settings = GeneralSettings::default();
+        settings.volume.show_button = false;
+        settings.volume.visible = true;
+        settings.normalize();
+        assert!(!settings.volume.visible);
+    }
+
+    #[test]
+    fn every_printer_volume_label_is_translated_in_all_catalogs() {
+        const CATALOGS: [(&str, &str); 6] = [
+            ("en_US", include_str!("../../../assets/i18n/en_US.json")),
+            ("es_419", include_str!("../../../assets/i18n/es_419.json")),
+            ("it_IT", include_str!("../../../assets/i18n/it_IT.json")),
+            ("pt_BR", include_str!("../../../assets/i18n/pt_BR.json")),
+            ("vi_VN", include_str!("../../../assets/i18n/vi_VN.json")),
+            ("zh_CN", include_str!("../../../assets/i18n/zh_CN.json")),
+        ];
+        const KEYS: [&str; 11] = [
+            "app.show_or_hide_the_printer_or_tool_volume",
+            "app.the_model_is_outside_the_printer_or_tool_volume",
+            "settings.printer_and_tool_volume",
+            "settings.a_locked_reference_box_for_a_printer_s_build",
+            "settings.show_the_toggle_on_the_viewport_toolbar",
+            "settings.hide_the_toggle_when_you_never_use_the",
+            "settings.width_x",
+            "settings.depth_y",
+            "settings.height_z",
+            "settings.toggle_shortcut",
+            "settings.clear_the_toggle_shortcut",
+        ];
+        for (language, raw) in CATALOGS {
+            let catalog: serde_json::Value = serde_json::from_str(raw).unwrap();
+            for key in KEYS {
+                let text = catalog
+                    .get(key)
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_else(|| panic!("{language} is missing {key}"));
+                assert!(!text.trim().is_empty(), "{language} has an empty {key}");
+            }
+        }
+    }
+
 }

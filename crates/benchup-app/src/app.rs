@@ -69,6 +69,8 @@ pub(crate) mod surface_appearance;
 mod grid;
 #[path = "grain_direction.rs"]
 mod grain_direction;
+#[path = "printer_volume.rs"]
+mod printer_volume;
 #[path = "measurement_tools.rs"]
 mod measurement_tools;
 #[path = "move_tool.rs"]
@@ -2715,6 +2717,12 @@ impl BenchUpApp {
                     }
                     if let Some(tool) = self.general_settings.tool_for_key(key) {
                         self.set_tool(tool);
+                        continue;
+                    }
+                    // Tool shortcuts win over the volume toggle, so a conflicting
+                    // assignment can never shadow a tool.
+                    if self.general_settings.volume.hotkey() == Some(key) {
+                        self.toggle_printer_volume(ctx);
                         continue;
                     }
                     match key {
@@ -5934,7 +5942,10 @@ impl BenchUpApp {
             && self.paste_preview.is_none()
             && (self.measurement.is_none()
                 || matches!(self.tool, Tool::TapeMeasure | Tool::Protractor))
-            && self.text_editor.is_none())
+            && self.text_editor.is_none()
+            // The volume overlay is not part of SceneKey, so cached shapes would
+            // replay a stale box across a toggle. Skip the cache while it is shown.
+            && !self.general_settings.volume.visible)
         .then(|| renderer::SceneKey {
             joinery_members: self.joinery_edit_members(),
             joint_preview,
@@ -5981,6 +5992,9 @@ impl BenchUpApp {
                 let v = axis.vector() * renderer::ReferenceFade::new(camera).axis_length();
                 references.axis_line(camera, -v, DVec3::ZERO, 0.85, self.axis_color(axis).gamma_multiply(0.35));
                 references.axis_line(camera, DVec3::ZERO, v, 1.1, self.axis_color(axis).gamma_multiply(0.8));
+            }
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut references);
             }
             self.add_drawing_preview(&mut references, camera, ui);
             self.scene_cache.paint_resident(key, model, &self.face_cache, entities, ui, rect, references);
@@ -6253,6 +6267,9 @@ impl BenchUpApp {
                 display,
                 &faces,
             );
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut mesh);
+            }
             let grain_preview = self.history_preview.is_none()
                 .then(|| self.grain_preview_axes())
                 .unwrap_or_default();
@@ -6952,6 +6969,7 @@ impl BenchUpApp {
                 p.galley(r.min + egui::vec2(12., 10.), galley, colors.ink);
             }
         }
+        self.paint_volume_warning(ui.ctx(), &p, rect, colors.paper, colors.ink, cache_revision);
     }
     fn edit_context_bar(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);
@@ -7258,6 +7276,7 @@ impl BenchUpApp {
                                     self.paint_menu(ui);
                                     ui.separator();
                                     self.walk_button(ui);
+                                    self.printer_volume_button(ui);
                                     ui.allocate_ui_with_layout(
                                         ui.available_size(),
                                         egui::Layout::left_to_right(egui::Align::Center),

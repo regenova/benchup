@@ -1605,6 +1605,26 @@ fn paint_line_icon(p: &egui::Painter, c: Pos2, kind: &str, color: Color32) {
                 s,
             ));
         }
+        "printer_volume" => {
+            // Isometric box: the printer build volume or a machine's working area.
+            let front = [
+                at(-8., 2.),
+                at(-2., 2.),
+                at(-2., 8.),
+                at(-8., 8.),
+            ];
+            let back = [
+                at(-3., -3.),
+                at(3., -3.),
+                at(3., 3.),
+                at(-3., 3.),
+            ];
+            p.add(egui::Shape::closed_line(front.to_vec(), s));
+            p.add(egui::Shape::closed_line(back.to_vec(), s));
+            for corner in 0..4 {
+                p.line_segment([front[corner], back[corner]], s);
+            }
+        }
         _ => {}
     }
 }
