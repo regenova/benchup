@@ -1,6 +1,6 @@
 # BenchUp
 
-![BenchUp editor screenshot](assets/screenshots/benchup.jpg?v=0.7.2)
+![BenchUp editor screenshot](assets/screenshots/benchup.jpg?v=2026-11-15)
 
 [![Try BenchUp in your browser](https://img.shields.io/badge/Try_BenchUp_in_your_browser-d63b32?style=for-the-badge)](https://benchup3d.github.io/benchup/play/)
 
@@ -24,7 +24,7 @@ Model shelves, tables, cabinets, workbenches, and other furniture with precisely
 
 Create mortise-and-tenon, half-lap, tongue-and-groove, rabbet, dovetail, finger, Lamello/biscuit, Domino/loose-tenon, groove, and groove-and-loose-tongue joints between boards, including angled connections. Adjust joint dimensions and clearance with live previews. Dynamic joints update automatically when either board moves. Inspect machining diagnostics and cut guides, and trim excess material past a joint while keeping the original boards editable. Biscuit and Domino pockets have adjustable width, thickness, insertion depth, and count; continuous grooves have adjustable thickness and depth. Position boards with a shared volume: the new pocket joints meet halfway through it. Loose inserts are separate parts and are not generated.
 
-![Dovetail joint between two selected boards, with joint types, tail width, pin width, angle, and clearance controls](assets/screenshots/wood-joinery-dovetail.png)
+![Dovetail joint between two selected boards, with joint types, tail width, pin width, angle, and clearance controls](assets/screenshots/wood-joinery-dovetail.jpg)
 
 ### Procedural wood material
 
@@ -32,13 +32,13 @@ Set the grain direction on groups and components and show grain-direction guides
 
 In the Materials face style, parts with assigned wood stock show procedural grain and the result of their sanding and finishing steps. Set the wood color and product appearance in the material catalog, then adjust the recipe and appearance overrides in the part's inspector. Work rates and drying times affect estimates only. Explicit face colors and Color by Tag take precedence over the finish preview.
 
-![Shelving with procedural wood grain visible across the horizontal shelves and vertical boards](assets/screenshots/procedural-wood.png)
+![Shelving with procedural wood grain visible across the horizontal shelves and vertical boards](assets/screenshots/procedural-wood.jpg)
 
 ### Router tool
 
 Select an edge with Router, then choose a profile in Properties to apply it immediately. Shape edges with chamfer, bevel, roundover, cove, rabbet, groove, Roman ogee, and bead profiles. Adjust the profile dimensions, change it later, or choose None to remove routing while preserving the original stock. Lines drawn on a solid face can also define routing paths. Saved routes contribute their length and work time to project estimates.
 
-![Close-up of a routed bead along a board edge, with the Bead profile selected in Properties](assets/screenshots/router-tool.png)
+![Close-up of a routed bead along a board edge, with the Bead profile selected in Properties](assets/screenshots/router-tool.jpg)
 
 ### Plan materials and workshop work
 
@@ -48,13 +48,23 @@ Assign stock materials and wood types to parts, configure sanding and finishing 
 
 Use the Tools menu to turn the model into printable workshop documents. Each report includes the BenchUp header, project name, and generation date.
 
-![BenchUp PDF exports, from left to right: Time & Cost Estimates with material costs and work times, Cutting Plan with a color-coded stock layout, and Workshop Labels with part marks and dimensions](assets/screenshots/pdf-exports.png)
+![BenchUp PDF exports, from left to right: Time & Cost Estimates with material costs and work times, Cutting Plan with a color-coded stock layout, and Workshop Labels with part marks and dimensions](assets/screenshots/pdf-exports.jpg)
 
 - **Time & Cost Estimates** summarizes material costs, hands-on work, drying and waiting time, and the sequential total. Detailed tables break down stock and finishing supplies, workshop tasks, and joinery allowances. Use it to plan purchases and time; labor is not included in the material price.
 - **Cutting Plan** groups matching parts by material and size, lists quantities and finished cutting dimensions, and lays out marked parts on the selected stock. Color-coded diagrams show part placement, saw kerf, and offcuts, with grain direction and rotation settings taken into account. Parts that do not fit the stock are flagged separately.
 - **Workshop Labels** creates one printable label per piece, with the part mark, group or component name, and dimensions. Cut along the dotted borders and attach the labels to keep similar boards identifiable during assembly. The marks match those in the cutting plan.
 
 Cutting plans and labels can cover selected parts or all visible parts in the project. Assign stock materials to the parts first, and verify dimensions before cutting.
+
+## Create with your AI agent
+
+Ask your AI coding agent to build a model in BenchUp: “Use benchup to create a small bookshelf.” With the BenchUp command-line tool installed, agents such as Codex, Claude Code, and Cursor can create and edit `.bup` projects, add boards and joints, check the model, and generate previews. Open the result in BenchUp to inspect it and keep editing.
+
+![An AI agent using the BenchUp CLI to create a small bookshelf, shown in the editor with dimensions and joints alongside the agent's completion message](assets/screenshots/ai-agent-bookshelf.jpg)
+
+The example above is a 600 × 300 × 900 mm birch plywood bookshelf with three compartments and a recessed base. The agent reports that all 12 joints passed validation.
+
+Start with the [CLI installation and setup](docs/cli.md), then have your agent read `benchup guide` for modeling conventions and woodworking recipes. The same tools are also available through the CLI's MCP server for agents that support MCP.
 
 ## Documentation
 
