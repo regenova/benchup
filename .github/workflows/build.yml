@@ -42,6 +42,7 @@ jobs:
       - name: Verify old updater URLs survived the repository transfer
         env:
           SOURCE_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: python scripts/verify_update_transfer.py --repository "$SOURCE_REPOSITORY"
 
   build:
