@@ -78,3 +78,6 @@ jobs:
 
       - name: Test browser SketchUp reader and worker
         run: node --test scripts/test_skp_import.cjs
+
+      - name: Test browser loading progress and translations
+        run: node --test scripts/test_web_loading.mjs scripts/test_web_i18n.cjs

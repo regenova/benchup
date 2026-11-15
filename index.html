@@ -17,7 +17,7 @@
         // Storage may be unavailable; the system color scheme still applies.
       }
     </script>
-    <link data-trunk rel="rust" href="crates/benchup-app/Cargo.toml" data-bin="benchup-app" />
+    <link data-trunk rel="rust" href="crates/benchup-app/Cargo.toml" data-bin="benchup-app" data-initializer="web/initializer.mjs" />
     <link data-trunk rel="copy-dir" href="assets/branding" data-target-path="assets/branding" />
     <link data-trunk rel="copy-dir" href="assets/i18n" data-target-path="assets/i18n" />
     <link rel="icon" type="image/x-icon" href="assets/branding/favicon.ico" sizes="16x16 32x32 48x48 64x64 128x128 256x256" />
@@ -37,6 +37,9 @@
       #loading img { width: 72px; height: 72px; margin-bottom: 18px; }
       .loading-progress { width: 200px; height: 4px; margin-top: 12px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--ink) 15%, transparent); }
       .loading-progress::after { content: ""; display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--accent); animation: loading-progress 1.3s ease-in-out infinite; }
+      .loading-progress[data-determinate]::after { width: var(--progress, 0%); animation: none; }
+      .loading-progress[hidden] { display: none; }
+      #loading-download { min-height: 1.6em; margin-bottom: 0; font-variant-numeric: tabular-nums; }
       #loading strong { font-size: 32px; letter-spacing: -1.5px; }
       #loading strong span { color: var(--accent); }
       #loading p { font-size: 14px; opacity: .7; max-width: 420px; line-height: 1.6; padding: 0 24px; }
@@ -253,10 +256,33 @@
       <img src="assets/branding/logo.svg" alt="" width="72" height="72" />
       <strong>BenchUp<span>.</span></strong>
       <p id="loading-label" role="status"></p>
-      <div class="loading-progress" role="progressbar" aria-labelledby="loading-label"></div>
+      <div id="loading-progress" class="loading-progress" role="progressbar" aria-labelledby="loading-download" aria-valuemin="0" aria-valuemax="100"></div>
+      <p id="loading-download" role="status"></p>
     </div>
     <script id="startup-messages">
-      fetch("assets/i18n/en_US.json")
+      // The WASM initializer shares this catalog lookup: Rust's tr! is not
+      // available until the download has finished. The inspector preferences
+      // remain authoritative; this plain language code is their startup mirror.
+      const supportedLanguages = ["en_US", "es_419", "it_IT", "pt_BR", "vi_VN", "zh_CN"];
+      const matchLanguage = locale => {
+        const parts = locale.toLowerCase().replaceAll("_", "-").split("-");
+        if (parts[0] === "zh") {
+          return parts.includes("hant") || parts.some(part => ["tw", "hk", "mo"].includes(part)) ? null : "zh_CN";
+        }
+        return supportedLanguages.find(code => code.split("_")[0] === parts[0]);
+      };
+      let language;
+      try { language = localStorage.getItem("benchup.startup-language.v1"); } catch {}
+      if (!supportedLanguages.includes(language)) {
+        language = (navigator.languages || []).map(matchLanguage).find(Boolean) || "en_US";
+      }
+      document.documentElement.lang = language.replace("_", "-");
+      window.benchupStartupMessages = fetch(`assets/i18n/${language}.json`)
+        .then(response => {
+          if (response.ok) return response;
+          throw new Error("Startup catalog unavailable");
+        })
+        .catch(() => fetch("assets/i18n/en_US.json"))
         .then(response => response.ok ? response.json() : null)
         .then(messages => {
           if (!messages) return;
@@ -264,10 +290,11 @@
             .setAttribute("aria-label", messages["web.canvas_label"]);
           // The app owns the title and any error as soon as it leaves the loading screen.
           const loading = document.getElementById("loading-label");
-          if (!loading) return;
+          if (!loading) return messages;
           document.title = messages["web.initial_title"];
           const phrases = Object.keys(messages).filter(key => key.startsWith("web.loading."));
           loading.textContent = messages[phrases[Math.floor(Math.random() * phrases.length)]];
+          return messages;
         })
         .catch(() => {}); // Loading the application is independent of this request.
     </script>

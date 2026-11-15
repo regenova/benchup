@@ -980,6 +980,13 @@ impl BenchUpApp {
             storage.set_string("benchup.inspector.unreadable-backup.v1", raw);
         }
         eframe::set_value(storage, PREFERENCE_KEY, &self.inspector_preferences);
+        // The browser loading screen needs the selected language before WASM
+        // can deserialize InspectorPreferences. Keep this derived mirror in
+        // the same immediate-save path as the authoritative preferences.
+        storage.set_string(
+            "benchup.startup-language.v1",
+            self.inspector_preferences.general.language.clone(),
+        );
         save_order(&self.inspector_order, storage);
     }
 
@@ -3151,6 +3158,7 @@ mod preference_tests {
             assert!(app.dirty_since.is_none());
             let saved: InspectorPreferences = crate::identity::preference_value(&storage, PREFERENCE_KEY).unwrap();
             assert_eq!(saved.general.language, language);
+            assert_eq!(storage.get_string("benchup.startup-language.v1").as_deref(), Some(language));
 
             let mut restored = BenchUpApp::with_document(Document::default(), None, true);
             restored.restore_inspector_preferences_with_language(
@@ -3206,6 +3214,7 @@ mod preference_tests {
         restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
         let saved: InspectorPreferences = crate::identity::preference_value(&storage, PREFERENCE_KEY).unwrap();
         assert_eq!(saved.general.language, "zh_CN");
+        assert_eq!(storage.get_string("benchup.startup-language.v1").as_deref(), Some("zh_CN"));
         assert_eq!(restored.general_settings.language, "zh_CN");
         assert_eq!(OrbitOrigin::VisibleModel.label(), "可见模型中心");
         assert_eq!(OrbitOrigin::Focused.label(), "焦点");
