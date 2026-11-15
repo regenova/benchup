@@ -865,6 +865,136 @@ fn drawing_menu_switches_tools_and_remembers_the_choice() {
     }
 }
 
+fn rail_separator_positions(output: &egui::FullOutput) -> Vec<Pos2> {
+    fn collect(shape: &egui::Shape, positions: &mut Vec<Pos2>) {
+        match shape {
+            egui::Shape::LineSegment { points, .. }
+                if points[0].y == points[1].y && points[0].x == 10. && points[1].x == 66. =>
+            {
+                positions.push(points[0] + (points[1] - points[0]) * 0.5);
+            }
+            egui::Shape::Vec(shapes) => {
+                for shape in shapes { collect(shape, positions); }
+            }
+            _ => {}
+        }
+    }
+    let mut positions = Vec::new();
+    for shape in &output.shapes { collect(&shape.shape, &mut positions); }
+    positions.sort_by(|a, b| a.y.total_cmp(&b.y));
+    positions
+}
+
+#[test]
+fn tool_rail_context_menu_adds_and_removes_separators_without_activating_tools() {
+    // Cover a plain tool and a group with a hover flyout.
+    for tool in [Tool::Move, Tool::Line] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let point = text_position(&output, tool.label());
+        let menu = open_context_menu(&mut h, point);
+        h.click(menu_text_position(&menu, tr!("tools.add_separator")));
+        let slot = h.app.tool_rail_order.iter().position(|&item| item == tool).unwrap() + 1;
+        assert_eq!(h.app.tool_rail_separators, vec![slot]);
+        assert_eq!(h.app.tool, Tool::Select);
+
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let separator = rail_separator_positions(&output)[0];
+        // The whole separator row, including its side margin, offers removal.
+        let menu = open_context_menu(&mut h, egui::pos2(3., separator.y));
+        h.click(menu_text_position(&menu, tr!("tools.remove_separator")));
+        assert!(h.app.tool_rail_separators.is_empty());
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+        assert!(h.app.doc.history.is_empty());
+    }
+}
+
+#[test]
+fn tool_rail_blank_space_context_menu_adds_outer_separators() {
+    let mut h = Harness::new();
+    h.size.y = 2200.;
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let first_tool = text_position(&output, Tool::Select.label());
+    // The top frame margin and the blank space below all tools are interactive.
+    for (point, slot) in [
+        (egui::pos2(3., first_tool.y - 45.), 0),
+        (egui::pos2(38., 2100.), Tool::RAIL.len()),
+    ] {
+        let menu = open_context_menu(&mut h, point);
+        h.click(menu_text_position(&menu, tr!("tools.add_separator")));
+        assert!(h.app.tool_rail_separators.contains(&slot));
+    }
+    assert_eq!(h.app.tool_rail_separators, vec![0, Tool::RAIL.len()]);
+    assert!(!h.app.project.modified);
+}
+
+#[test]
+fn separators_drag_up_down_and_to_the_end_without_activating_tools() {
+    for (source, target_tool, before) in [
+        (0, Tool::Move, false),
+        (3, Tool::Select, true),
+        (0, Tool::Router, false),
+    ] {
+        let mut h = Harness::new();
+        h.size.y = 2200.;
+        h.app.tool_rail_separators = vec![source];
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let start = rail_separator_positions(&output)[0];
+        let label = if target_tool == Tool::Router { tr!("tools.wood_tools") } else { target_tool.label() };
+        let end = text_position(&output, label) - egui::vec2(0., if before { 20. } else { 0. });
+        let insertion = h.app.tool_rail_order.iter().position(|&tool| tool == target_tool).unwrap()
+            + usize::from(!before);
+        let order = h.app.tool_rail_order.clone();
+        h.pointer(start, egui::PointerButton::Primary, true, false);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+        assert!(egui::DragAndDrop::has_payload_of_type::<RailSeparatorDrag>(&h.ctx));
+        assert_eq!(h.app.tool_rail_separators, vec![source], "preview must not change saved positions");
+        h.pointer(end, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.tool_rail_separators, vec![insertion]);
+        assert_eq!(h.app.tool_rail_order, order);
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+        assert!(h.app.doc.history.is_empty());
+    }
+}
+
+#[test]
+fn separator_drag_cancellation_and_occupied_boundaries_preserve_the_layout() {
+    for cancel in [false, true] {
+        let mut h = Harness::new();
+        h.app.tool_rail_separators = vec![0, 1];
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let start = rail_separator_positions(&output)[0];
+        let end = if cancel { egui::pos2(500., 400.) } else { text_position(&output, Tool::Select.label()) };
+        h.pointer(start, egui::PointerButton::Primary, true, false);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+        h.pointer(end, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.tool_rail_separators, vec![0, 1]);
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+    }
+}
+
+#[test]
+fn dragging_rail_tools_preserves_separator_boundaries() {
+    let mut h = Harness::new();
+    h.app.tool_rail_separators = vec![1, 3];
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let start = text_position(&output, Tool::Move.label()) - egui::vec2(0., 12.);
+    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+    h.pointer(end, egui::PointerButton::Primary, false, false);
+    assert_eq!(h.app.tool_rail_order[0], Tool::Move);
+    assert_eq!(h.app.tool_rail_separators, vec![1, 3]);
+    assert_eq!(h.app.tool, Tool::Select);
+    assert!(!h.app.project.modified);
+}
+
 #[test]
 fn dragging_a_rail_tool_reorders_without_activating_it() {
     let mut h = Harness::new();

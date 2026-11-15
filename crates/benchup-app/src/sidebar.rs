@@ -72,6 +72,7 @@ pub(super) struct InspectorPreferences {
     orbit_origin: OrbitOrigin,
     tool_rail_order: Vec<Tool>,
     tool_rail_order_revision: u32,
+    tool_rail_separators: Vec<usize>,
     snapping: Option<SnappingPreferences>,
     cutting_plan: CuttingPlanPreferences,
     time_estimates: time_estimates::Settings,
@@ -118,6 +119,7 @@ impl Default for InspectorPreferences {
             orbit_origin: OrbitOrigin::default(),
             tool_rail_order: Tool::RAIL.to_vec(),
             tool_rail_order_revision: 0,
+            tool_rail_separators: Vec::new(),
             snapping: None,
             cutting_plan: CuttingPlanPreferences::default(),
             time_estimates: Default::default(),
@@ -174,6 +176,72 @@ mod guide_preference_tests {
         fn set_string(&mut self, key: &str, value: String) { self.values.insert(key.into(), value); }
         fn remove_string(&mut self, key: &str) { self.values.remove(key); }
         fn flush(&mut self) { self.flushed = true; }
+    }
+
+    #[test]
+    fn tool_rail_separators_default_and_restore_without_model_edits() {
+        let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert!(legacy.tool_rail_separators.is_empty());
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = Storage::default();
+        // Include both outer boundaries and a separator between tools.
+        app.tool_rail_separators = vec![0, 2, Tool::RAIL.len()];
+        app.reorder_rail_tool(Tool::Move, 0);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.tool_rail_separators, app.tool_rail_separators);
+        assert_eq!(restored.tool_rail_order, app.tool_rail_order);
+
+        storage.flushed = false;
+        app.tool_rail_separators.remove(1);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.tool_rail_separators, vec![0, Tool::RAIL.len()]);
+        assert!(!app.project.modified);
+    }
+
+    #[test]
+    fn separator_moves_save_immediately_without_model_edits() {
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.tool_rail_separators = vec![0, 2];
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        storage.flushed = false;
+        app.reorder_rail_separator(0, Tool::RAIL.len());
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert_eq!(app.tool_rail_separators, vec![2, Tool::RAIL.len()]);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.tool_rail_separators, app.tool_rail_separators);
+        assert_eq!(restored.tool_rail_order, app.tool_rail_order);
+        // Moving onto an occupied boundary or moving a missing separator is a no-op.
+        restored.reorder_rail_separator(2, Tool::RAIL.len());
+        restored.reorder_rail_separator(1, 0);
+        assert_eq!(restored.tool_rail_separators, app.tool_rail_separators);
+    }
+
+    #[test]
+    fn restored_tool_rail_separators_discard_invalid_and_duplicate_boundaries() {
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let preferences = InspectorPreferences {
+            tool_rail_separators: vec![Tool::RAIL.len() + 1, 2, 0, 2, usize::MAX],
+            ..Default::default()
+        };
+        eframe::set_value(&mut storage, PREFERENCE_KEY, &preferences);
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert_eq!(app.tool_rail_separators, vec![0, 2]);
     }
 
     #[test]
@@ -843,6 +911,10 @@ impl BenchUpApp {
         preferences.tools.restore(self);
         self.orbit_origin = preferences.orbit_origin;
         self.tool_rail_order = normalized_tool_rail_order(&preferences.tool_rail_order);
+        self.tool_rail_separators = preferences.tool_rail_separators.iter().copied()
+            .filter(|&slot| slot <= self.tool_rail_order.len()).collect();
+        self.tool_rail_separators.sort_unstable();
+        self.tool_rail_separators.dedup();
         // Apply the new bottom placement once, preserving subsequent user reordering.
         if preferences.tool_rail_order_revision < 1 {
             self.tool_rail_order.retain(|tool| *tool != Tool::Router);
@@ -987,6 +1059,7 @@ impl BenchUpApp {
             orbit_origin: self.orbit_origin,
             tool_rail_order: self.tool_rail_order.clone(),
             tool_rail_order_revision: 1,
+            tool_rail_separators: self.tool_rail_separators.clone(),
             snapping: Some(SnappingPreferences {
                 geometry: true,
                 edges: self.doc.snap_to_geometry && self.snap_to_edge,

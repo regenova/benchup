@@ -1,4 +1,6 @@
 {
+  "tools.add_separator": "Agregar separador",
+  "tools.remove_separator": "Eliminar separador",
   "tools.wood_tools": "Madera",
   "follow_me.advanced_tools": "Avanzado",
   "account.account": "Cuenta",

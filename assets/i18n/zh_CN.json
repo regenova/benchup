@@ -1,4 +1,6 @@
 {
+  "tools.add_separator": "添加分隔线",
+  "tools.remove_separator": "移除分隔线",
   "tools.wood_tools": "木材",
   "follow_me.advanced_tools": "高级",
   "account.account": "账户",
