@@ -177,6 +177,92 @@ fn each_changing_call_is_one_undo_step_and_reads_add_none() {
 }
 
 #[test]
+fn activity_includes_reads_and_returns_to_idle_without_another_call() {
+    let mut setup = Setup::paired();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+
+    assert_eq!(setup.call("get_scene", json!({}))["ok"], true);
+    let (_, at) = setup.app.agent_link.last_activity.unwrap();
+    assert_eq!(setup.app.agent_link.activity_text(at), Some("AI: Reading the project…".into()));
+    assert!(setup.app.agent_link.activity_text(at + ACTIVITY_LINGER).is_none());
+    assert!(!setup.app.agent_link.editing(at), "reading does not take editing control");
+
+    assert_eq!(setup.call("create_board", board("Side", 0.))["ok"], true);
+    assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Creating geometry…".into()));
+    // A failed request must not leave a misleading description of work.
+    assert_eq!(setup.call("get_object", json!({"id": u64::MAX}))["ok"], false);
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+}
+
+#[test]
+fn waiting_activity_clears_on_cancellation_denial_and_disconnect() {
+    let mut setup = Setup::paired();
+    setup.app.line_start = Some(DVec3::ZERO);
+    let id = setup.send("create_board", board("Side", 0.));
+    setup.poll();
+    assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Waiting for access — Creating geometry".into()));
+    setup.wire.push(json!({"type": "cancel", "id": id}));
+    setup.poll();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+
+    setup.send("create_board", board("Side", 0.));
+    setup.poll();
+    setup.app.agent_link.deny();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+
+    assert_eq!(setup.call("get_scene", json!({}))["ok"], true, "reads still work after denying edits");
+    assert!(setup.app.agent_link.activity_text(clock()).is_some());
+    setup.wire.0.lock().unwrap().incoming.push(Err("disconnected".into()));
+    setup.poll();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+    assert!(setup.app.agent_link.last_activity.is_none());
+}
+
+#[test]
+fn single_call_batches_describe_the_action_and_previews_are_identified() {
+    let mut setup = Setup::paired();
+    let calls = json!([{"tool": "create_board", "arguments": board("Side", 0.)}]);
+    assert_eq!(setup.call("run_batch", json!({"calls": calls, "dry_run": true}))["ok"], true);
+    assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Previewing changes…".into()));
+    assert!(setup.app.doc.model.objects.is_empty());
+
+    assert_eq!(setup.call("run_batch", json!({"calls": calls}))["ok"], true);
+    assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Creating geometry…".into()));
+    setup.app.doc_epoch += 1;
+    setup.poll();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none(), "activity belongs to its project");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn rendering_activity_stays_visible_until_the_render_finishes() {
+    let mut setup = Setup::paired();
+    // Hold a render open deterministically without running a GPU render.
+    let (tx, rx) = std::sync::mpsc::channel();
+    setup.app.agent_link.rendering = Some(("render".into(), rx, setup.app.doc_epoch));
+    let later = clock() + ACTIVITY_LINGER * 10.;
+    assert_eq!(setup.app.agent_link.activity_text(later), Some("AI: Rendering a view…".into()));
+    // Concurrent read calls must not hide an in-progress render.
+    assert_eq!(setup.call("get_scene", json!({}))["ok"], true);
+    assert_eq!(setup.app.agent_link.activity_text(later), Some("AI: Rendering a view…".into()));
+    tx.send((true, json!({"png_base64": "test"}))).unwrap();
+    setup.poll();
+    let (_, at) = setup.app.agent_link.last_activity.unwrap();
+    assert!(setup.app.agent_link.rendering.is_none());
+    assert_eq!(setup.app.agent_link.activity_text(at), Some("AI: Rendering a view…".into()));
+    assert!(setup.app.agent_link.activity_text(at + ACTIVITY_LINGER).is_none());
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    setup.app.agent_link.rendering = Some(("old-project-render".into(), rx, setup.app.doc_epoch));
+    setup.app.doc_epoch += 1;
+    setup.poll();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none(), "the previous project's render stays hidden");
+    tx.send((true, json!({"png_base64": "test"}))).unwrap();
+    setup.poll();
+    assert!(setup.app.agent_link.activity_text(clock()).is_none(), "finishing an old render does not revive its activity");
+}
+
+#[test]
 fn a_batch_is_one_step_all_or_nothing_and_a_dry_run_changes_nothing() {
     let mut setup = Setup::paired();
     let calls = json!([

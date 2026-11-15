@@ -29,6 +29,9 @@ use benchup_tools::{Call, ToolEnv, batch, pairing};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 
+#[path = "agent_link_activity.rs"]
+mod activity;
+use activity::Activity;
 #[path = "agent_link_ui.rs"]
 mod ui;
 #[cfg(test)]
@@ -58,6 +61,8 @@ const DEADLINE_MARGIN_MS: u64 = 1000;
 const TOKEN_RETRY: f64 = 30.;
 /// Granted control returns to normal after the agent is quiet this long.
 const AGENT_IDLE: f64 = 8.;
+/// Keep quick calls readable between successive agent requests.
+const ACTIVITY_LINGER: f64 = 3.;
 const TOKEN_FILE: &str = "agent-link.token";
 const TOKEN_STORAGE: &str = "benchup.agent_link.token";
 
@@ -387,12 +392,14 @@ pub(super) struct AgentLink {
     denied: bool,
     /// When the agent last changed the model.
     last_change: Option<f64>,
+    /// Session-only telemetry, cleared on disconnect or project replacement.
+    last_activity: Option<(Activity, f64)>,
     /// The last copy button pressed and until when "Copied" shows (session only).
     copied: Option<(ui::CopiedText, f64)>,
-    /// The `render_view` being made on another thread: its call id, and
-    /// where the answer arrives.
+    /// The `render_view` being made on another thread: its call id, where
+    /// the answer arrives, and the document epoch it belongs to.
     #[cfg(not(target_arch = "wasm32"))]
-    rendering: Option<(String, std::sync::mpsc::Receiver<(bool, Value)>)>,
+    rendering: Option<(String, std::sync::mpsc::Receiver<(bool, Value)>, u64)>,
     /// Results larger than this are refused (lowered in tests).
     max_result_bytes: usize,
     /// Token storage; tests use a temporary slot.
@@ -412,6 +419,12 @@ impl Default for AgentLink {
 pub(super) fn claude_command(token: &str, port: u16) -> String {
     let port = if port == DEFAULT_PORT { String::new() } else { format!(" --port {port}") };
     format!("claude mcp add benchup -e BENCHUP_AGENT_TOKEN={token} -- benchup bridge{port}")
+}
+
+/// `codex mcp add` command; the bridge receives the token in its environment.
+pub(super) fn codex_command(token: &str, port: u16) -> String {
+    let port = if port == DEFAULT_PORT { String::new() } else { format!(" --port {port}") };
+    format!("codex mcp add benchup --env BENCHUP_AGENT_TOKEN={token} -- benchup bridge{port}")
 }
 
 /// Generic `mcpServers` entry; the token travels in the environment.
@@ -454,6 +467,7 @@ impl AgentLink {
             asking: false,
             denied: false,
             last_change: None,
+            last_activity: None,
             copied: None,
             #[cfg(not(target_arch = "wasm32"))]
             rendering: None,
@@ -536,6 +550,29 @@ impl AgentLink {
         }
     }
 
+    /// Work the app can observe, including reads and long-running renders.
+    /// Resolve labels here so changing the application language updates them.
+    pub(super) fn activity_text(&self, now: f64) -> Option<String> {
+        if !self.connected() {
+            return None;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.rendering.as_ref().is_some_and(|(_, _, epoch)| *epoch == self.epoch) {
+            return Some(tr!("agent_link.activity.current", activity = Activity::Rendering.label()));
+        }
+        if let Some(queued) = self.queue.iter().find(|queued| queued.epoch == self.epoch) {
+            let activity = Activity::for_call(&queued.name, &queued.arguments).label();
+            return Some(if self.asking && queued.changes {
+                tr!("agent_link.activity.waiting_access", activity = activity)
+            } else {
+                tr!("agent_link.activity.waiting", activity = activity)
+            });
+        }
+        self.last_activity
+            .filter(|(_, at)| now - at < ACTIVITY_LINGER)
+            .map(|(activity, _)| tr!("agent_link.activity.current", activity = activity.label()))
+    }
+
     fn send(&mut self, message: Value) {
         if let Some(active) = &mut self.active {
             let _ = active.link.send(message);
@@ -587,6 +624,7 @@ impl AgentLink {
     pub(super) fn take_control(&mut self) {
         self.control = Control::Designer;
         self.last_change = None;
+        self.last_activity = None;
         self.refuse_changes(tr!("agent_link.error.taken_control"), Some(tr!("agent_link.error.denied_hint")));
     }
     /// The designer lets the agent edit again without asking.
@@ -597,6 +635,7 @@ impl AgentLink {
     /// The designer refused the waiting changes.
     pub(super) fn deny(&mut self) {
         self.denied = true;
+        self.last_activity = None;
         self.refuse_changes(tr!("agent_link.error.denied"), Some(tr!("agent_link.error.denied_hint")));
     }
 
@@ -605,6 +644,7 @@ impl AgentLink {
         self.active = None;
         self.queue.clear();
         self.asking = false;
+        self.last_activity = None;
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.rendering = None;
@@ -817,7 +857,10 @@ impl BenchUpApp {
     pub(super) fn poll_agent_link(&mut self, ctx: &egui::Context) {
         let now = clock();
         let prefs = self.general_settings.agent.clone();
-        self.agent_link.epoch = self.doc_epoch;
+        if self.agent_link.epoch != self.doc_epoch {
+            self.agent_link.last_activity = None;
+            self.agent_link.epoch = self.doc_epoch;
+        }
         self.agent_link.document_name = self.doc.name.clone();
         self.agent_link.pump(ctx, now, &prefs);
         self.agent_link.expire(now);
@@ -918,6 +961,7 @@ impl BenchUpApp {
             }
             let selection_before = self.selected.clone();
             let (ok, result) = self.run_agent_request(&queued.name, &queued.arguments, ctx);
+            self.agent_link.last_activity = ok.then(|| (Activity::for_call(&queued.name, &queued.arguments), clock()));
             // `select` or `undo` may change the selection; in a shared
             // project the server must lease it before edits can follow.
             self.selection_changed_outside_frame(&selection_before);
@@ -942,6 +986,12 @@ impl BenchUpApp {
         if self.agent_link.editing(now) {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
+        if let Some((_, at)) = self.agent_link.last_activity {
+            let remaining = ACTIVITY_LINGER - (clock() - at);
+            if remaining > 0. {
+                ctx.request_repaint_after(Duration::from_secs_f64(remaining));
+            }
+        }
     }
 
     /// Renders a view on another thread from a copy of the model, so a large
@@ -955,7 +1005,7 @@ impl BenchUpApp {
             let _ = tx.send(render_answer(&model, &arguments));
             ctx.request_repaint();
         });
-        self.agent_link.rendering = Some((id, rx));
+        self.agent_link.rendering = Some((id, rx, self.doc_epoch));
     }
 
     /// Answers the render made on another thread, once it is done.
@@ -963,14 +1013,18 @@ impl BenchUpApp {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use std::sync::mpsc::TryRecvError;
-            let Some((id, rx)) = &self.agent_link.rendering else { return };
+            let Some((id, rx, epoch)) = &self.agent_link.rendering else { return };
             let answer = match rx.try_recv() {
                 Ok(answer) => answer,
                 Err(TryRecvError::Empty) => return,
                 Err(TryRecvError::Disconnected) => (false, json!({"ok": false, "error": "the render failed"})),
             };
             let id = id.clone();
+            let current_document = *epoch == self.doc_epoch;
             self.agent_link.rendering = None;
+            if current_document {
+                self.agent_link.last_activity = answer.0.then(|| (Activity::Rendering, clock()));
+            }
             self.agent_link.document_name = self.doc.name.clone();
             self.agent_link.send_result(&id, answer.0, answer.1, false);
         }

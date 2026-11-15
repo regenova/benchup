@@ -99,6 +99,9 @@ impl BenchUpApp {
                 if ui.button(tr!("agent_link.copy_command")).on_hover_text(tr!("agent_link.command_help")).clicked() {
                     self.agent_link.copy(ui.ctx(), claude_command(&token, port), CopiedText::Setup);
                 }
+                if ui.button(tr!("agent_link.copy_codex_command")).on_hover_text(tr!("agent_link.codex_command_help")).clicked() {
+                    self.agent_link.copy(ui.ctx(), codex_command(&token, port), CopiedText::Setup);
+                }
                 if ui.button(tr!("agent_link.copy_json")).on_hover_text(tr!("agent_link.json_help")).clicked() {
                     self.agent_link.copy(ui.ctx(), mcp_json(&token, port), CopiedText::Setup);
                 }
@@ -133,11 +136,15 @@ impl BenchUpApp {
         } else {
             (tr!("agent_link.chip.connected").to_owned(), colors.muted)
         };
-        let label = ui.text_label(RichText::new(text).size(12.).color(color));
-        if let Some(client) = client {
-            label.on_hover_text(client);
-        }
-        dot(ui, color);
+        let text = self.agent_link.activity_text(now).unwrap_or(text);
+        let tooltip = match client {
+            Some(client) => format!("{text}\n{client}"),
+            None => text.clone(),
+        };
+        let label = ui.add(crate::natural_text::Label::new(RichText::new(text).size(12.).color(color)).truncate());
+        label.on_hover_text(tooltip);
+        // The dot reports the live connection; text and buttons report control.
+        dot(ui, Color32::from_rgb(34, 197, 94));
         ui.add_space(8.);
     }
 
