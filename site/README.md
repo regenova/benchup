@@ -4,6 +4,8 @@ The landing page serves woodworking use cases and application facts as static HT
 
 The Pages workflow stages `index.html`, `styles.css`, `sitemap.xml`, `robots.txt`, and `llms.txt` using `scripts/stage_site.py`. All public URLs remain under `https://benchup3d.github.io/benchup/`; staging does not rewrite links for forks or custom domains. The sitemap lists the informational landing page; the interactive WebAssembly editor is linked from that page.
 
+Typography uses the self-hosted Manrope variable font in `fonts/`, distributed under the included SIL Open Font License. Staging copies this directory alongside the stylesheet; the page preloads the font and uses `font-display: swap` with system fallbacks.
+
 Crawlers only consult robots.txt at the origin root. On the project site at https://benchup3d.github.io/benchup/, the staged /benchup/robots.txt is informational; effective crawl rules must be maintained at https://benchup3d.github.io/robots.txt in the organization Pages repository. Do not block search crawlers there. No special AI directive is required: the wildcard rule permits all crawlers without distinguishing search from training crawlers.
 
 After publication, verify the canonical URL and discovery files on the live site. The site owner can verify ownership in Google Search Console and Bing Webmaster Tools, submit the sitemap URL, and request indexing of the landing page. These steps require the owner's accounts; repository changes do not submit the site automatically. Indexing, citations, and recommendations remain at each provider's discretion.

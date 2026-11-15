@@ -12,6 +12,7 @@ def stage(source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for name in FILES:
         shutil.copy2(source / name, destination / name)
+    shutil.copytree(source / "fonts", destination / "fonts", dirs_exist_ok=True)
     for directory in ("branding", "screenshots"):
         shutil.copytree(source.parent / "assets" / directory,
                         destination / "assets" / directory, dirs_exist_ok=True)

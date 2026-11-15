@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Manrope";
+  src: url("fonts/manrope-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --paper: #f7f5ee;
@@ -5,7 +13,7 @@
   --muted: #536159;
   --red: #c83d2c;
   --line: #d9ddd3;
-  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-family: "Manrope", "Avenir Next", Avenir, "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
@@ -18,7 +26,7 @@ a { color: inherit; text-underline-offset: 4px; }
 img { display: block; max-width: 100%; height: auto; }
 p { line-height: 1.75; }
 h1, h2, h3, p, figure { margin: 0; }
-h1, h2 { font-weight: 500; letter-spacing: -.055em; line-height: 1.06; }
+h1, h2 { font-weight: 600; letter-spacing: -.045em; line-height: 1.1; }
 h2 { font-size: clamp(2.1rem, 4vw, 3.25rem); }
 h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; }
 ::selection { background: #f5c2ab; color: var(--ink); }
@@ -29,7 +37,7 @@ h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; }
 .skip-link:focus { top: 12px; }
 
 .site-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 26px; border-bottom: 1px solid var(--line); }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 1.65rem; letter-spacing: -.04em; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 1.65rem; font-weight: 700; letter-spacing: -.04em; text-decoration: none; }
 nav { display: flex; align-items: center; gap: 30px; }
 nav a { font-size: .9rem; text-decoration: none; }
 .source-link:hover, .desktop-link:hover, .site-footer a:hover { text-decoration: underline; }
@@ -41,7 +49,7 @@ nav a { font-size: .9rem; text-decoration: none; }
 .hero { padding-top: 86px; }
 .hero-intro { display: grid; grid-template-columns: 1.4fr 1fr; gap: 55px; align-items: center; margin-bottom: 54px; }
 h1 { font-size: clamp(3.25rem, 6.6vw, 5.4rem); }
-h1 em { font-family: Georgia, "Times New Roman", serif; font-weight: 400; color: var(--red); }
+h1 em { font-style: normal; color: var(--red); }
 .hero-copy > p:first-child { color: var(--muted); font-size: 1.15rem; max-width: 380px; margin-bottom: 24px; }
 .hero-note { color: var(--muted); font-size: .78rem; margin-top: 15px; }
 .workspace-preview { padding: 10px 10px 0; background: #e9ebdf; border: 1px solid #d3d8ca; border-radius: 10px; }
