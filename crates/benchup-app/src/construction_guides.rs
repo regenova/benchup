@@ -3,6 +3,8 @@ use super::*;
 use benchup_core::ConstructionGuide;
 
 const GUIDE_COLOR: Color32 = Color32::from_rgb(0, 174, 214);
+/// Matches the eraser's pending highlight for faces and edges.
+const ERASING_COLOR: Color32 = Color32::from_rgb(220, 91, 76);
 
 impl BenchUpApp {
     pub(super) fn guide_modifier(
@@ -234,9 +236,16 @@ impl BenchUpApp {
             })
             .unwrap_or(&self.doc.model);
         let colors = Palette::for_painter(p);
+        let erasing = match &self.gesture {
+            Some(Gesture { kind: GestureKind::Erase { ids }, .. }) => Some(ids),
+            _ => None,
+        };
         for (id, guide) in model.guides.iter().filter(|(id, _)| !model.is_hidden(**id)) {
-            let hovered = self.hover.is_some() && self.hover == model.entity_in_context(*id);
-            let (color, width) = if self.entity_cache.selected(model, *id, &self.selected) {
+            let root = model.entity_in_context(*id);
+            let hovered = self.hover.is_some() && self.hover == root;
+            let (color, width) = if erasing.is_some_and(|ids| root.is_some_and(|id| ids.contains(&id))) {
+                (ERASING_COLOR, 2.)
+            } else if self.entity_cache.selected(model, *id, &self.selected) {
                 (colors.accent, 2.5)
             } else if hovered {
                 (colors.green, 2.)

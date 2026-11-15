@@ -140,6 +140,37 @@ fn selected_guides_render_a_distinct_highlight() {
 }
 
 #[test]
+fn eraser_strokes_highlight_the_guides_they_will_delete() {
+    let mut h = Harness::new();
+    let id = h.app.doc.model.add_guide(DVec3::Y, Some(DVec3::X)).unwrap();
+    h.app.set_tool(Tool::Erase);
+    let point = h.at(DVec3::new(1., 1., 0.));
+    let erased_color = |h: &mut Harness| {
+        let rect = h.app.viewport;
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, h.size)),
+            time: Some(h.time),
+            ..Default::default()
+        };
+        let output = h.ctx.run_test_ui(input, |ui| {
+            h.app.paint_construction_guides(ui.painter(), rect);
+        });
+        output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::LineSegment { stroke, .. } if stroke.color == Color32::from_rgb(220, 91, 76)))
+    };
+    h.pointer(point - egui::vec2(0., 20.), egui::PointerButton::Primary, true, false);
+    h.frame(
+        vec![egui::Event::PointerMoved(point + egui::vec2(0., 20.))],
+        egui::Modifiers::NONE,
+    );
+    assert!(h.app.doc.model.guides.contains_key(&id));
+    assert!(erased_color(&mut h), "pending erase must tint the guide");
+    h.pointer(point + egui::vec2(0., 20.), egui::PointerButton::Primary, false, false);
+    assert!(!h.app.doc.model.guides.contains_key(&id));
+    assert!(!erased_color(&mut h));
+}
+
+#[test]
 fn tape_guide_from_an_edge_is_parallel_to_it_and_supports_exact_entry_and_undo() {
     let mut h = Harness::new();
     h.app
