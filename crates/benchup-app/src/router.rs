@@ -261,7 +261,7 @@ fn profile_selector(ui: &mut egui::Ui, current: &mut Profile) -> ProfileInteract
 }
 
 /// Cross sections show the retained wood and highlighted cutting boundary.
-/// Each span is filled separately so concave profiles tessellate correctly.
+/// Triangulate spans in one mesh so concave profiles fill without antialiased seams.
 fn profile_icon(p: &egui::Painter, rect: Rect, profile: Profile, ink: Color32, enabled: bool) {
     let v = egui::vec2;
     let quarter = |radius: f32, origin: egui::Vec2, convex: bool| {
@@ -310,20 +310,18 @@ fn profile_icon(p: &egui::Painter, rect: Rect, profile: Profile, ink: Color32, e
     let mut path: Vec<_> = boundary.iter().copied().map(at).collect();
     let last = *boundary.last().unwrap();
     let final_span = [last, v(1.35, 0.)];
+    let mut fill = egui::Mesh::default();
     for pair in boundary.windows(2).chain(std::iter::once(&final_span[..])) {
         if pair[1].x > pair[0].x {
-            p.add(egui::Shape::convex_polygon(
-                vec![
-                    at(pair[0]),
-                    at(pair[1]),
-                    at(v(pair[1].x, 1.35)),
-                    at(v(pair[0].x, 1.35)),
-                ],
-                wood,
-                Stroke::NONE,
-            ));
+            let base = fill.vertices.len() as u32;
+            for point in [pair[0], pair[1], v(pair[1].x, 1.35), v(pair[0].x, 1.35)] {
+                fill.colored_vertex(at(point), wood);
+            }
+            fill.add_triangle(base, base + 1, base + 2);
+            fill.add_triangle(base, base + 2, base + 3);
         }
     }
+    p.add(egui::Shape::mesh(fill));
     path.extend([at(v(1.35, 0.)), at(v(1.35, 1.35)), at(v(0., 1.35))]);
     p.add(egui::Shape::closed_line(path, Stroke::new(1.2, ink)));
     p.add(egui::Shape::line(

@@ -8,8 +8,11 @@ const catalog = require('../assets/i18n/en_US.json');
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const startup = html.match(/<script id="startup-messages">([\s\S]*?)<\/script>/)[1];
 
-function runStartup(document, fetch) {
-    return vm.runInNewContext(startup, {document, fetch, Math: {random: () => 0, floor: Math.floor}});
+function runStartup(document, fetch, {language = null, languages = ['en-US'], storageBlocked = false} = {}) {
+    document.documentElement ??= {};
+    return vm.runInNewContext(startup, {document, fetch, window: {}, navigator: {languages},
+        localStorage: {getItem() { if (storageBlocked) throw new Error('blocked'); return language; }},
+        Math: {random: () => 0, floor: Math.floor}});
 }
 
 // Catalog text must not introduce destinations absent from the source message.
@@ -57,6 +60,40 @@ test('a late catalog response leaves the open project title intact', async () =>
     };
     await runStartup(document, async () => ({ok: true, json: async () => catalog}));
     assert.equal(document.title, 'Workshop - BenchUp');
+});
+
+test('the loading screen respects the saved language before browser languages', async () => {
+    const messages = require('../assets/i18n/it_IT.json');
+    const loading = {};
+    const document = {getElementById: id => id === 'loading-label' ? loading : {setAttribute() {}}};
+    await runStartup(document, async url => {
+        assert.equal(url, 'assets/i18n/it_IT.json');
+        return {ok: true, json: async () => messages};
+    }, {language: 'it_IT', languages: ['es-MX']});
+    assert.equal(document.documentElement.lang, 'it-IT');
+    assert.equal(loading.textContent, messages['web.loading.01']);
+});
+
+test('browser language detection works without storage and avoids Traditional Chinese', async () => {
+    for (const [languages, expected] of [[['pt-PT'], 'pt_BR'], [['zh-Hant-TW', 'es-MX'], 'es_419'],
+        [['zh-Hans'], 'zh_CN'], [['de-DE'], 'en_US']]) {
+        const requests = [];
+        await runStartup({getElementById: () => ({setAttribute() {}})}, async url => {
+            requests.push(url);
+            return {ok: true, json: async () => catalog};
+        }, {languages, storageBlocked: true});
+        assert.deepEqual(requests, [`assets/i18n/${expected}.json`]);
+    }
+});
+
+test('a missing translated startup catalog falls back to English', async () => {
+    const requests = [];
+    const document = {getElementById: () => ({setAttribute() {}})};
+    await runStartup(document, async url => {
+        requests.push(url);
+        return {ok: requests.length === 2, json: async () => catalog};
+    }, {language: 'vi_VN'});
+    assert.deepEqual(requests, ['assets/i18n/vi_VN.json', 'assets/i18n/en_US.json']);
 });
 
 for (const [language, file] of [['Chinese', 'zh_CN'], ['Brazilian Portuguese', 'pt_BR']]) {

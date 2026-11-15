@@ -126,6 +126,27 @@ pub fn initialize() {
     });
 }
 #[cfg(target_os = "linux")]
+fn linux_thumbnailer(quoted_executable: &str, system_bin: &Path) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    // GNOME hides the user's home (and AppImage mounts) from thumbnailers.
+    // Our previews are PNGs, so prefer an image decoder installed in /usr.
+    for (program, arguments) in [
+        ("glycin-thumbnailer", "--input %u --output %o --size %s"),
+        ("gdk-pixbuf-thumbnailer", "-s %s %u %o"),
+    ] {
+        let path = system_bin.join(program);
+        if path.metadata().is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0) {
+            return format!(
+                "[Thumbnailer Entry]\nTryExec={}\nExec={} {arguments}\nMimeType=application/x-benchup;\n",
+                path.display(), path.display(),
+            );
+        }
+    }
+    // Other desktops may not sandbox thumbnailers or ship a system decoder.
+    format!("[Thumbnailer Entry]\nExec={quoted_executable} --thumbnail %i %o\nMimeType=application/x-benchup;\n")
+}
+
+#[cfg(target_os = "linux")]
 fn register() -> Result<(), Box<dyn std::error::Error>> {
     let exe = std::env::var_os("APPIMAGE")
         .map(PathBuf::from)
@@ -163,9 +184,7 @@ fn register() -> Result<(), Box<dyn std::error::Error>> {
         ),
         (
             "thumbnailers/benchup.thumbnailer",
-            format!(
-                "[Thumbnailer Entry]\nExec={quoted} --thumbnail %i %o\nMimeType=application/x-benchup;\n"
-            ),
+            linux_thumbnailer(&quoted, Path::new("/usr/bin")),
         ),
     ];
     let mut changed = false;

@@ -491,8 +491,10 @@ impl Model {
         self.entity_tags.retain(|id, _| !replaced.contains(id));
         self.reference_images
             .retain(|id, _| self.faces.contains_key(id));
+        let mut added_faces = BTreeSet::new();
         for (vertices, (color, tag, glue)) in fresh.into_iter().zip(inherited) {
             let id = self.id();
+            added_faces.insert(id);
             self.faces.insert(
                 id,
                 Face {
@@ -509,17 +511,35 @@ impl Model {
                 self.entity_tags.insert(id, tag);
             }
         }
-        // Keep nested outlines as holes even when their independently selectable fill is deleted.
-        let holes: Vec<_> = self
-            .faces
-            .values()
+        let holes = self.drawing_hole_updates(&loose_faces, &added_faces, &hole_candidates);
+        for (id, holes) in holes {
+            self.faces.get_mut(&id).unwrap().holes = holes;
+        }
+        true
+    }
+
+    fn drawing_hole_updates(
+        &self,
+        loose_faces: &BTreeSet<u64>,
+        added_faces: &BTreeSet<u64>,
+        hole_candidates: &[Vec<u64>],
+    ) -> Vec<(u64, Vec<Vec<u64>>)> {
+        // Drawing only adds boundaries (edge splits insert collinear vertices).
+        // An existing face's nesting can therefore change only when it contains
+        // a new boundary. Avoid comparing every old face with every old ring
+        // whenever an unrelated drawing closes, especially beside swept meshes.
+        loose_faces
+            .union(added_faces)
+            .filter_map(|id| self.faces.get(id))
             .filter(|face| {
-                !children.contains(&face.id)
-                    && !hidden.contains(&face.id)
-                    && !locked.contains(&face.id)
-                    && !self.is_tag_hidden(face.id)
+                added_faces.contains(&face.id)
+                    || added_faces
+                        .iter()
+                        .any(|id| contains_ring(self, &face.vertices, &self.faces[id].vertices))
             })
             .map(|face| {
+                // Include old holes even when their selectable fill was erased,
+                // and outlines replaced by a divider, as in the full rebuild.
                 let candidates: BTreeMap<_, _> = hole_candidates
                     .iter()
                     .filter(|ring| contains_ring(self, &face.vertices, ring))
@@ -538,10 +558,142 @@ impl Model {
                     .collect();
                 (face.id, holes)
             })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod drawing_hole_tests {
+    use super::*;
+
+    fn square(model: &mut Model, low: f64, high: f64, offset: DVec3) -> u64 {
+        let points = [
+            DVec3::new(low, low, 0.),
+            DVec3::new(high, low, 0.),
+            DVec3::new(high, high, 0.),
+            DVec3::new(low, high, 0.),
+            DVec3::new(low, low, 0.),
+        ]
+        .map(|point| point + offset);
+        let previous = model.next_id;
+        model.draw_polyline(&points, true).unwrap();
+        *model.faces.range(previous + 1..).next().unwrap().0
+    }
+
+    // Independent full-scene reference: keep every directly nested boundary.
+    fn assert_full_rebuild_matches(model: &Model) {
+        let candidates: BTreeMap<_, _> = model
+            .faces
+            .values()
+            .flat_map(|face| std::iter::once(&face.vertices).chain(&face.holes))
+            .map(|ring| (canonical_ring(ring), ring.clone()))
             .collect();
-        for (id, holes) in holes {
-            self.faces.get_mut(&id).unwrap().holes = holes;
+        for face in model.faces.values() {
+            let contained: Vec<_> = candidates
+                .values()
+                .filter(|ring| contains_ring(model, &face.vertices, ring))
+                .collect();
+            let expected: BTreeSet<_> = contained
+                .iter()
+                .filter(|ring| {
+                    !contained.iter().any(|other| {
+                        canonical_ring(ring) != canonical_ring(other)
+                            && contains_ring(model, other, ring)
+                    })
+                })
+                .map(|ring| canonical_ring(ring))
+                .collect();
+            let actual: BTreeSet<_> = face.holes.iter().map(|ring| canonical_ring(ring)).collect();
+            assert_eq!(expected, actual, "holes of face {}", face.id);
         }
-        true
+        model.validate().unwrap();
+    }
+
+    #[test]
+    fn drawing_rechecks_only_new_faces_and_their_containers() {
+        let mut model = Model::default();
+        let outer = square(&mut model, 0., 8., DVec3::ZERO);
+        // A dense unrelated mesh must not participate in a quadratic rebuild.
+        for i in 0..626 {
+            let offset = DVec3::new(20. + (i % 32) as f64 * 2., (i / 32) as f64 * 2., 0.);
+            let vertices = [offset, offset + DVec3::X, offset + DVec3::Y]
+                .map(|point| model.raw_vertex(point))
+                .to_vec();
+            model.raw_face(vertices, vec![], None);
+        }
+        let old = model.faces.keys().copied().collect();
+        let inner = square(&mut model, 2., 4., DVec3::ZERO);
+        let candidates: Vec<_> = model
+            .faces
+            .values()
+            .map(|face| face.vertices.clone())
+            .collect();
+        let updates = model.drawing_hole_updates(&old, &BTreeSet::from([inner]), &candidates);
+        assert_eq!(
+            updates.iter().map(|(id, _)| *id).collect::<BTreeSet<_>>(),
+            BTreeSet::from([outer, inner])
+        );
+        assert_eq!(model.faces[&outer].holes.len(), 1);
+
+        let old = model.faces.keys().copied().collect();
+        let separate = square(&mut model, 0., 1., DVec3::Z * 3.);
+        let candidates: Vec<_> = model
+            .faces
+            .values()
+            .map(|face| face.vertices.clone())
+            .collect();
+        let updates = model.drawing_hole_updates(&old, &BTreeSet::from([separate]), &candidates);
+        assert_eq!(
+            updates.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            [separate]
+        );
+    }
+
+    #[test]
+    fn nested_drawings_deleted_fills_and_dividers_match_a_full_hole_rebuild() {
+        for tilt in [false, true] {
+            let mut model = Model::default();
+            let outer = square(&mut model, 0., 10., DVec3::ZERO);
+            let deleted = square(&mut model, 4., 6., DVec3::ZERO);
+            model.erase(&BTreeSet::from([deleted]));
+            // A new outline surrounds a hole whose selectable fill is gone.
+            let middle = square(&mut model, 2., 8., DVec3::ZERO);
+            assert_eq!(
+                model.faces[&outer].holes,
+                vec![model.faces[&middle].vertices.clone()]
+            );
+            assert_eq!(model.faces[&middle].holes.len(), 1);
+            assert_full_rebuild_matches(&model);
+            square(&mut model, 4.5, 5.5, DVec3::ZERO);
+            assert_full_rebuild_matches(&model);
+            if tilt {
+                for vertex in model.vertices.values_mut() {
+                    let p = vertex.position;
+                    vertex.position = DVec3::new(p.x, p.y * 0.6, p.y * 0.8);
+                }
+            }
+            let at = |x, y| {
+                if tilt {
+                    DVec3::new(x, y * 0.6, y * 0.8)
+                } else {
+                    DVec3::new(x, y, 0.)
+                }
+            };
+            // Split the outer region, inserting collinear boundary vertices.
+            model.add_edge(at(0., 1.), at(10., 1.)).unwrap();
+            assert_full_rebuild_matches(&model);
+            // Retrace a deleted fill without changing its containing hole.
+            model.add_edge(at(4., 4.), at(6., 4.)).unwrap();
+            assert_full_rebuild_matches(&model);
+            let before = model.clone();
+            square(&mut model, 20., 21., DVec3::ZERO);
+            let mut history = crate::History::default();
+            history.record_applied_attributed("Draw rectangle", before.clone(), &model, None, None);
+            let after = model.clone();
+            assert!(history.undo(&mut model));
+            assert_eq!(model, before);
+            assert!(history.redo(&mut model));
+            assert_eq!(model, after);
+        }
     }
 }

@@ -75,6 +75,8 @@ mod measurement_tools;
 mod move_tool;
 #[path = "offset_tool.rs"]
 mod offset_tool;
+#[path = "follow_me.rs"]
+mod follow_me;
 #[path = "rotate_tool.rs"]
 mod rotate_tool;
 #[path = "scale_tool.rs"]
@@ -218,6 +220,7 @@ enum GestureKind {
     GrainDirection,
     WoodGlue,
     Router,
+    FollowMe,
     Solid,
     Measure,
     Paste,
@@ -353,6 +356,9 @@ struct ObjectCreation {
     name: String,
 }
 
+#[derive(Clone, Copy)]
+struct RailSeparatorDrag(usize);
+
 pub struct BenchUpApp {
     scale_cage: scale_tool::Cage,
     #[cfg(not(target_arch = "wasm32"))]
@@ -382,9 +388,12 @@ pub struct BenchUpApp {
     space_mouse: space_mouse::SpaceMouse,
     drawing_tool: Tool,
     tool_rail_order: Vec<Tool>,
+    // Boundaries between tool slots, including before the first and after the last.
+    tool_rail_separators: Vec<usize>,
     measurement_tool: Tool,
     solid_tool: Tool,
     solid_first: Option<u64>,
+    follow_me: follow_me::State,
     solid_volume_cache: solid_tools::VolumeCache,
     selection_measurements: selection_measurements::Cache,
     flip_hover: Option<Axis>,
@@ -582,9 +591,11 @@ impl BenchUpApp {
             space_mouse: Default::default(),
             drawing_tool: Tool::Line,
             tool_rail_order: Tool::RAIL.to_vec(),
+            tool_rail_separators: Vec::new(),
             measurement_tool: Tool::Dimensions,
             solid_tool: Tool::Union,
             solid_first: None,
+            follow_me: Default::default(),
             solid_volume_cache: Default::default(),
             selection_measurements:Default::default(),
             flip_hover: None,
@@ -766,6 +777,7 @@ impl BenchUpApp {
         self.drawing_orbit_pivot = None;
         self.hover = None;
         self.solid_first = None;
+        self.follow_me.reset();
         self.flip_hover = None;
         if tool.is_solid() {
             self.solid_tool = tool;
@@ -867,6 +879,7 @@ impl BenchUpApp {
     }
     fn finish_recorded_edit(&mut self, ctx: &egui::Context, geometry_changed: bool) {
         self.solid_first = None;
+        self.follow_me.reset();
         self.last_move_copy = None;
         self.measurement = None;
         self.modeling = None;
@@ -909,6 +922,7 @@ impl BenchUpApp {
         self.drawing_axis_guides.clear();
         self.drawing_projection = None;
         self.solid_first = None;
+        self.follow_me.reset();
         self.flip_hover = None;
         self.last_move_copy = None;
         self.measurement = None;
@@ -2545,6 +2559,7 @@ impl BenchUpApp {
             let editing_operation = self.last_move_copy.is_some()
                 || solid_operation
                 || measurement_operation
+                || self.follow_me.is_tracing()
                 || self.drawing.is_some()
                 || self.modeling.is_some()
                 || self.gesture.is_some()
@@ -2563,6 +2578,7 @@ impl BenchUpApp {
             self.last_move_copy = None;
             let completed_group = self.line_group;
             self.stop_drawing();
+            self.follow_me.reset();
             self.modeling = None;
             self.notice = None;
             self.help = false;
@@ -3345,6 +3361,8 @@ impl BenchUpApp {
                                 (false, false) => tr!("app.move_ctrl_toggles_copy_click_base_point_and"),
                             }
                         }
+                    } else if self.tool == Tool::FollowMe {
+                        self.follow_me_status()
                     } else if self.tool.is_solid() {
                         self.solid_status()
                     } else if self.tool.is_measuring() {
@@ -3524,36 +3542,13 @@ impl BenchUpApp {
             color,
         );
         let shortcut = shortcut_input::key_label(self.general_settings.tool_shortcut(tool));
-        let shortcut_size = ui.painter().text(
+        ui.painter().text(
             egui::pos2(rect.right() - 8., rect.center().y),
             Align2::RIGHT_CENTER,
             shortcut,
             FontId::proportional(11.),
             colors.muted,
         );
-        if tool == Tool::Polygon {
-            let input_rect = Rect::from_min_size(
-                egui::pos2(
-                    shortcut_size.left() - ui.spacing().item_spacing.x - 48.,
-                    rect.top(),
-                ),
-                egui::vec2(48., rect.height()),
-            );
-            // Center the widget's padded height within the row without advancing
-            // the menu cursor a second time.
-            let mut input_ui = ui.new_child(
-                egui::UiBuilder::new()
-                    .max_rect(input_rect)
-                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
-            );
-            input_ui
-                .add(
-                    egui::DragValue::new(&mut self.polygon_sides)
-                        .range(3..=64)
-                        .min_size(egui::vec2(48., 0.)),
-                )
-                .on_hover_text(tr!("app.polygon_sides"));
-        }
         self.tool_tooltip(response, tool)
     }
     fn reorder_rail_tool(&mut self, tool: Tool, insertion: usize) {
@@ -3564,8 +3559,61 @@ impl BenchUpApp {
         }
     }
 
+    fn reorder_rail_separator(&mut self, from: usize, insertion: usize) {
+        let insertion = insertion.min(self.tool_rail_order.len());
+        if self.tool_rail_separators.contains(&insertion) {
+            return;
+        }
+        if let Some(slot) = self.tool_rail_separators.iter_mut().find(|slot| **slot == from) {
+            *slot = insertion;
+            self.tool_rail_separators.sort_unstable();
+        }
+    }
+
+    fn rail_separator(
+        ui: &mut egui::Ui,
+        size: Vec2,
+        slot: usize,
+        placeholder: bool,
+        content_top: f32,
+    ) -> Rect {
+        let colors = Palette::for_ui(ui);
+        let (_, target) = ui.allocate_space(size);
+        let offset = ui.ctx().animate_value_with_time(
+            ui.scope_id().with(("tool_rail_separator_position", slot)),
+            target.top() - content_top,
+            ui.style().animation_time.min(0.14),
+        );
+        let rect = target.translate(egui::vec2(0., content_top + offset - target.top()));
+        let response = ui.interact(
+            rect,
+            ui.scope_id().with(("tool_rail_separator", slot)),
+            if placeholder { Sense::hover() } else { Sense::click_and_drag() },
+        );
+        response.dnd_set_drag_payload(RailSeparatorDrag(slot));
+        if response.drag_started() {
+            egui::Popup::close_all(ui.ctx());
+        }
+        if placeholder {
+            ui.painter().rect_filled(rect, 4, colors.hovered);
+            ui.painter().rect_stroke(rect, 4, Stroke::new(2., colors.accent), egui::StrokeKind::Inside);
+        } else if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
+        ui.painter().hline(
+            rect.x_range(), rect.center().y,
+            Stroke::new(1., if placeholder { colors.accent } else { colors.border }),
+        );
+        rect
+    }
+
     fn tool_rail(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);
+        let context_id = ui.make_persistent_id("tool_rail_context_menu");
+        let context_open = egui::Popup::is_id_open(ui.ctx(), context_id);
+        let secondary_down = ui.input(|input| input.pointer.secondary_down());
+        let mut rail_rows = Vec::new();
+        let mut separator_rects = Vec::new();
         let panel = egui::Panel::left("tools")
             .exact_size(self.tool_rail_width)
             .resizable(false)
@@ -3594,7 +3642,9 @@ impl BenchUpApp {
                     let label_painter = ui.painter().clone();
                     let label_layout = |tool: Tool| {
                         let mut job = egui::text::LayoutJob::simple(
-                            if tool == Tool::TapeMeasure {
+                            if tool == Tool::FollowMe {
+                                tr!("follow_me.advanced_tools").to_owned()
+                            } else if tool == Tool::TapeMeasure {
                                 tr!("app.tape").to_owned()
                             } else {
                                 tool.label().to_owned()
@@ -3616,9 +3666,11 @@ impl BenchUpApp {
                         };
                         (rail_tool, label_layout(tool).size().y)
                     }).collect();
+                    let separator_height = 12.;
                     let regular_height: f32 = label_heights.iter().map(|(_, height)| {
                         55_f32.max(34. + height + 4.) + 5. + ui.spacing().item_spacing.y
-                    }).sum();
+                    }).sum::<f32>() + self.tool_rail_separators.len() as f32
+                        * (separator_height + ui.spacing().item_spacing.y);
                     let compact = ui.available_height() < regular_height;
                     let gap = if compact { 2. } else { 5. };
                     let button_height = |tool: Tool| {
@@ -3629,16 +3681,21 @@ impl BenchUpApp {
                     if compact {
                         ui.spacing_mut().item_spacing.y = 4.;
                     }
+                    let separator_space = separator_height + ui.spacing().item_spacing.y;
                     let mut tool_rects = Vec::with_capacity(Tool::RAIL.len());
                     let dragged = egui::DragAndDrop::payload::<Tool>(ui.ctx());
+                    let dragged_separator = egui::DragAndDrop::payload::<RailSeparatorDrag>(ui.ctx());
                     let mut preview_order = self.tool_rail_order.clone();
+                    let mut preview_separators = self.tool_rail_separators.clone();
+                    let mut separator_insertion = None;
                     let mut drop_inside = false;
-                    if let Some(dragged) = dragged.as_ref() {
+                    if dragged.is_some() || dragged_separator.is_some() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
                         if let Some(pointer) = ui.input(|i| i.pointer.hover_pos()) {
                             let spacing = gap + ui.spacing().item_spacing.y;
                             let total_height: f32 = preview_order.iter()
-                                .map(|&tool| button_height(tool) + spacing).sum();
+                                .map(|&tool| button_height(tool) + spacing).sum::<f32>()
+                                + self.tool_rail_separators.len() as f32 * separator_space;
                             let bounds = Rect::from_min_size(
                                 ui.cursor().min,
                                 egui::vec2(button_width, total_height - gap),
@@ -3646,21 +3703,45 @@ impl BenchUpApp {
                             drop_inside = bounds.contains(pointer);
                             if drop_inside {
                                 let mut top = content_top;
-                                let insertion = preview_order.iter().position(|&tool| {
+                                let insertion = preview_order.iter().enumerate().position(|(index, &tool)| {
+                                    if self.tool_rail_separators.contains(&index) {
+                                        top += separator_space;
+                                    }
                                     let height = button_height(tool);
                                     let before_center = pointer.y <= top + height * 0.5;
                                     top += height + spacing;
                                     before_center
                                 }).unwrap_or(preview_order.len());
-                                if let Some(from) = preview_order.iter().position(|tool| tool == dragged.as_ref()) {
+                                if let Some(dragged) = dragged.as_ref()
+                                    && let Some(from) = preview_order.iter().position(|tool| tool == dragged.as_ref()) {
                                     let insertion = insertion.min(preview_order.len());
                                     preview_order.remove(from);
                                     preview_order.insert(insertion.saturating_sub(usize::from(from < insertion)), **dragged);
                                 }
+                                if let Some(dragged) = dragged_separator.as_ref() {
+                                    // Keep one separator per boundary; dropping onto another
+                                    // separator leaves both in their original positions.
+                                    if insertion == dragged.0 || !preview_separators.contains(&insertion) {
+                                        if let Some(slot) = preview_separators.iter_mut().find(|slot| **slot == dragged.0) {
+                                            *slot = insertion;
+                                            separator_insertion = Some(insertion);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                    for rail_tool in preview_order.iter().copied() {
+                    for (index, rail_tool) in preview_order.iter().copied().enumerate() {
+                        if preview_separators.contains(&index) {
+                            let placeholder = dragged_separator.as_ref().is_some_and(|dragged| {
+                                index == separator_insertion.unwrap_or(dragged.0)
+                            });
+                            let source = if placeholder { dragged_separator.as_ref().unwrap().0 } else { index };
+                            let rect = Self::rail_separator(
+                                ui, egui::vec2(button_width, separator_height), source, placeholder, content_top,
+                            );
+                            separator_rects.push((index, rect));
+                        }
                         let tool = if rail_tool == Tool::Line {
                             self.drawing_tool
                         } else if rail_tool == Tool::Dimensions {
@@ -3673,7 +3754,7 @@ impl BenchUpApp {
                         let placeholder = dragged.as_ref().is_some_and(|tool| **tool == rail_tool);
                         let active = self.tool == tool;
                         let nested =
-                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union);
+                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union | Tool::FollowMe);
                         let shortcut = shortcut_input::key_label(self.general_settings.tool_shortcut(tool));
                         let tooltip = if shortcut.is_empty() {
                             tool.label().to_owned()
@@ -3690,6 +3771,7 @@ impl BenchUpApp {
                             ui.style().animation_time.min(0.14),
                         );
                         let rect = target.translate(egui::vec2(0., content_top + offset - target.top()));
+                        rail_rows.push((index, rect));
                         if placeholder {
                             ui.painter().rect_filled(rect, 8, colors.hovered);
                             ui.painter().rect_stroke(
@@ -3767,7 +3849,7 @@ impl BenchUpApp {
                                 Stroke::NONE,
                             ));
                         }
-                        if nested && !placeholder {
+                        if nested && !placeholder && !context_open && !secondary_down {
                             let popup = egui::Popup::menu(&response)
                                 .open_memory(
                                     ((response.hovered() || response.clicked())
@@ -3781,11 +3863,11 @@ impl BenchUpApp {
                                         Tool::Line => &Tool::DRAWING,
                                         Tool::Dimensions => &Tool::MEASUREMENT_MENU,
                                         Tool::Union => &Tool::SOLID,
+                                        Tool::FollowMe => &Tool::ADVANCED,
                                         _ => unreachable!(),
                                     };
                                     for &option in options {
-                                        let response =
-                                            self.tool_menu_item(ui, option, self.tool == option);
+                                        let response = self.tool_menu_item(ui, option, self.tool == option);
                                         if response.clicked() {
                                             if option.is_solid() {
                                                 self.start_solid_tool(option, ui.ctx());
@@ -3809,10 +3891,32 @@ impl BenchUpApp {
                                 }
                             }
                         }
-                        if self.tool_tooltip(response, tool).clicked() && !nested {
-                            self.set_tool(tool);
+                        if self.tool_tooltip(response, tool).clicked() {
+                            if tool.is_solid() {
+                                self.start_solid_tool(tool, ui.ctx());
+                            } else {
+                                self.set_tool(tool);
+                            }
                         }
                         ui.add_space(gap);
+                    }
+                    if preview_separators.contains(&preview_order.len()) {
+                        let placeholder = dragged_separator.as_ref().is_some_and(|dragged| {
+                            preview_order.len() == separator_insertion.unwrap_or(dragged.0)
+                        });
+                        let source = if placeholder { dragged_separator.as_ref().unwrap().0 } else { preview_order.len() };
+                        let rect = Self::rail_separator(
+                            ui, egui::vec2(button_width, separator_height), source, placeholder, content_top,
+                        );
+                        separator_rects.push((preview_order.len(), rect));
+                    }
+                    if let Some(dragged) = dragged_separator.as_ref()
+                        && drop_inside && ui.input(|i| i.pointer.any_released())
+                    {
+                        if let Some(insertion) = separator_insertion {
+                            self.reorder_rail_separator(dragged.0, insertion);
+                        }
+                        egui::DragAndDrop::clear_payload(ui.ctx());
                     }
                     if let Some(dragged) = dragged.as_ref()
                         && drop_inside && ui.input(|i| i.pointer.any_released())
@@ -3873,6 +3977,7 @@ impl BenchUpApp {
                 // restore normal scrolling whenever the full tool list overflows.
                 if scroll.content_size.y <= scroll.inner_rect.height()
                     && ui.rect_contains_pointer(ui.max_rect())
+                    && !egui::DragAndDrop::has_any_payload(ui.ctx())
                 {
                     // Use wheel events, not inertial smoothing, for one tool change
                     // per wheel input when the rail needs no scrolling.
@@ -3913,6 +4018,41 @@ impl BenchUpApp {
                     }
                 }
                 sidebar::remember_scroll(ui.ctx(), "sidebar_left", scroll.state.clamped_offset());
+            });
+        // One context menu covers tool buttons, separators, gaps, and panel margins.
+        // Keep its target fixed while the pointer moves from the rail to the menu.
+        let context_clicked = ui.rect_contains_pointer(panel.response.rect)
+            && ui.input(|input| input.pointer.secondary_clicked());
+        if context_clicked && let Some(pointer) = ui.input(|input| input.pointer.interact_pos()) {
+            let separator = separator_rects.iter().find(|(_, rect)| rect.y_range().contains(pointer.y));
+            let target = if let Some(&(index, _)) = separator {
+                (true, index)
+            } else {
+                let insertion = rail_rows.iter().find(|(_, rect)| pointer.y < rect.top())
+                    .map_or(self.tool_rail_order.len(), |(index, _)| *index);
+                (false, insertion)
+            };
+            ui.ctx().data_mut(|data| data.insert_temp(context_id, target));
+            egui::Popup::close_all(ui.ctx());
+        }
+        egui::Popup::menu(&panel.response)
+            .id(context_id)
+            .open_memory(context_clicked.then_some(egui::SetOpenCommand::Bool(true)))
+            .at_pointer_fixed()
+            .show(|ui| {
+                if let Some((remove, index)) = ui.ctx().data(|data| data.get_temp::<(bool, usize)>(context_id)) {
+                    let label = if remove { tr!("tools.remove_separator") } else { tr!("tools.add_separator") };
+                    let enabled = remove || !self.tool_rail_separators.contains(&index);
+                    if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                        if remove {
+                            self.tool_rail_separators.retain(|&slot| slot != index);
+                        } else {
+                            self.tool_rail_separators.push(index);
+                            self.tool_rail_separators.sort_unstable();
+                        }
+                        ui.close();
+                    }
+                }
             });
         let edge = panel.response.rect;
         let grab = ui.style().interaction.resize_grab_radius_side;
@@ -4672,6 +4812,10 @@ impl BenchUpApp {
             self.update_grain_pointer(pos);
             return;
         }
+        if self.tool == Tool::FollowMe && self.paste_preview.is_none() {
+            self.follow_me_pointer(pos);
+            return;
+        }
         if self.tool == Tool::Router && self.paste_preview.is_none() {
             self.hover = self.router_edge_at(pos);
             self.snap = None;
@@ -5136,6 +5280,7 @@ impl BenchUpApp {
                     self.update_drawing_orbit(modifiers);
                     if button == egui::PointerButton::Secondary {
                         self.solid_first = None;
+                        self.follow_me.reset();
                         self.flip_hover = None;
                         self.measurement = None;
                         self.drawing = None;
@@ -5180,6 +5325,7 @@ impl BenchUpApp {
                                 Tool::GrainDirection => GestureKind::GrainDirection,
                                 Tool::WoodGlue => GestureKind::WoodGlue,
                                 Tool::Router => GestureKind::Router,
+                                Tool::FollowMe => GestureKind::FollowMe,
                                 Tool::Flip
                                 | Tool::OuterShell
                                 | Tool::Union
@@ -5377,6 +5523,11 @@ impl BenchUpApp {
                                     && gesture.start.distance(pos) < 5. =>
                             {
                                 self.measurement_click(pos, ctx);
+                            }
+                            GestureKind::FollowMe
+                                if self.viewport.contains(pos) && gesture.start.distance(pos) < 5. =>
+                            {
+                                self.follow_me_click(pos, ctx);
                             }
                             GestureKind::Router
                                 if self.viewport.contains(pos) && gesture.start.distance(pos) < 5. =>
@@ -5590,6 +5741,7 @@ impl BenchUpApp {
 
     fn paint_scene_with_background(&mut self, ui: &egui::Ui, rect: Rect, background: bool) {
         let evaluated = self.history_preview.is_some()
+            || self.follow_me.preview.is_some()
             || self
                 .modeling
                 .as_ref()
@@ -5677,6 +5829,7 @@ impl BenchUpApp {
         let colors = Palette::for_ui(ui);
         let faces = FacePalette::for_ui(ui);
         let committed = self.history_preview.is_none()
+            && self.follow_me.preview.is_none()
             && self.modeling.as_ref().is_none_or(|edit| edit.preview.is_none());
         let source_revision = (committed && self.doc.model.connections.is_empty()
             && self.doc.model.routes.is_empty()).then(|| self.document_revision(ui.ctx()));
@@ -5688,6 +5841,7 @@ impl BenchUpApp {
             self.modeling
                 .as_ref()
                 .and_then(|edit| edit.preview.as_ref())
+                .or(self.follow_me.preview.as_ref())
                 .unwrap_or(&self.doc.model)
         });
         let evaluated = !model.connections.is_empty() || !model.routes.is_empty();
@@ -5695,7 +5849,7 @@ impl BenchUpApp {
             #[cfg(not(target_arch = "wasm32"))]
             let _profile = viewport_benchmark::scope("geometry_update");
             self.joinery_geometry.update_render(model,
-                self.history_preview.is_none() && self.modeling.as_ref().is_some_and(|edit| edit.preview.is_some()),
+                self.history_preview.is_none() && (self.follow_me.preview.is_some() || self.modeling.as_ref().is_some_and(|edit| edit.preview.is_some())),
                 ui.ctx(), &self.doc.display, &self.shadow_cache, machining_revision);
         } else {
             self.joinery_geometry.clear_removed_connections();

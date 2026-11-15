@@ -865,6 +865,136 @@ fn drawing_menu_switches_tools_and_remembers_the_choice() {
     }
 }
 
+fn rail_separator_positions(output: &egui::FullOutput) -> Vec<Pos2> {
+    fn collect(shape: &egui::Shape, positions: &mut Vec<Pos2>) {
+        match shape {
+            egui::Shape::LineSegment { points, .. }
+                if points[0].y == points[1].y && points[0].x == 10. && points[1].x == 66. =>
+            {
+                positions.push(points[0] + (points[1] - points[0]) * 0.5);
+            }
+            egui::Shape::Vec(shapes) => {
+                for shape in shapes { collect(shape, positions); }
+            }
+            _ => {}
+        }
+    }
+    let mut positions = Vec::new();
+    for shape in &output.shapes { collect(&shape.shape, &mut positions); }
+    positions.sort_by(|a, b| a.y.total_cmp(&b.y));
+    positions
+}
+
+#[test]
+fn tool_rail_context_menu_adds_and_removes_separators_without_activating_tools() {
+    // Cover a plain tool and a group with a hover flyout.
+    for tool in [Tool::Move, Tool::Line] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let point = text_position(&output, tool.label());
+        let menu = open_context_menu(&mut h, point);
+        h.click(menu_text_position(&menu, tr!("tools.add_separator")));
+        let slot = h.app.tool_rail_order.iter().position(|&item| item == tool).unwrap() + 1;
+        assert_eq!(h.app.tool_rail_separators, vec![slot]);
+        assert_eq!(h.app.tool, Tool::Select);
+
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let separator = rail_separator_positions(&output)[0];
+        // The whole separator row, including its side margin, offers removal.
+        let menu = open_context_menu(&mut h, egui::pos2(3., separator.y));
+        h.click(menu_text_position(&menu, tr!("tools.remove_separator")));
+        assert!(h.app.tool_rail_separators.is_empty());
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+        assert!(h.app.doc.history.is_empty());
+    }
+}
+
+#[test]
+fn tool_rail_blank_space_context_menu_adds_outer_separators() {
+    let mut h = Harness::new();
+    h.size.y = 2200.;
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let first_tool = text_position(&output, Tool::Select.label());
+    // The top frame margin and the blank space below all tools are interactive.
+    for (point, slot) in [
+        (egui::pos2(3., first_tool.y - 45.), 0),
+        (egui::pos2(38., 2100.), Tool::RAIL.len()),
+    ] {
+        let menu = open_context_menu(&mut h, point);
+        h.click(menu_text_position(&menu, tr!("tools.add_separator")));
+        assert!(h.app.tool_rail_separators.contains(&slot));
+    }
+    assert_eq!(h.app.tool_rail_separators, vec![0, Tool::RAIL.len()]);
+    assert!(!h.app.project.modified);
+}
+
+#[test]
+fn separators_drag_up_down_and_to_the_end_without_activating_tools() {
+    for (source, target_tool, before) in [
+        (0, Tool::Move, false),
+        (3, Tool::Select, true),
+        (0, Tool::FollowMe, false),
+    ] {
+        let mut h = Harness::new();
+        h.size.y = 2200.;
+        h.app.tool_rail_separators = vec![source];
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let start = rail_separator_positions(&output)[0];
+        let label = if target_tool == Tool::FollowMe { tr!("follow_me.advanced_tools") } else { target_tool.label() };
+        let end = text_position(&output, label) - egui::vec2(0., if before { 20. } else { 0. });
+        let insertion = h.app.tool_rail_order.iter().position(|&tool| tool == target_tool).unwrap()
+            + usize::from(!before);
+        let order = h.app.tool_rail_order.clone();
+        h.pointer(start, egui::PointerButton::Primary, true, false);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+        assert!(egui::DragAndDrop::has_payload_of_type::<RailSeparatorDrag>(&h.ctx));
+        assert_eq!(h.app.tool_rail_separators, vec![source], "preview must not change saved positions");
+        h.pointer(end, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.tool_rail_separators, vec![insertion]);
+        assert_eq!(h.app.tool_rail_order, order);
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+        assert!(h.app.doc.history.is_empty());
+    }
+}
+
+#[test]
+fn separator_drag_cancellation_and_occupied_boundaries_preserve_the_layout() {
+    for cancel in [false, true] {
+        let mut h = Harness::new();
+        h.app.tool_rail_separators = vec![0, 1];
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        let start = rail_separator_positions(&output)[0];
+        let end = if cancel { egui::pos2(500., 400.) } else { text_position(&output, Tool::Select.label()) };
+        h.pointer(start, egui::PointerButton::Primary, true, false);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+        h.pointer(end, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.tool_rail_separators, vec![0, 1]);
+        assert_eq!(h.app.tool, Tool::Select);
+        assert!(!h.app.project.modified);
+    }
+}
+
+#[test]
+fn dragging_rail_tools_preserves_separator_boundaries() {
+    let mut h = Harness::new();
+    h.app.tool_rail_separators = vec![1, 3];
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let start = text_position(&output, Tool::Move.label()) - egui::vec2(0., 12.);
+    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+    h.pointer(end, egui::PointerButton::Primary, false, false);
+    assert_eq!(h.app.tool_rail_order[0], Tool::Move);
+    assert_eq!(h.app.tool_rail_separators, vec![1, 3]);
+    assert_eq!(h.app.tool, Tool::Select);
+    assert!(!h.app.project.modified);
+}
+
 #[test]
 fn dragging_a_rail_tool_reorders_without_activating_it() {
     let mut h = Harness::new();
@@ -908,7 +1038,7 @@ fn tool_rail_flyouts_close_after_leaving_parent_and_menu() {
     ] {
         let output = h.frame(vec![], egui::Modifiers::NONE);
         let rail = text_position(&output, label);
-        h.click(rail);
+        h.frame(vec![egui::Event::PointerMoved(rail)], egui::Modifiers::NONE);
         let menu = h.frame(vec![], egui::Modifiers::NONE);
         let item = menu_text_position(&menu, option.label());
         h.frame(vec![egui::Event::PointerMoved(item)], egui::Modifiers::NONE);
@@ -917,13 +1047,65 @@ fn tool_rail_flyouts_close_after_leaving_parent_and_menu() {
         assert!(egui::Popup::is_any_open(&h.ctx));
         h.frame(vec![egui::Event::PointerMoved(egui::pos2(500., 400.))], egui::Modifiers::NONE);
         assert!(!egui::Popup::is_any_open(&h.ctx));
-        h.click(rail);
         h.frame(vec![egui::Event::PointerMoved(rail)], egui::Modifiers::NONE);
+        h.frame(vec![], egui::Modifiers::NONE);
         assert!(egui::Popup::is_any_open(&h.ctx));
         h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
         assert!(!egui::Popup::is_any_open(&h.ctx));
         assert_eq!(h.app.tool, Tool::Select);
     }
+}
+
+#[test]
+fn clicking_a_tool_group_reactivates_its_last_used_tool() {
+    for options in [
+        &Tool::DRAWING[..],
+        &Tool::MEASUREMENT_MENU[..],
+        &Tool::SOLID[..],
+        &Tool::ADVANCED[..],
+    ] {
+        let mut h = Harness::new();
+        h.size.y = 2000.;
+        for &tool in options {
+            h.app.set_tool(tool);
+            h.app.set_tool(Tool::Select);
+            let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+            let label = if Tool::ADVANCED.contains(&tool) {
+                tr!("follow_me.advanced_tools")
+            } else if tool == Tool::TapeMeasure {
+                tr!("app.tape")
+            } else {
+                tool.label()
+            };
+            h.click(text_position(&output, label));
+            assert_eq!(h.app.tool, tool, "clicking the group must reactivate {tool:?}");
+            let menu = h.frame(vec![], egui::Modifiers::NONE);
+            assert!(egui::Popup::is_any_open(&h.ctx));
+            for &option in options {
+                assert_menu_icon(&menu, option.label());
+            }
+            assert!(!h.app.project.modified);
+            assert!(h.app.doc.history.is_empty());
+        }
+    }
+}
+
+#[test]
+fn dragging_a_tool_group_reorders_without_reactivating_its_tool() {
+    let mut h = Harness::new();
+    h.app.set_tool(Tool::Circle);
+    h.app.set_tool(Tool::Select);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let start = text_position(&output, Tool::Circle.label()) - egui::vec2(0., 12.);
+    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+    h.pointer(end, egui::PointerButton::Primary, false, false);
+    assert_eq!(h.app.tool_rail_order[0], Tool::Line);
+    assert_eq!(h.app.tool, Tool::Select);
+    assert_eq!(h.app.drawing_tool, Tool::Circle);
+    assert!(!h.app.project.modified);
 }
 
 #[test]
@@ -942,8 +1124,7 @@ fn toolbar_order_and_measurement_flyout_defaults_and_remembers_the_choice() {
         "Paint",
         "Dimensions",
         "Union",
-        "Router",
-        "Wood Glue",
+        "Wood",
     ];
     let positions: Vec<_> = labels
         .iter()
@@ -5186,8 +5367,9 @@ fn solid_flyout_contains_all_six_tools_and_union_applies_to_selection_with_undo(
     h.app.selected = BTreeSet::from([a, b]);
     let before = h.app.doc.model.clone();
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    h.click(text_position(&output, "Union"));
+    h.frame(vec![egui::Event::PointerMoved(text_position(&output, "Union"))], egui::Modifiers::NONE);
     let menu = h.frame(vec![], egui::Modifiers::NONE);
+    assert_eq!(h.app.doc.model, before, "hovering must not apply the remembered operation");
     for label in ["Flip", "Combine", "Union", "Intersect", "Trim", "Split"] {
         assert_menu_icon(&menu, label);
     }
@@ -5205,11 +5387,31 @@ fn solid_flyout_contains_all_six_tools_and_union_applies_to_selection_with_undo(
     h.app.undo(&h.ctx, false);
     assert_eq!(h.app.doc.model, before);
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    h.click(text_position(&output, "Union"));
+    h.frame(vec![egui::Event::PointerMoved(text_position(&output, "Union"))], egui::Modifiers::NONE);
     let menu = h.frame(vec![], egui::Modifiers::NONE);
     h.click(menu_text_position(&menu, "Combine"));
     assert_eq!(h.app.solid_tool, Tool::OuterShell);
 }
+
+#[test]
+fn clicking_a_solid_tool_group_applies_the_remembered_operation_to_selection() {
+    let mut h = Harness::new();
+    let (a, b) = ui_solid_pair(&mut h);
+    h.app.set_tool(Tool::Intersect);
+    h.app.set_tool(Tool::Select);
+    h.app.selected = BTreeSet::from([a, b]);
+    let before = h.app.doc.model.clone();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, Tool::Intersect.label()));
+    assert_eq!(h.app.tool, Tool::Intersect);
+    assert_eq!(h.app.doc.history.undo_label(), Some("Intersect"));
+    assert_eq!(h.app.doc.model.objects.len(), 1);
+    let result = *h.app.selected.first().unwrap();
+    assert!((h.app.doc.model.solid_volume(result).unwrap() - 4.).abs() < 1e-6);
+    h.app.undo(&h.ctx, false);
+    assert_eq!(h.app.doc.model, before);
+}
+
 #[test]
 fn trim_picks_cutter_then_target_and_cancel_never_edits_geometry() {
     let mut h = Harness::new();
@@ -6973,6 +7175,7 @@ fn cancelling_an_unfinished_angle_leaves_no_dimension() {
 #[test]
 fn wood_glue_pointer_clicks_and_automatic_selection_record_one_edit_each() {
     let mut h = Harness::new();
+    h.size.y = 2000.;
     h.app.doc.model = Model::default();
     let board = |model: &mut Model, x: f64| {
         let mut stock = Model::default();
@@ -6991,8 +7194,9 @@ fn wood_glue_pointer_clicks_and_automatic_selection_record_one_edit_each() {
     let output = h.frame(vec![], egui::Modifiers::NONE);
     let button = text_position(&output, Tool::WoodGlue.label());
     assert!(button.x < 76.);
-    h.click(button + egui::vec2(20., -25.));
+    h.click(button);
     assert_eq!(h.app.tool, Tool::WoodGlue);
+    assert!(!egui::Popup::is_any_open(&h.ctx));
     let pos = h.at(DVec3::new(0.25, 0.5, 0.));
     let initial = h.app.doc.history.position();
     h.click(pos);
@@ -7081,6 +7285,7 @@ fn router_rail_tool_routes_clicked_edges_and_reopens_existing_cuts() {
         let button = text_position(&output, Tool::Router.label());
         assert!(button.x < 76.);
         h.click(button);
+        assert!(!egui::Popup::is_any_open(&h.ctx));
         assert_eq!(h.app.tool, Tool::Router);
         let properties = h.frame(vec![], egui::Modifiers::NONE);
         text_position(&properties, tr!("sidebar.properties"));
@@ -7473,3 +7678,6 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
     h.app.update_pointer(pos);
     assert_eq!(h.app.hover, None);
 }
+
+#[path = "follow_me_ui_tests.rs"]
+mod follow_me_ui_tests;

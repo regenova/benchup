@@ -43,6 +43,7 @@ const HISTORY_LABEL_KEYS: &[&str] = &[
     "core.solids.union",
     "fasteners.create_fasteners",
     "fasteners.edit_fasteners",
+    "follow_me.tool",
     "grain_direction.assign",
     "grain_direction.clear_history",
     "image_tools.add_reference_image",

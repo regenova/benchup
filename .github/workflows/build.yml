@@ -36,6 +36,7 @@ jobs:
         run: |
           python scripts/desktop_release.py version --tag "$TAG_NAME"
           python -m unittest discover -s scripts -p 'test_install_linux_dependencies.py'
+          python -m unittest discover -s scripts -p 'test_install_linux_desktop.py'
           python -m unittest discover -s scripts -p 'test_desktop_release.py'
           python -m unittest discover -s scripts -p 'test_verify_update_transfer.py'
 

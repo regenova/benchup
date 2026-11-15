@@ -20,6 +20,19 @@ def desktop_exec(path):
     return ('"' + argument + '"').replace('\\', '\\\\')
 
 
+def thumbnailer_entry(executable, system_bin=Path("/usr/bin")):
+    # GNOME's sandbox cannot launch a binary in home or an AppImage mount.
+    # Saved previews are PNGs and can use the system's sandbox-visible decoder.
+    for program, arguments in [
+        ("glycin-thumbnailer", "--input %u --output %o --size %s"),
+        ("gdk-pixbuf-thumbnailer", "-s %s %u %o"),
+    ]:
+        path = system_bin / program
+        if path.is_file() and os.access(path, os.X_OK):
+            return f"[Thumbnailer Entry]\nTryExec={path}\nExec={path} {arguments}\nMimeType=application/x-benchup;\n"
+    return f"[Thumbnailer Entry]\nExec={desktop_exec(executable)} --thumbnail %i %o\nMimeType=application/x-benchup;\n"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", nargs="?", type=Path,
@@ -53,7 +66,7 @@ def main():
     shutil.copyfile(ROOT / f"packaging/linux/{APP_ID}.xml", mime)
     thumbnailer = data_home / "thumbnailers/benchup.thumbnailer"
     thumbnailer.parent.mkdir(parents=True, exist_ok=True)
-    thumbnailer.write_text(f"[Thumbnailer Entry]\nExec={desktop_exec(executable)} --thumbnail %i %o\nMimeType=application/x-benchup;\n")
+    thumbnailer.write_text(thumbnailer_entry(executable))
 
     icons = data_home / "icons/hicolor"
     for size in [16, 32, 48, 256, 512]:

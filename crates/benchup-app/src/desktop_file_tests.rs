@@ -1,6 +1,30 @@
 use super::*;
 use benchup_core::tr;
 
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_thumbnails_prefer_sandbox_visible_image_decoders() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let quoted = "\"/home/user/BenchUp AppImage\"";
+    let gdk = directory.path().join("gdk-pixbuf-thumbnailer");
+    let glycin = directory.path().join("glycin-thumbnailer");
+    let fallback = format!("[Thumbnailer Entry]\nExec={quoted} --thumbnail %i %o\nMimeType=application/x-benchup;\n");
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), fallback);
+    std::fs::write(&gdk, b"").unwrap();
+    std::fs::set_permissions(&gdk, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), fallback, "ignore non-executables");
+    std::fs::set_permissions(&gdk, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), format!(
+        "[Thumbnailer Entry]\nTryExec={}\nExec={} -s %s %u %o\nMimeType=application/x-benchup;\n", gdk.display(), gdk.display(),
+    ));
+    std::fs::write(&glycin, b"").unwrap();
+    std::fs::set_permissions(&glycin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), format!(
+        "[Thumbnailer Entry]\nTryExec={}\nExec={} --input %u --output %o --size %s\nMimeType=application/x-benchup;\n", glycin.display(), glycin.display(),
+    ));
+}
+
 #[test]
 fn skp_conversion_writes_the_same_document_as_import_then_save() {
     let directory = tempfile::tempdir().unwrap();

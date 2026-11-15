@@ -378,7 +378,7 @@ impl Model {
         Ok(())
     }
 
-    fn editable_surface(&self, face: u64) -> Result<(), &'static str> {
+    pub(crate) fn editable_surface(&self, face: u64) -> Result<(), &'static str> {
         if self.reference_images.contains_key(&face) {
             return Err(tr!("core.modeling.edit_reference_image_tools"));
         }
@@ -391,12 +391,12 @@ impl Model {
         Ok(())
     }
 
-    fn raw_vertex(&mut self, position: DVec3) -> u64 {
+    pub(crate) fn raw_vertex(&mut self, position: DVec3) -> u64 {
         let id = self.id();
         self.vertices.insert(id, Vertex { id, position });
         id
     }
-    fn raw_face(
+    pub(crate) fn raw_face(
         &mut self,
         vertices: Vec<u64>,
         holes: Vec<Vec<u64>>,
