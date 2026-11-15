@@ -76,6 +76,10 @@ fn zero_duration_selection_snaps_and_nested_tools_share_their_slot() {
     let drawing = frame(&ctx, &mut app, 0.02);
     app.set_tool(Tool::Circle);
     assert_eq!(frame(&ctx, &mut app, 0.03), drawing);
+    app.set_tool(Tool::Router);
+    let wood = frame(&ctx, &mut app, 0.04);
+    app.set_tool(Tool::WoodGlue);
+    assert_eq!(frame(&ctx, &mut app, 0.05), wood);
 }
 
 #[test]

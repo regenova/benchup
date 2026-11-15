@@ -887,6 +887,7 @@ fn tool_rail_flyouts_open_on_hover_without_changing_the_tool() {
         ("Line", Tool::Rectangle),
         ("Dimensions", Tool::TapeMeasure),
         ("Union", Tool::Intersect),
+        ("Wood", Tool::WoodGlue),
     ] {
         let output = h.frame(vec![], egui::Modifiers::NONE);
         let rail = text_position(&output, label);
@@ -905,10 +906,11 @@ fn tool_rail_flyouts_close_after_leaving_parent_and_menu() {
         ("Line", Tool::Rectangle),
         ("Dimensions", Tool::TapeMeasure),
         ("Union", Tool::Intersect),
+        ("Wood", Tool::Router),
     ] {
         let output = h.frame(vec![], egui::Modifiers::NONE);
         let rail = text_position(&output, label);
-        h.click(rail);
+        h.frame(vec![egui::Event::PointerMoved(rail)], egui::Modifiers::NONE);
         let menu = h.frame(vec![], egui::Modifiers::NONE);
         let item = menu_text_position(&menu, option.label());
         h.frame(vec![egui::Event::PointerMoved(item)], egui::Modifiers::NONE);
@@ -917,8 +919,8 @@ fn tool_rail_flyouts_close_after_leaving_parent_and_menu() {
         assert!(egui::Popup::is_any_open(&h.ctx));
         h.frame(vec![egui::Event::PointerMoved(egui::pos2(500., 400.))], egui::Modifiers::NONE);
         assert!(!egui::Popup::is_any_open(&h.ctx));
-        h.click(rail);
         h.frame(vec![egui::Event::PointerMoved(rail)], egui::Modifiers::NONE);
+        h.frame(vec![], egui::Modifiers::NONE);
         assert!(egui::Popup::is_any_open(&h.ctx));
         h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
         assert!(!egui::Popup::is_any_open(&h.ctx));
@@ -942,8 +944,7 @@ fn toolbar_order_and_measurement_flyout_defaults_and_remembers_the_choice() {
         "Paint",
         "Dimensions",
         "Union",
-        "Router",
-        "Wood Glue",
+        "Wood",
     ];
     let positions: Vec<_> = labels
         .iter()
@@ -5186,8 +5187,9 @@ fn solid_flyout_contains_all_six_tools_and_union_applies_to_selection_with_undo(
     h.app.selected = BTreeSet::from([a, b]);
     let before = h.app.doc.model.clone();
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    h.click(text_position(&output, "Union"));
+    h.frame(vec![egui::Event::PointerMoved(text_position(&output, "Union"))], egui::Modifiers::NONE);
     let menu = h.frame(vec![], egui::Modifiers::NONE);
+    assert_eq!(h.app.doc.model, before, "hovering must not apply the remembered operation");
     for label in ["Flip", "Combine", "Union", "Intersect", "Trim", "Split"] {
         assert_menu_icon(&menu, label);
     }
@@ -5205,7 +5207,7 @@ fn solid_flyout_contains_all_six_tools_and_union_applies_to_selection_with_undo(
     h.app.undo(&h.ctx, false);
     assert_eq!(h.app.doc.model, before);
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    h.click(text_position(&output, "Union"));
+    h.frame(vec![egui::Event::PointerMoved(text_position(&output, "Union"))], egui::Modifiers::NONE);
     let menu = h.frame(vec![], egui::Modifiers::NONE);
     h.click(menu_text_position(&menu, "Combine"));
     assert_eq!(h.app.solid_tool, Tool::OuterShell);
@@ -6989,10 +6991,16 @@ fn wood_glue_pointer_clicks_and_automatic_selection_record_one_edit_each() {
     let (b, contact_face) = board(&mut h.app.doc.model, 0.5);
     h.app.doc.camera = Camera::default();
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    let button = text_position(&output, Tool::WoodGlue.label());
+    let button = text_position(&output, tr!("tools.wood_tools"));
     assert!(button.x < 76.);
-    h.click(button + egui::vec2(20., -25.));
+    h.click(button);
+    let menu = h.frame(vec![], egui::Modifiers::NONE);
+    for tool in Tool::WOOD {
+        assert_menu_icon(&menu, tool.label());
+    }
+    h.click(menu_text_position(&menu, Tool::WoodGlue.label()));
     assert_eq!(h.app.tool, Tool::WoodGlue);
+    assert_eq!(h.app.wood_tool, Tool::WoodGlue);
     let pos = h.at(DVec3::new(0.25, 0.5, 0.));
     let initial = h.app.doc.history.position();
     h.click(pos);
@@ -7078,9 +7086,11 @@ fn router_rail_tool_routes_clicked_edges_and_reopens_existing_cuts() {
             ..Default::default()
         };
         let output = h.frame(vec![], egui::Modifiers::NONE);
-        let button = text_position(&output, Tool::Router.label());
+        let button = text_position(&output, tr!("tools.wood_tools"));
         assert!(button.x < 76.);
         h.click(button);
+        let menu = h.frame(vec![], egui::Modifiers::NONE);
+        h.click(menu_text_position(&menu, Tool::Router.label()));
         assert_eq!(h.app.tool, Tool::Router);
         let properties = h.frame(vec![], egui::Modifiers::NONE);
         text_position(&properties, tr!("sidebar.properties"));
@@ -7472,4 +7482,75 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
     h.app.setting_orbit_focus = false;
     h.app.update_pointer(pos);
     assert_eq!(h.app.hover, None);
+}
+
+#[test]
+fn clicking_a_tool_group_reactivates_its_last_used_tool() {
+    for options in [
+        &Tool::DRAWING[..],
+        &Tool::MEASUREMENT_MENU[..],
+        &Tool::SOLID[..],
+        &Tool::WOOD[..],
+    ] {
+        let mut h = Harness::new();
+        h.size.y = 2000.;
+        for &tool in options {
+            h.app.set_tool(tool);
+            h.app.set_tool(Tool::Select);
+            let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+            let label = if Tool::WOOD.contains(&tool) {
+                tr!("tools.wood_tools")
+            } else if tool == Tool::TapeMeasure {
+                tr!("app.tape")
+            } else {
+                tool.label()
+            };
+            h.click(text_position(&output, label));
+            assert_eq!(h.app.tool, tool, "clicking the group must reactivate {tool:?}");
+            let menu = h.frame(vec![], egui::Modifiers::NONE);
+            assert!(egui::Popup::is_any_open(&h.ctx));
+            for &option in options {
+                assert_menu_icon(&menu, option.label());
+            }
+            assert!(!h.app.project.modified);
+            assert!(h.app.doc.history.is_empty());
+        }
+    }
+}
+
+#[test]
+fn dragging_a_tool_group_reorders_without_reactivating_its_tool() {
+    let mut h = Harness::new();
+    h.app.set_tool(Tool::Circle);
+    h.app.set_tool(Tool::Select);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let start = text_position(&output, Tool::Circle.label()) - egui::vec2(0., 12.);
+    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
+    h.pointer(end, egui::PointerButton::Primary, false, false);
+    assert_eq!(h.app.tool_rail_order[0], Tool::Line);
+    assert_eq!(h.app.tool, Tool::Select);
+    assert_eq!(h.app.drawing_tool, Tool::Circle);
+    assert!(!h.app.project.modified);
+}
+
+#[test]
+fn clicking_a_solid_tool_group_applies_the_remembered_operation_to_selection() {
+    let mut h = Harness::new();
+    let (a, b) = ui_solid_pair(&mut h);
+    h.app.set_tool(Tool::Intersect);
+    h.app.set_tool(Tool::Select);
+    h.app.selected = BTreeSet::from([a, b]);
+    let before = h.app.doc.model.clone();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, Tool::Intersect.label()));
+    assert_eq!(h.app.tool, Tool::Intersect);
+    assert_eq!(h.app.doc.history.undo_label(), Some("Intersect"));
+    assert_eq!(h.app.doc.model.objects.len(), 1);
+    let result = *h.app.selected.first().unwrap();
+    assert!((h.app.doc.model.solid_volume(result).unwrap() - 4.).abs() < 1e-6);
+    h.app.undo(&h.ctx, false);
+    assert_eq!(h.app.doc.model, before);
 }

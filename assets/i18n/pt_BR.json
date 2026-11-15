@@ -1,4 +1,6 @@
 {
+  "tools.wood_tools": "Madeira",
+  "follow_me.advanced_tools": "Avançado",
   "account.account": "Conta",
   "account.are_you_sure_you_want_to_log_out": "Tem certeza de que deseja sair?",
   "account.cannot_connect_to_server": "Não foi possível conectar ao servidor",

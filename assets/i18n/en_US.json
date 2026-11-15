@@ -1,4 +1,6 @@
 {
+  "tools.wood_tools": "Wood",
+  "follow_me.advanced_tools": "Advanced",
   "account.account": "Account",
   "account.are_you_sure_you_want_to_log_out": "Are you sure you want to log out?",
   "account.cannot_connect_to_server": "Cannot connect to server",

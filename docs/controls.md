@@ -20,7 +20,7 @@
 | Paste in place | Ctrl/Command Shift V; retains the copied coordinates |
 | Automatic geometry snapping | Snap menu → Snap to edge, Snap to face, and Snap to face center; independent, enabled by default, and remembered across restarts |
 | Automatic axis snapping | Snap menu → Snap to axes; enabled by default and remembered across restarts |
-| Drawing tools | Click the Line item in the left toolbar to choose Line, Rectangle, Circle, Polygon, or Freehand; the item remembers your choice |
+| Drawing tools | Click the drawing item in the left toolbar to activate its last-used tool; hover to choose Line, Rectangle, Circle, Polygon, Arc, or Freehand |
 | Line | L; click start and end, then continue drawing |
 | Rectangle | R; click the first corner, then click the opposite corner or type width,height + Enter (for example, `5m,50mm`) |
 | Circle | C; click the center, then set the radius by pointer or type a length + Enter (48 segments) |
@@ -99,7 +99,7 @@ Tape Measure and Protractor start in Create Guides mode. Tap Ctrl or Command to 
 
 Dimensions adds persistent linear annotations with extension lines, endpoint ticks, and a meter label. The third click places the dimension away from the measured geometry. During placement, Right / Left / Up locks the dimension line and its displayed length to X / Y / Z while preserving both picked endpoints; repeat the arrow or press Down to return to the full aligned length. If the locked axis is perpendicular to the measured span (for example, Z for two points on a horizontal face), placement moves the extension lines along that axis and preserves the full measured length instead of collapsing the dimension. The saved dimension keeps this alignment when the source geometry changes. Snapped endpoints attach to vertices, edges, or surfaces and update when that geometry moves or scales; deleting the source geometry keeps the annotation at its last position. Free points remain in world coordinates. Select a dimension by its line or label to delete, move, copy, group, or hide it. Dimensions support undo/redo, local saving, and component editing.
 
-The toolbar is ordered Select, Line, Erase, Orbit, Push/Pull, Scale, Offset, Move, Paint, Dimensions, and Union. Dimensions groups Dimensions, Tape Measure, and Protractor, with Dimensions selected by default. Every flyout entry has an icon, and each group remembers its last chosen tool.
+The toolbar is ordered Select, Line, Erase, Orbit, Push/Pull, Scale, Offset, Move, Rotate, Paint, Dimensions, Union, and Wood. Drag slots to change their order. Dimensions groups Dimensions, Tape Measure, Protractor, Text, and Image, with Dimensions selected by default. Wood groups Router and Wood Glue, with Router selected by default. Every flyout entry has an icon, and each group remembers its last chosen tool across reloads and restarts. Click a group to activate its remembered tool, or hover over it to choose another tool from the flyout. For example, after using Circle, switch to Select and click the drawing group to activate Circle again.
 
 Hover over a toolbar tool or flyout entry for one second to see its name, keyboard shortcut (when available), and usage instructions.
 

@@ -1,4 +1,6 @@
 {
+  "tools.wood_tools": "木材",
+  "follow_me.advanced_tools": "高级",
   "account.account": "账户",
   "account.are_you_sure_you_want_to_log_out": "确定要退出登录吗？",
   "account.cannot_connect_to_server": "无法连接到服务器",

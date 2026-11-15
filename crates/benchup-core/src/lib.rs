@@ -147,6 +147,7 @@ impl Tool {
     pub fn is_drawing(self) -> bool {
         self == Self::Image || Self::DRAWING.contains(&self)
     }
+    pub const WOOD: [Self; 2] = [Self::Router, Self::WoodGlue];
     pub const ALL: [Self; 30] = [
         Self::Select,
         Self::Line,
@@ -179,7 +180,7 @@ impl Tool {
         Self::WoodGlue,
         Self::Router,
     ];
-    pub const RAIL: [Self; 14] = [
+    pub const RAIL: [Self; 13] = [
         Self::Select,
         Self::Line,
         Self::Erase,
@@ -193,7 +194,6 @@ impl Tool {
         Self::Dimensions,
         Self::Union,
         Self::Router,
-        Self::WoodGlue,
     ];
     pub fn label(self) -> &'static str {
         match self {

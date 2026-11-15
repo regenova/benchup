@@ -375,6 +375,7 @@ pub struct BenchUpApp {
     tool_rail_order: Vec<Tool>,
     measurement_tool: Tool,
     solid_tool: Tool,
+    wood_tool: Tool,
     solid_first: Option<u64>,
     solid_volume_cache: solid_tools::VolumeCache,
     selection_measurements: selection_measurements::Cache,
@@ -573,6 +574,7 @@ impl BenchUpApp {
             tool_rail_order: Tool::RAIL.to_vec(),
             measurement_tool: Tool::Dimensions,
             solid_tool: Tool::Union,
+            wood_tool: Tool::Router,
             solid_first: None,
             solid_volume_cache: Default::default(),
             selection_measurements:Default::default(),
@@ -777,6 +779,9 @@ impl BenchUpApp {
         }
         if Tool::MEASUREMENT_MENU.contains(&tool) {
             self.measurement_tool = tool;
+        }
+        if Tool::WOOD.contains(&tool) {
+            self.wood_tool = tool;
         }
         self.drawing = None;
         if tool == Tool::Paint {
@@ -3576,7 +3581,9 @@ impl BenchUpApp {
                     let label_painter = ui.painter().clone();
                     let label_layout = |tool: Tool| {
                         let mut job = egui::text::LayoutJob::simple(
-                            if tool == Tool::TapeMeasure {
+                            if Tool::WOOD.contains(&tool) {
+                                tr!("tools.wood_tools").to_owned()
+                            } else if tool == Tool::TapeMeasure {
                                 tr!("app.tape").to_owned()
                             } else {
                                 tool.label().to_owned()
@@ -3594,6 +3601,7 @@ impl BenchUpApp {
                             Tool::Line => self.drawing_tool,
                             Tool::Dimensions => self.measurement_tool,
                             Tool::Union => self.solid_tool,
+                            Tool::Router => self.wood_tool,
                             tool => tool,
                         };
                         (rail_tool, label_layout(tool).size().y)
@@ -3649,13 +3657,15 @@ impl BenchUpApp {
                             self.measurement_tool
                         } else if rail_tool == Tool::Union {
                             self.solid_tool
+                        } else if rail_tool == Tool::Router {
+                            self.wood_tool
                         } else {
                             rail_tool
                         };
                         let placeholder = dragged.as_ref().is_some_and(|tool| **tool == rail_tool);
                         let active = self.tool == tool;
                         let nested =
-                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union);
+                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union | Tool::Router);
                         let shortcut = shortcut_input::key_label(self.general_settings.tool_shortcut(tool));
                         let tooltip = if shortcut.is_empty() {
                             tool.label().to_owned()
@@ -3763,6 +3773,7 @@ impl BenchUpApp {
                                         Tool::Line => &Tool::DRAWING,
                                         Tool::Dimensions => &Tool::MEASUREMENT_MENU,
                                         Tool::Union => &Tool::SOLID,
+                                        Tool::Router => &Tool::WOOD,
                                         _ => unreachable!(),
                                     };
                                     for &option in options {
@@ -3791,8 +3802,12 @@ impl BenchUpApp {
                                 }
                             }
                         }
-                        if self.tool_tooltip(response, tool).clicked() && !nested {
-                            self.set_tool(tool);
+                        if self.tool_tooltip(response, tool).clicked() {
+                            if tool.is_solid() {
+                                self.start_solid_tool(tool, ui.ctx());
+                            } else {
+                                self.set_tool(tool);
+                            }
                         }
                         ui.add_space(gap);
                     }
@@ -3813,6 +3828,8 @@ impl BenchUpApp {
                         Tool::Line
                     } else if Tool::MEASUREMENT_MENU.contains(&self.tool) {
                         Tool::Dimensions
+                    } else if Tool::WOOD.contains(&self.tool) {
+                        Tool::Router
                     } else {
                         self.tool
                     };
@@ -3877,6 +3894,7 @@ impl BenchUpApp {
                                 || (*tool == Tool::Line && Tool::DRAWING.contains(&self.tool))
                                 || (*tool == Tool::Dimensions && Tool::MEASUREMENT_MENU.contains(&self.tool))
                                 || (*tool == Tool::Union && self.tool.is_solid())
+                                || (*tool == Tool::Router && Tool::WOOD.contains(&self.tool))
                         }).unwrap_or(0);
                         let next = if wheel > 0. {
                             current.saturating_sub(1)
@@ -3888,6 +3906,7 @@ impl BenchUpApp {
                                 Tool::Line => self.drawing_tool,
                                 Tool::Dimensions => self.measurement_tool,
                                 Tool::Union => self.solid_tool,
+                                Tool::Router => self.wood_tool,
                                 tool => tool,
                             };
                             self.set_tool(tool);

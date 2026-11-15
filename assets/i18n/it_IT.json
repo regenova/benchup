@@ -1,4 +1,6 @@
 {
+  "tools.wood_tools": "Legno",
+  "follow_me.advanced_tools": "Avanzate",
   "account.account": "Account",
   "account.are_you_sure_you_want_to_log_out": "Vuoi davvero uscire?",
   "account.cannot_connect_to_server": "Impossibile connettersi al server",
