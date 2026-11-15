@@ -295,7 +295,7 @@ fn invalid_paths_folds_and_locked_profiles_are_atomic() {
 #[test]
 fn preselected_face_uses_its_perimeter_and_scoped_edits_stay_in_the_group() {
     let mut model = Model::default();
-    let face = profile(&mut model, 0.2, 0.3, false);
+    profile(&mut model, 0.2, 0.3, false);
     let perimeter = path(
         &mut model,
         &[
@@ -328,10 +328,31 @@ fn preselected_face_uses_its_perimeter_and_scoped_edits_stay_in_the_group() {
         .unwrap();
     assert!(matches!(model.objects[&group].kind, ObjectKind::Group));
     assert!(model.enter_object(group));
+    // Grouping copies geometry and assigns new IDs. Resolve both faces from
+    // the group's contents instead of using their pre-grouping IDs.
+    let face = *model.objects[&group]
+        .entities
+        .iter()
+        .find(|id| model.face_colors.get(id) == Some(&[120, 170, 200]))
+        .unwrap();
+    let path_face = *model.objects[&group]
+        .entities
+        .iter()
+        .find(|id| **id != face && model.faces.contains_key(id))
+        .unwrap();
+    let path_before = model.faces[&path_face].clone();
+    let perimeter = model.follow_me_edges(&BTreeSet::from([path_face])).unwrap();
     let result = model
         .follow_me(face, &BTreeSet::from([path_face]), 0., false)
         .unwrap();
+    assert!(!result.is_empty());
     assert!(result.iter().all(|id| model.parent(*id) == Some(group)));
-    assert!(model.faces.contains_key(&path_face));
-    model.validate().unwrap();
+    assert!(!model.faces.contains_key(&face));
+    assert_eq!(model.edit_context, Some(group));
+    assert_eq!(model.faces[&path_face], path_before);
+    assert_eq!(
+        model.follow_me_edges(&BTreeSet::from([path_face])).unwrap(),
+        perimeter
+    );
+    watertight(&model, &result);
 }
