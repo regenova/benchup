@@ -75,6 +75,8 @@ mod measurement_tools;
 mod move_tool;
 #[path = "offset_tool.rs"]
 mod offset_tool;
+#[path = "follow_me.rs"]
+mod follow_me;
 #[path = "rotate_tool.rs"]
 mod rotate_tool;
 #[path = "scale_tool.rs"]
@@ -214,6 +216,7 @@ enum GestureKind {
     GrainDirection,
     WoodGlue,
     Router,
+    FollowMe,
     Solid,
     Measure,
     Paste,
@@ -380,8 +383,8 @@ pub struct BenchUpApp {
     tool_rail_separators: Vec<usize>,
     measurement_tool: Tool,
     solid_tool: Tool,
-    wood_tool: Tool,
     solid_first: Option<u64>,
+    follow_me: follow_me::State,
     solid_volume_cache: solid_tools::VolumeCache,
     selection_measurements: selection_measurements::Cache,
     flip_hover: Option<Axis>,
@@ -580,8 +583,8 @@ impl BenchUpApp {
             tool_rail_separators: Vec::new(),
             measurement_tool: Tool::Dimensions,
             solid_tool: Tool::Union,
-            wood_tool: Tool::Router,
             solid_first: None,
+            follow_me: Default::default(),
             solid_volume_cache: Default::default(),
             selection_measurements:Default::default(),
             flip_hover: None,
@@ -763,6 +766,7 @@ impl BenchUpApp {
         self.drawing_orbit_pivot = None;
         self.hover = None;
         self.solid_first = None;
+        self.follow_me.reset();
         self.flip_hover = None;
         if tool.is_solid() {
             self.solid_tool = tool;
@@ -785,9 +789,6 @@ impl BenchUpApp {
         }
         if Tool::MEASUREMENT_MENU.contains(&tool) {
             self.measurement_tool = tool;
-        }
-        if Tool::WOOD.contains(&tool) {
-            self.wood_tool = tool;
         }
         self.drawing = None;
         if tool == Tool::Paint {
@@ -861,6 +862,7 @@ impl BenchUpApp {
     }
     fn finish_recorded_edit(&mut self, ctx: &egui::Context, geometry_changed: bool) {
         self.solid_first = None;
+        self.follow_me.reset();
         self.last_move_copy = None;
         self.measurement = None;
         self.modeling = None;
@@ -903,6 +905,7 @@ impl BenchUpApp {
         self.drawing_axis_guides.clear();
         self.drawing_projection = None;
         self.solid_first = None;
+        self.follow_me.reset();
         self.flip_hover = None;
         self.last_move_copy = None;
         self.measurement = None;
@@ -2539,6 +2542,7 @@ impl BenchUpApp {
             let editing_operation = self.last_move_copy.is_some()
                 || solid_operation
                 || measurement_operation
+                || self.follow_me.is_tracing()
                 || self.drawing.is_some()
                 || self.modeling.is_some()
                 || self.gesture.is_some()
@@ -2557,6 +2561,7 @@ impl BenchUpApp {
             self.last_move_copy = None;
             let completed_group = self.line_group;
             self.stop_drawing();
+            self.follow_me.reset();
             self.modeling = None;
             self.notice = None;
             self.help = false;
@@ -3339,6 +3344,8 @@ impl BenchUpApp {
                                 (false, false) => tr!("app.move_ctrl_toggles_copy_click_base_point_and"),
                             }
                         }
+                    } else if self.tool == Tool::FollowMe {
+                        self.follow_me_status()
                     } else if self.tool.is_solid() {
                         self.solid_status()
                     } else if self.tool.is_measuring() {
@@ -3517,36 +3524,13 @@ impl BenchUpApp {
             color,
         );
         let shortcut = shortcut_input::key_label(self.general_settings.tool_shortcut(tool));
-        let shortcut_size = ui.painter().text(
+        ui.painter().text(
             egui::pos2(rect.right() - 8., rect.center().y),
             Align2::RIGHT_CENTER,
             shortcut,
             FontId::proportional(11.),
             colors.muted,
         );
-        if tool == Tool::Polygon {
-            let input_rect = Rect::from_min_size(
-                egui::pos2(
-                    shortcut_size.left() - ui.spacing().item_spacing.x - 48.,
-                    rect.top(),
-                ),
-                egui::vec2(48., rect.height()),
-            );
-            // Center the widget's padded height within the row without advancing
-            // the menu cursor a second time.
-            let mut input_ui = ui.new_child(
-                egui::UiBuilder::new()
-                    .max_rect(input_rect)
-                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
-            );
-            input_ui
-                .add(
-                    egui::DragValue::new(&mut self.polygon_sides)
-                        .range(3..=64)
-                        .min_size(egui::vec2(48., 0.)),
-                )
-                .on_hover_text(tr!("app.polygon_sides"));
-        }
         self.tool_tooltip(response, tool)
     }
     fn reorder_rail_tool(&mut self, tool: Tool, insertion: usize) {
@@ -3640,8 +3624,8 @@ impl BenchUpApp {
                     let label_painter = ui.painter().clone();
                     let label_layout = |tool: Tool| {
                         let mut job = egui::text::LayoutJob::simple(
-                            if Tool::WOOD.contains(&tool) {
-                                tr!("tools.wood_tools").to_owned()
+                            if tool == Tool::FollowMe {
+                                tr!("follow_me.advanced_tools").to_owned()
                             } else if tool == Tool::TapeMeasure {
                                 tr!("app.tape").to_owned()
                             } else {
@@ -3660,7 +3644,6 @@ impl BenchUpApp {
                             Tool::Line => self.drawing_tool,
                             Tool::Dimensions => self.measurement_tool,
                             Tool::Union => self.solid_tool,
-                            Tool::Router => self.wood_tool,
                             tool => tool,
                         };
                         (rail_tool, label_layout(tool).size().y)
@@ -3747,15 +3730,13 @@ impl BenchUpApp {
                             self.measurement_tool
                         } else if rail_tool == Tool::Union {
                             self.solid_tool
-                        } else if rail_tool == Tool::Router {
-                            self.wood_tool
                         } else {
                             rail_tool
                         };
                         let placeholder = dragged.as_ref().is_some_and(|tool| **tool == rail_tool);
                         let active = self.tool == tool;
                         let nested =
-                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union | Tool::Router);
+                            matches!(rail_tool, Tool::Line | Tool::Dimensions | Tool::Union | Tool::FollowMe);
                         let shortcut = shortcut_input::key_label(self.general_settings.tool_shortcut(tool));
                         let tooltip = if shortcut.is_empty() {
                             tool.label().to_owned()
@@ -3864,12 +3845,11 @@ impl BenchUpApp {
                                         Tool::Line => &Tool::DRAWING,
                                         Tool::Dimensions => &Tool::MEASUREMENT_MENU,
                                         Tool::Union => &Tool::SOLID,
-                                        Tool::Router => &Tool::WOOD,
+                                        Tool::FollowMe => &Tool::ADVANCED,
                                         _ => unreachable!(),
                                     };
                                     for &option in options {
-                                        let response =
-                                            self.tool_menu_item(ui, option, self.tool == option);
+                                        let response = self.tool_menu_item(ui, option, self.tool == option);
                                         if response.clicked() {
                                             if option.is_solid() {
                                                 self.start_solid_tool(option, ui.ctx());
@@ -3937,8 +3917,6 @@ impl BenchUpApp {
                         Tool::Line
                     } else if Tool::MEASUREMENT_MENU.contains(&self.tool) {
                         Tool::Dimensions
-                    } else if Tool::WOOD.contains(&self.tool) {
-                        Tool::Router
                     } else {
                         self.tool
                     };
@@ -4004,7 +3982,6 @@ impl BenchUpApp {
                                 || (*tool == Tool::Line && Tool::DRAWING.contains(&self.tool))
                                 || (*tool == Tool::Dimensions && Tool::MEASUREMENT_MENU.contains(&self.tool))
                                 || (*tool == Tool::Union && self.tool.is_solid())
-                                || (*tool == Tool::Router && Tool::WOOD.contains(&self.tool))
                         }).unwrap_or(0);
                         let next = if wheel > 0. {
                             current.saturating_sub(1)
@@ -4016,7 +3993,6 @@ impl BenchUpApp {
                                 Tool::Line => self.drawing_tool,
                                 Tool::Dimensions => self.measurement_tool,
                                 Tool::Union => self.solid_tool,
-                                Tool::Router => self.wood_tool,
                                 tool => tool,
                             };
                             self.set_tool(tool);
@@ -4818,6 +4794,10 @@ impl BenchUpApp {
             self.update_grain_pointer(pos);
             return;
         }
+        if self.tool == Tool::FollowMe && self.paste_preview.is_none() {
+            self.follow_me_pointer(pos);
+            return;
+        }
         if self.tool == Tool::Router && self.paste_preview.is_none() {
             self.hover = self.router_edge_at(pos);
             self.snap = None;
@@ -5282,6 +5262,7 @@ impl BenchUpApp {
                     self.update_drawing_orbit(modifiers);
                     if button == egui::PointerButton::Secondary {
                         self.solid_first = None;
+                        self.follow_me.reset();
                         self.flip_hover = None;
                         self.measurement = None;
                         self.drawing = None;
@@ -5326,6 +5307,7 @@ impl BenchUpApp {
                                 Tool::GrainDirection => GestureKind::GrainDirection,
                                 Tool::WoodGlue => GestureKind::WoodGlue,
                                 Tool::Router => GestureKind::Router,
+                                Tool::FollowMe => GestureKind::FollowMe,
                                 Tool::Flip
                                 | Tool::OuterShell
                                 | Tool::Union
@@ -5523,6 +5505,11 @@ impl BenchUpApp {
                                     && gesture.start.distance(pos) < 5. =>
                             {
                                 self.measurement_click(pos, ctx);
+                            }
+                            GestureKind::FollowMe
+                                if self.viewport.contains(pos) && gesture.start.distance(pos) < 5. =>
+                            {
+                                self.follow_me_click(pos, ctx);
                             }
                             GestureKind::Router
                                 if self.viewport.contains(pos) && gesture.start.distance(pos) < 5. =>
@@ -5736,6 +5723,7 @@ impl BenchUpApp {
 
     fn paint_scene_with_background(&mut self, ui: &egui::Ui, rect: Rect, background: bool) {
         let evaluated = self.history_preview.is_some()
+            || self.follow_me.preview.is_some()
             || self
                 .modeling
                 .as_ref()
@@ -5823,6 +5811,7 @@ impl BenchUpApp {
         let colors = Palette::for_ui(ui);
         let faces = FacePalette::for_ui(ui);
         let committed = self.history_preview.is_none()
+            && self.follow_me.preview.is_none()
             && self.modeling.as_ref().is_none_or(|edit| edit.preview.is_none());
         let source_revision = (committed && self.doc.model.connections.is_empty()
             && self.doc.model.routes.is_empty()).then(|| self.document_revision(ui.ctx()));
@@ -5834,6 +5823,7 @@ impl BenchUpApp {
             self.modeling
                 .as_ref()
                 .and_then(|edit| edit.preview.as_ref())
+                .or(self.follow_me.preview.as_ref())
                 .unwrap_or(&self.doc.model)
         });
         let evaluated = !model.connections.is_empty() || !model.routes.is_empty();
@@ -5841,7 +5831,7 @@ impl BenchUpApp {
             #[cfg(not(target_arch = "wasm32"))]
             let _profile = viewport_benchmark::scope("geometry_update");
             self.joinery_geometry.update_render(model,
-                self.history_preview.is_none() && self.modeling.as_ref().is_some_and(|edit| edit.preview.is_some()),
+                self.history_preview.is_none() && (self.follow_me.preview.is_some() || self.modeling.as_ref().is_some_and(|edit| edit.preview.is_some())),
                 ui.ctx(), &self.doc.display, &self.shadow_cache, machining_revision);
         } else {
             self.joinery_geometry.clear_removed_connections();

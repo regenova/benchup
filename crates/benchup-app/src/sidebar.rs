@@ -53,6 +53,7 @@ impl OrbitOrigin {
 pub(super) struct InspectorPreferences {
     joinery: joinery::Preferences,
     router: router::Preferences,
+    follow_me: follow_me::Preferences,
     fasteners: fasteners::Preferences,
     sharing: sharing::Preferences,
     account_open: bool,
@@ -100,6 +101,7 @@ impl Default for InspectorPreferences {
         Self {
             joinery: Default::default(),
             router: Default::default(),
+            follow_me: Default::default(),
             fasteners: Default::default(),
             sharing: Default::default(),
             account_open: false,
@@ -153,7 +155,6 @@ struct ToolPreferences {
     drawing: Tool,
     measurement: Tool,
     solid: Tool,
-    wood: Tool,
     polygon_sides: usize,
     push_pull_new_faces: bool,
     move_copy: bool,
@@ -261,6 +262,32 @@ mod guide_preference_tests {
     }
 
     #[test]
+    fn follow_me_options_and_advanced_tool_slot_restore_without_a_model_edit() {
+        let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.follow_me, follow_me::Preferences::default());
+        let old_order: Vec<_> = Tool::RAIL.iter().copied().filter(|t| *t != Tool::FollowMe).collect();
+        let normalized = normalized_tool_rail_order(&old_order);
+        assert_eq!(&normalized[..old_order.len()], old_order.as_slice());
+        assert_eq!(normalized.last(), Some(&Tool::FollowMe));
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.set_tool(Tool::FollowMe);
+        app.follow_me.preferences = follow_me::Preferences { roll: 37.5, reverse: true };
+        app.reorder_rail_tool(Tool::FollowMe, 0);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.tool, Tool::FollowMe);
+        assert_eq!(restored.follow_me.preferences, app.follow_me.preferences);
+        assert!(restored.follow_me.preview.is_none());
+        assert_eq!(restored.tool_rail_order[0], Tool::FollowMe);
+    }
+
+    #[test]
     fn tool_rail_order_defaults_normalizes_and_persists_without_model_edits() {
         let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
         assert_eq!(legacy.tool_rail_order, Tool::RAIL.to_vec());
@@ -293,7 +320,7 @@ mod guide_preference_tests {
         eframe::set_value(&mut storage, PREFERENCE_KEY, &legacy);
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         app.restore_inspector_preferences(&ctx, Some(&storage));
-        assert_eq!(app.tool_rail_order.last(), Some(&Tool::Router));
+        assert_eq!(&app.tool_rail_order[app.tool_rail_order.len() - 3..], &[Tool::Router, Tool::WoodGlue, Tool::FollowMe]);
         app.reorder_rail_tool(Tool::Router, 0);
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         let mut restored = BenchUpApp::with_document(Document::default(), None, true);
@@ -303,62 +330,46 @@ mod guide_preference_tests {
     }
 
     #[test]
-    fn legacy_wood_slots_merge_at_the_first_saved_position() {
+    fn separate_wood_slots_preserve_their_saved_positions() {
         for saved in [
             vec![Tool::WoodGlue, Tool::Move, Tool::Router, Tool::Select],
             vec![Tool::Router, Tool::Move, Tool::WoodGlue, Tool::Select],
         ] {
-            let ctx = egui::Context::default();
-            let mut storage = Storage::default();
-            let legacy = InspectorPreferences {
-                tool_rail_order: saved,
-                tool_rail_order_revision: 1,
-                ..Default::default()
-            };
-            eframe::set_value(&mut storage, PREFERENCE_KEY, &legacy);
-            let mut app = BenchUpApp::with_document(Document::default(), None, true);
-            app.restore_inspector_preferences(&ctx, Some(&storage));
-            assert_eq!(&app.tool_rail_order[..3], &[Tool::Router, Tool::Move, Tool::Select]);
-            assert_eq!(app.tool_rail_order.len(), Tool::RAIL.len());
-            assert!(!app.tool_rail_order.contains(&Tool::WoodGlue));
-            app.reorder_rail_tool(Tool::Router, Tool::RAIL.len());
-            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
-            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
-            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
-            assert_eq!(restored.tool_rail_order.last(), Some(&Tool::Router));
-            assert!(!restored.project.modified);
+            let normalized = normalized_tool_rail_order(&saved);
+            assert_eq!(&normalized[..saved.len()], saved.as_slice());
+            assert_eq!(normalized.len(), Tool::RAIL.len());
         }
     }
 
     #[test]
-    fn wood_tool_choices_save_immediately_without_model_edits() {
-        let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(legacy.tools.wood, Tool::Router);
+    fn grouped_wood_preferences_expand_in_place_and_save_without_model_edits() {
         let ctx = egui::Context::default();
         let mut storage = Storage::default();
+        let grouped = InspectorPreferences {
+            tool_rail_order: vec![Tool::Move, Tool::Router, Tool::Select, Tool::FollowMe],
+            tool_rail_separators: vec![1, 2, 4],
+            tool_rail_order_revision: 2,
+            ..Default::default()
+        };
+        // The removed group choice remains accepted as an unknown legacy field.
+        let mut legacy = serde_json::to_value(&grouped).unwrap();
+        legacy["tools"]["wood"] = serde_json::json!("wood_glue");
+        eframe::set_value(&mut storage, PREFERENCE_KEY, &legacy);
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
-        for tool in [Tool::WoodGlue, Tool::Router] {
-            for active in [tool, Tool::Select] {
-                app.set_tool(tool);
-                app.set_tool(active);
-                storage.flushed = false;
-                app.persist_inspector_changes(&ctx, Some(&mut storage), false);
-                assert!(storage.flushed);
-                assert!(!app.project.modified);
-                assert!(app.dirty_since.is_none());
-                let mut restored = BenchUpApp::with_document(Document::default(), None, true);
-                restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
-                assert_eq!(restored.tool, active);
-                assert_eq!(restored.wood_tool, tool);
-            }
-        }
-        // Older settings did not have a wood choice; the active tool wins.
-        let legacy: ToolPreferences = serde_json::from_str(r#"{"active":"wood_glue"}"#).unwrap();
-        legacy.restore(&mut app);
-        assert_eq!(app.wood_tool, Tool::WoodGlue);
-        let invalid = ToolPreferences { wood: Tool::Paint, ..Default::default() };
-        invalid.restore(&mut app);
-        assert_eq!(app.wood_tool, Tool::Router);
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert_eq!(&app.tool_rail_order[..5], &[Tool::Move, Tool::Router, Tool::WoodGlue, Tool::Select, Tool::FollowMe]);
+        assert_eq!(app.tool_rail_separators, vec![1, 3, 5]);
+        app.reorder_rail_tool(Tool::WoodGlue, 0);
+        app.set_tool(Tool::WoodGlue);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.tool, Tool::WoodGlue);
+        assert_eq!(restored.tool_rail_order, app.tool_rail_order);
+        assert_eq!(restored.tool_rail_separators, app.tool_rail_separators);
     }
 
     #[test]
@@ -560,7 +571,6 @@ impl Default for ToolPreferences {
             drawing: Tool::Line,
             measurement: Tool::Dimensions,
             solid: Tool::Union,
-            wood: Tool::Router,
             polygon_sides: 6,
             push_pull_new_faces: false,
             move_copy: false,
@@ -579,7 +589,6 @@ impl ToolPreferences {
             drawing: app.drawing_tool,
             measurement: app.measurement_tool,
             solid: app.solid_tool,
-            wood: app.wood_tool,
             polygon_sides: app.polygon_sides,
             push_pull_new_faces: app.push_pull_new_faces,
             move_copy: app.move_copy,
@@ -609,11 +618,6 @@ impl ToolPreferences {
             self.solid
         } else {
             defaults.solid
-        };
-        app.wood_tool = if Tool::WOOD.contains(&self.wood) {
-            self.wood
-        } else {
-            defaults.wood
         };
         app.polygon_sides = self.polygon_sides.clamp(3, 64);
         // This resets transient state without executing the tool (solid tools
@@ -910,15 +914,29 @@ impl BenchUpApp {
         benchup_core::i18n::set_language(&self.general_settings.language);
         preferences.tools.restore(self);
         self.orbit_origin = preferences.orbit_origin;
+        self.follow_me.preferences = follow_me::Preferences {
+            roll: if preferences.follow_me.roll.is_finite() { preferences.follow_me.roll.clamp(-180., 180.) } else { 0. },
+            reverse: preferences.follow_me.reverse,
+        };
         self.tool_rail_order = normalized_tool_rail_order(&preferences.tool_rail_order);
+        // Expanding a saved Wood group inserts Glue after Router. Keep any
+        // separator after the group after both of its now-independent tools.
+        let inserted_glue = (preferences.tool_rail_order.contains(&Tool::Router)
+            && !preferences.tool_rail_order.contains(&Tool::WoodGlue))
+            .then(|| self.tool_rail_order.iter().position(|tool| *tool == Tool::WoodGlue).unwrap());
         self.tool_rail_separators = preferences.tool_rail_separators.iter().copied()
+            .map(|slot| slot + usize::from(inserted_glue.is_some_and(|index| slot >= index)))
             .filter(|&slot| slot <= self.tool_rail_order.len()).collect();
         self.tool_rail_separators.sort_unstable();
         self.tool_rail_separators.dedup();
         // Apply the new bottom placement once, preserving subsequent user reordering.
         if preferences.tool_rail_order_revision < 1 {
-            self.tool_rail_order.retain(|tool| *tool != Tool::Router);
-            self.tool_rail_order.push(Tool::Router);
+            self.tool_rail_order.retain(|tool| !matches!(tool, Tool::Router | Tool::WoodGlue));
+            self.tool_rail_order.extend([Tool::Router, Tool::WoodGlue]);
+        }
+        if preferences.tool_rail_order_revision < 2 {
+            self.tool_rail_order.retain(|tool| *tool != Tool::FollowMe);
+            self.tool_rail_order.push(Tool::FollowMe);
         }
         self.project.recent = preferences.recent_projects.clone();
         self.project.recent.truncate(10);
@@ -1035,6 +1053,7 @@ impl BenchUpApp {
         InspectorPreferences {
             joinery: self.joinery.clone(),
             router: self.router,
+            follow_me: self.follow_me.preferences,
             fasteners: self.fasteners.clone(),
             sharing: self.sharing.preferences.clone(),
             account_open: self.account.open,
@@ -1058,7 +1077,7 @@ impl BenchUpApp {
             tools: ToolPreferences::capture(self),
             orbit_origin: self.orbit_origin,
             tool_rail_order: self.tool_rail_order.clone(),
-            tool_rail_order_revision: 1,
+            tool_rail_order_revision: 2,
             tool_rail_separators: self.tool_rail_separators.clone(),
             snapping: Some(SnappingPreferences {
                 geometry: true,
@@ -5991,15 +6010,21 @@ mod face_center_preference_tests {
     }
 }
 
-// Merge the old wood slots at their first saved position, preserve other slots,
-// remove duplicates, and append tools added by newer versions.
+// Preserve independent saved slots and expand the former Wood group in place.
+// Remove duplicates and append other tools added by newer versions.
 pub(super) fn normalized_tool_rail_order(saved: &[Tool]) -> Vec<Tool> {
     let mut order = Vec::with_capacity(Tool::RAIL.len());
     for &tool in saved.iter().chain(Tool::RAIL.iter()) {
-        let tool = if tool == Tool::WoodGlue { Tool::Router } else { tool };
         if Tool::RAIL.contains(&tool) && !order.contains(&tool) {
             order.push(tool);
         }
+    }
+    if !saved.contains(&Tool::WoodGlue)
+        && let Some(router) = order.iter().position(|tool| *tool == Tool::Router)
+        && let Some(glue) = order.iter().position(|tool| *tool == Tool::WoodGlue)
+    {
+        let tool = order.remove(glue);
+        order.insert(router + 1, tool);
     }
     order
 }

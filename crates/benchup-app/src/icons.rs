@@ -489,6 +489,13 @@ fn paint_tool(p: &egui::Painter, rect: Rect, tool: Tool, colors: ToolPalette) {
             ));
             p.circle_filled(c, 2., red);
         }
+        Tool::FollowMe => {
+            p.add(egui::Shape::line(vec![xy(-0.85, 0.75), xy(-0.85, -0.45), xy(0.2, -0.45), xy(0.8, 0.15)],
+                Stroke::new(4., gold)));
+            p.add(egui::Shape::convex_polygon(vec![xy(0.45, 0.18), xy(0.92, 0.55), xy(0.94, -0.1)],
+                red, Stroke::new(1., outline)));
+            p.rect_filled(Rect::from_center_size(xy(-0.85, 0.75), egui::vec2(r * 0.5, r * 0.5)), 1., metal);
+        }
         Tool::Router => {
             // Classic bearing-guided bit: steel shank, carbide cutting head,
             // flute and pilot bearing, legible in both the rail and cursor.

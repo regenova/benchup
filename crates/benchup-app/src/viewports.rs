@@ -4,6 +4,43 @@ use benchup_core::tr;
 use super::*;
 use std::collections::BTreeMap;
 
+/// Tool options share Orbit's fixed top-right overlay in each visible pane.
+fn viewport_tool_controls(
+    ctx: &egui::Context,
+    rect: Rect,
+    id: egui::Id,
+    contents: impl FnOnce(&mut egui::Ui, f32),
+) {
+    egui::Area::new(id)
+        .order(egui::Order::Foreground)
+        .pivot(Align2::RIGHT_TOP)
+        .fixed_pos(rect.right_top() + egui::vec2(-8., 8.))
+        .movable(false)
+        .show(ctx, |ui| {
+            egui::Frame::NONE.show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let control_height = ui.spacing().interact_size.y.max(
+                        ui.text_style_height(&egui::TextStyle::Button).max(18.)
+                            + 2. * ui.spacing().button_padding.y,
+                    );
+                    ui.spacing_mut().interact_size.y = control_height;
+                    let colors = Palette::for_ui(ui);
+                    let widgets = &mut ui.style_mut().visuals.widgets;
+                    for (visuals, opacity) in [
+                        (&mut widgets.inactive, 0.75),
+                        (&mut widgets.hovered, 0.80),
+                        (&mut widgets.active, 0.80),
+                    ] {
+                        let fill = colors.paper.gamma_multiply(opacity);
+                        visuals.bg_fill = fill;
+                        visuals.weak_bg_fill = fill;
+                    }
+                    contents(ui, control_height);
+                });
+            });
+        });
+}
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) enum Layout {
     Pane {
@@ -778,53 +815,44 @@ impl BenchUpApp {
             {
                 activate = Some(pane.selected);
             }
-            if self.tool == Tool::Orbit {
-                egui::Area::new(egui::Id::unique(("orbit-origin-selector", pane.id)))
-                    .order(egui::Order::Foreground)
-                    .pivot(Align2::RIGHT_TOP)
-                    .fixed_pos(rect.right_top() + egui::vec2(-8., 8.))
-                    .movable(false)
-                    .show(&ctx, |ui| {
-                        egui::Frame::NONE.show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                // The selector includes an 18-point origin icon. Give both
-                                // controls the same height and center them on the row.
-                                let control_height = ui.spacing().interact_size.y.max(
-                                    ui.text_style_height(&egui::TextStyle::Button).max(18.)
-                                        + 2. * ui.spacing().button_padding.y,
-                                );
-                                ui.spacing_mut().interact_size.y = control_height;
-                                let colors = Palette::for_ui(ui);
-                                let widgets = &mut ui.style_mut().visuals.widgets;
-                                for (visuals, opacity) in [
-                                    (&mut widgets.inactive, 0.75),
-                                    (&mut widgets.hovered, 0.80),
-                                    (&mut widgets.active, 0.80),
-                                ] {
-                                    let fill = colors.paper.gamma_multiply(opacity);
-                                    visuals.bg_fill = fill;
-                                    visuals.weak_bg_fill = fill;
-                                }
-                                if ui.add(egui::Button::new(tr!("orbit.set_focus")).selected(self.setting_orbit_focus)
-                                    .min_size(egui::vec2(0., control_height)))
-                                    .on_hover_text(tr!("orbit.set_focus_hint"))
-                                    .clicked()
-                                {
-                                    self.setting_orbit_focus = !self.setting_orbit_focus;
-                                }
-                                let icon = crate::icons::origin_atom(colors.ink);
-                                egui::ComboBox::from_id_salt("orbit-origin")
-                                    .selected_text((icon, self.orbit_origin.label()))
-                                    .show_ui(ui, |ui| {
-                                        for origin in sidebar::OrbitOrigin::ALL {
-                                            ui.selectable_value(&mut self.orbit_origin, origin, origin.label());
-                                        }
-                                    })
-                                    .response
-                                    .on_hover_text(tr!("orbit.pivot_hint"));
-                            });
-                        });
-                    });
+            if matches!(self.tool, Tool::Orbit | Tool::FollowMe | Tool::Polygon) {
+                let control_id = match self.tool {
+                    Tool::Orbit => "orbit-origin-selector",
+                    Tool::Polygon => "polygon-options",
+                    _ => "follow-me-options",
+                };
+                viewport_tool_controls(&ctx, rect, egui::Id::unique((control_id, pane.id)), |ui, control_height| {
+                    if self.tool == Tool::FollowMe {
+                        self.follow_me_options(ui, control_height);
+                        return;
+                    }
+                    if self.tool == Tool::Polygon {
+                        ui.add(egui::DragValue::new(&mut self.polygon_sides)
+                            .range(3..=64)
+                            .min_size(egui::vec2(0., control_height))
+                            .prefix(format!("{}: ", tr!("app.polygon_sides"))))
+                            .on_hover_text(tr!("app.polygon_sides"));
+                        return;
+                    }
+                    if ui.add(egui::Button::new(tr!("orbit.set_focus")).selected(self.setting_orbit_focus)
+                        .min_size(egui::vec2(0., control_height)))
+                        .on_hover_text(tr!("orbit.set_focus_hint"))
+                        .clicked()
+                    {
+                        self.setting_orbit_focus = !self.setting_orbit_focus;
+                    }
+                    let colors = Palette::for_ui(ui);
+                    let icon = crate::icons::origin_atom(colors.ink);
+                    egui::ComboBox::from_id_salt("orbit-origin")
+                        .selected_text((icon, self.orbit_origin.label()))
+                        .show_ui(ui, |ui| {
+                            for origin in sidebar::OrbitOrigin::ALL {
+                                ui.selectable_value(&mut self.orbit_origin, origin, origin.label());
+                            }
+                        })
+                        .response
+                        .on_hover_text(tr!("orbit.pivot_hint"));
+                });
             }
             views.push((pane.selected, rect, response));
         }

@@ -21,6 +21,7 @@ pub mod guides;
 pub mod inference;
 pub mod measurements;
 pub mod modeling;
+pub mod follow_me;
 pub mod objects;
 mod reparent;
 pub mod selection;
@@ -103,6 +104,7 @@ pub enum Tool {
     Walk,
     WoodGlue,
     Router,
+    FollowMe,
 }
 
 impl Tool {
@@ -147,8 +149,8 @@ impl Tool {
     pub fn is_drawing(self) -> bool {
         self == Self::Image || Self::DRAWING.contains(&self)
     }
-    pub const WOOD: [Self; 2] = [Self::Router, Self::WoodGlue];
-    pub const ALL: [Self; 30] = [
+    pub const ADVANCED: [Self; 1] = [Self::FollowMe];
+    pub const ALL: [Self; 31] = [
         Self::Select,
         Self::Line,
         Self::Rectangle,
@@ -179,8 +181,9 @@ impl Tool {
         Self::Walk,
         Self::WoodGlue,
         Self::Router,
+        Self::FollowMe,
     ];
-    pub const RAIL: [Self; 13] = [
+    pub const RAIL: [Self; 15] = [
         Self::Select,
         Self::Line,
         Self::Erase,
@@ -194,6 +197,8 @@ impl Tool {
         Self::Dimensions,
         Self::Union,
         Self::Router,
+        Self::WoodGlue,
+        Self::FollowMe,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -227,6 +232,7 @@ impl Tool {
             Self::Walk => "Walk",
             Self::WoodGlue => tr!("wood_glue.tool"),
             Self::Router => tr!("router.router"),
+            Self::FollowMe => tr!("follow_me.tool"),
         }
     }
     pub fn shortcut(self) -> &'static str {
@@ -253,7 +259,7 @@ impl Tool {
             Self::TapeMeasure => "T",
             Self::Protractor => "A",
             Self::Dimensions => "I",
-            Self::Arc | Self::Text | Self::GrainDirection | Self::Walk | Self::WoodGlue | Self::Router => "",
+            Self::Arc | Self::Text | Self::GrainDirection | Self::Walk | Self::WoodGlue | Self::Router | Self::FollowMe => "",
             Self::Erase => "E",
             Self::Orbit => "O",
         }
@@ -315,6 +321,7 @@ impl Tool {
             Self::GrainDirection => tr!("tools.place_the_grain_anchor"),
             Self::WoodGlue => tr!("wood_glue.instructions"),
             Self::Router => tr!("router.click_edges"),
+            Self::FollowMe => tr!("follow_me.instructions"),
             Self::Walk => "Click a floor face to start walking at eye level. Escape exits Walk.",
         }
     }
