@@ -6,11 +6,11 @@
 
 ## Download for desktop
 
-[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
-[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
-[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
-[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
-[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest)
+[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
+[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
+[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
+[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
+[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest)
 
 A free, open-source 3D modeling app for woodworking and furniture design, written in Rust. Plan individual boards, wood joints, and complete assemblies with exact measurements before heading to the workshop. The same editor runs as a native Windows, macOS, or Linux application and in a desktop browser through WebAssembly.
 
@@ -213,8 +213,9 @@ python3 scripts/desktop_release.py version --tag vX.Y.Z
 python3 scripts/desktop_release.py notes --tag vX.Y.Z
 ```
 
-Refresh the README screenshot by launching an existing desktop executable as
-described below. Deploy requests do not run local builds or tests; GitHub Actions
+Deployments reuse the existing README and website screenshots. Refresh them only
+when explicitly requested, using the procedure below. Deploy requests do not run
+local builds or tests; GitHub Actions
 performs the desktop and browser builds, tests, and packaging. Commit and push
 the release changes and notes before creating and pushing the matching tag.
 Release validation rejects missing or mismatched notes. The same
@@ -306,8 +307,8 @@ explicitly. It launches the desktop app in an isolated temporary profile, loads
 camera and display settings, dismisses open dialogs and popups, captures the
 settled window at 1920 × 1080, and updates `assets/screenshots/benchup.jpg` and its
 README link. Visually verify that no modal remains open before using the image.
-For a release, update the landing page and its social preview references to
-the same capture.
+When refreshing the screenshot, update the landing page and its social preview
+references to the same capture.
 It never compiles the app, runs tests, or starts benchmarks. The screenshot
 reflects the existing executable; a missing executable is reported without
 building one.

@@ -9,7 +9,7 @@ import re
 import urllib.error
 import urllib.request
 
-CURRENT = "BenchUp3D/editor"
+CURRENT = "BenchUp3D/benchup"
 LEGACY = "Ketchup3D/app"
 API = "https://api.github.com/repos/"
 
@@ -32,7 +32,7 @@ def verify(repository, fetch=fetch_json):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Repository must be owner/repository")
     owner, name = repository.lower().split("/")
-    if owner not in ("ketchup3d", "benchup3d") or name not in ("app", "editor"):
+    if owner not in ("ketchup3d", "benchup3d") or name not in ("app", "editor", "benchup"):
         return "Skipped official KetchUp transfer check for a fork."
     old = fetch(API + LEGACY)
     new = fetch(API + CURRENT)

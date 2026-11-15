@@ -28,9 +28,9 @@ BenchUp helps woodworkers, furniture makers, and DIY builders model shelves, tab
 
 - [Homepage](https://benchup3d.github.io/editor/): overview, features, and platform downloads.
 - [Browser editor](https://benchup3d.github.io/editor/play/): try the application.
-- [Source repository](https://github.com/BenchUp3D/editor): implementation and developer documentation.
-- [User guide](https://github.com/BenchUp3D/editor/tree/main/docs): modeling instructions and workflows.
-- [Command line and AI agents](https://github.com/BenchUp3D/editor/blob/main/docs/cli.md): installing and using the `benchup` command and its MCP server.
-- [Agent guide](https://github.com/BenchUp3D/editor/blob/main/docs/agent-guide.md): conventions, workflow and woodworking recipes for agents editing projects.
-- [Latest desktop release](https://github.com/BenchUp3D/editor/releases/latest): downloads and release notes.
-- [MIT license](https://github.com/BenchUp3D/editor/blob/main/LICENSE).
+- [Source repository](https://github.com/BenchUp3D/benchup): implementation and developer documentation.
+- [User guide](https://github.com/BenchUp3D/benchup/tree/main/docs): modeling instructions and workflows.
+- [Command line and AI agents](https://github.com/BenchUp3D/benchup/blob/main/docs/cli.md): installing and using the `benchup` command and its MCP server.
+- [Agent guide](https://github.com/BenchUp3D/benchup/blob/main/docs/agent-guide.md): conventions, workflow and woodworking recipes for agents editing projects.
+- [Latest desktop release](https://github.com/BenchUp3D/benchup/releases/latest): downloads and release notes.
+- [MIT license](https://github.com/BenchUp3D/benchup/blob/main/LICENSE).

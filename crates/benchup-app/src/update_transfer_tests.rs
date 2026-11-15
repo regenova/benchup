@@ -92,21 +92,21 @@ impl Server {
                     ("301 Moved Permanently", b"")
                 } else if let Some(tail) = path.strip_prefix("/api/v3/repos/BenchUp3D/app/") {
                     location = Some(format!(
-                        "{server_base}/api/v3/repos/BenchUp3D/editor/{tail}"
+                        "{server_base}/api/v3/repos/BenchUp3D/benchup/{tail}"
                     ));
                     ("301 Moved Permanently", b"")
-                } else if path.starts_with("/api/v3/repos/BenchUp3D/editor/releases?") {
+                } else if path.starts_with("/api/v3/repos/BenchUp3D/benchup/releases?") {
                     ("200 OK", &releases)
                 } else if let Some(tail) = path.strip_prefix("/Ketchup3D/app/releases/download/") {
                     location = Some(format!(
-                        "{server_base}/BenchUp3D/editor/releases/download/{tail}"
+                        "{server_base}/BenchUp3D/benchup/releases/download/{tail}"
                     ));
                     ("302 Found", b"")
-                } else if path == format!("/BenchUp3D/editor/releases/download/v0.6.6/{feed_name}")
+                } else if path == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{feed_name}")
                 {
                     ("200 OK", &feed)
                 } else if path
-                    == format!("/BenchUp3D/editor/releases/download/v0.6.6/{package_name}")
+                    == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{package_name}")
                 {
                     ("200 OK", &package)
                 } else {
@@ -203,7 +203,7 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
         );
         std::fs::write(&config.ManifestPath, new_manifest).unwrap();
         let new_manager = UpdateManager::new(
-            GithubSource::new(&format!("{}/BenchUp3D/editor", server.base), None, false),
+            GithubSource::new(&format!("{}/BenchUp3D/benchup", server.base), None, false),
             None,
             Some(config),
         )
@@ -228,7 +228,7 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
                     && path.ends_with(".nupkg"))
         );
         assert!(seen.iter().any(
-            |path| path.starts_with("/BenchUp3D/editor/releases/download/")
+            |path| path.starts_with("/BenchUp3D/benchup/releases/download/")
                 && path.ends_with(".nupkg")
         ));
     }

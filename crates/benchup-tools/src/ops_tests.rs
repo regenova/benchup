@@ -643,7 +643,7 @@ fn the_scene_flags_joints_whose_board_is_gone() {
     let (mut model, mut env) = (Model::default(), ToolEnv::default());
     let (_, shelf, joint) = joined_pair(&mut model, &mut env);
     // Projects saved before the core removed joints with their boards
-    // (BenchUp3D/editor#36) can still contain such a joint.
+    // (BenchUp3D/benchup#36) can still contain such a joint.
     let saved = model.connections[&joint].clone();
     assert_eq!(model.erase(&BTreeSet::from([shelf])), vec![joint], "the core removes the joint with its board");
     assert!(model.connections.is_empty());

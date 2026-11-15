@@ -16,7 +16,7 @@ class TransferTests(unittest.TestCase):
         ])
 
     def test_transferred_repository_retains_numeric_identity_and_public_release_access(self):
-        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor"]:
+        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor", "BenchUp3D/editor", "benchup3d/BENCHUP"]:
             fetch = self.fetch()
             self.assertIn("Verified", migration.verify(source, fetch))
             self.assertEqual(fetch.call_args_list[2].args[0],

@@ -41,7 +41,7 @@ impl BenchUpApp {
                 } else if primary_button(ui, tr!("app_updates.check_now"), self.updates.available() && !self.updates.busy()).clicked() {
                     self.updates.check(ctx, false);
                 }
-                ui.hyperlink_to(tr!("app_updates.release_notes"), "https://github.com/BenchUp3D/editor/releases");
+                ui.hyperlink_to(tr!("app_updates.release_notes"), "https://github.com/BenchUp3D/benchup/releases");
             });
         });
         if response.should_close() {
