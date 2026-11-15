@@ -2,6 +2,7 @@
 //!
 //! Every command prints JSON on stdout. Exit status: 0 success, 1 the tool
 //! reported an error (the file is unchanged), 2 usage or I/O error.
+mod bridge;
 mod launch;
 mod mcp;
 mod project;
@@ -36,10 +37,20 @@ usage:
   benchup undo <file.bup>                          undo the last change
   benchup redo <file.bup>                          redo the last undone change
   benchup mcp <file.bup>                           serve the tools over MCP (stdio)
+  benchup bridge [--no-mcp] [--port PORT] [--allow-origin ORIGIN]...
+                                                   serve the project open in BenchUp over MCP
+                                                   (stdio); BenchUp connects to it on 127.0.0.1
   benchup open <file.bup> [--app EXECUTABLE]       open the project in the BenchUp desktop app
                                                    (or in EXECUTABLE, default $BENCHUP_APP)
 
+live mode: scene, get, call, undo, redo and render take --live instead of <file.bup>
+and act on the project open in BenchUp, e.g. `benchup call --live create_board '{..}'`.
+Set BENCHUP_AGENT_TOKEN to the pairing token in BenchUp (Settings → Agent connection).
+A bridge is started in the background when none is running (BENCHUP_BRIDGE_PORT
+changes its port). Each change is one undo step, \"Agent: ...\", in BenchUp.
+
 options:
+  --live           act on the project open in BenchUp, through `benchup bridge`
   --dry-run        (call) report the results without changing the file
   --brief          (call) leave out the object summaries of changing calls
   --allow-shared   edit the local copy of a shared project
@@ -150,7 +161,7 @@ fn apply(project: &mut Project, calls: &[(String, Value)]) -> Result<Output, Str
 }
 
 fn run_calls(project: &mut Project, calls: &[(String, Value)], save: bool, batch: bool) -> Result<Output, String> {
-    let (value, ok) = project::report(calls, project.run(calls, save)?, batch);
+    let (value, ok) = benchup_tools::batch::report(calls, project.run(calls, save)?, batch);
     Ok(Output { value, ok })
 }
 
@@ -186,6 +197,18 @@ fn tools(args: Args) -> Result<Output, String> {
     }
 }
 
+/// Runs one call in the project open in BenchUp (`--live`).
+fn live(name: &str, arguments: Value) -> Result<Output, String> {
+    let (value, ok) = bridge::cli_request(name, arguments)?;
+    Ok(Output { value, ok })
+}
+
+/// The positionals after `<file.bup>`, which `--live` commands leave out.
+fn after_file(args: &Args) -> Result<&[String], String> {
+    let skip = usize::from(!args.flag("--live"));
+    args.positional.get(skip..).ok_or_else(|| USAGE.to_owned())
+}
+
 fn run(mut argv: Vec<String>) -> Result<Output, String> {
     if argv.is_empty() || matches!(argv[0].as_str(), "-h" | "--help" | "help") {
         println!("{USAGE}");
@@ -202,17 +225,19 @@ fn run(mut argv: Vec<String>) -> Result<Output, String> {
         }
         "tools" => tools(parse_args(argv, &["--json", "--names"], &[])?),
         "scene" => {
-            let args = parse_args(argv, &["--allow-shared"], &[])?;
-            let filter = match args.positional.len() {
-                1 => json!({}),
-                2 => parse_object(&args.positional[1], "FILTER")?,
+            let args = parse_args(argv, &["--allow-shared", "--live"], &[])?;
+            let filter = match after_file(&args)? {
+                [] => json!({}),
+                [filter] => parse_object(filter, "FILTER")?,
                 _ => return Err(USAGE.into()),
             };
+            if args.flag("--live") {
+                return live("get_scene", filter);
+            }
             apply(&mut open(&args)?, &[("get_scene".into(), filter)])
         }
         "render" => {
-            let args = parse_args(argv, &["--allow-shared"], &["-o", "--output", "--view", "--size"])?;
-            let path = &args.expect(1)?[0];
+            let args = parse_args(argv, &["--allow-shared", "--live"], &["-o", "--output", "--view", "--size"])?;
             let view = args.value("--view").unwrap_or("iso");
             let (width, height) = match args.value("--size") {
                 None => (1000, 750),
@@ -221,21 +246,36 @@ fn run(mut argv: Vec<String>) -> Result<Output, String> {
                     .and_then(|(w, h)| Some((w.trim().parse().ok()?, h.trim().parse().ok()?)))
                     .ok_or("--size is WIDTHxHEIGHT in pixels, e.g. 1200x900")?,
             };
-            let project = open(&args)?;
-            let rendered = benchup_tools::render::render(&project.doc.model, view, width, height)?;
-            let output = match args.value("-o").or(args.value("--output")) {
-                Some(output) => std::path::PathBuf::from(output),
-                None => Path::new(path).with_extension(format!("{view}.png")),
+            let output = args.value("-o").or(args.value("--output")).map(std::path::PathBuf::from);
+            let (png, info, output) = if args.flag("--live") {
+                args.expect(0)?;
+                let answer = live("render_view", json!({"view": view, "width": width, "height": height}))?;
+                if !answer.ok {
+                    return Ok(answer);
+                }
+                let png = bridge::decode_base64(answer.value["png_base64"].as_str().unwrap_or_default())?;
+                let output = output.unwrap_or_else(|| format!("benchup-live.{view}.png").into());
+                (png, answer.value["info"].clone(), output)
+            } else {
+                let path = &args.expect(1)?[0];
+                let project = open(&args)?;
+                let rendered = benchup_tools::render::render(&project.doc.model, view, width, height)?;
+                let output = output.unwrap_or_else(|| Path::new(path).with_extension(format!("{view}.png")));
+                (rendered.png, rendered.info, output)
             };
-            std::fs::write(&output, &rendered.png).map_err(|e| format!("cannot write {}: {e}", output.display()))?;
-            let mut value = rendered.info;
+            std::fs::write(&output, &png).map_err(|e| format!("cannot write {}: {e}", output.display()))?;
+            let mut value = if info.is_object() { info } else { json!({}) };
             value["ok"] = json!(true);
             value["file"] = json!(output.display().to_string());
             Ok(ok(value))
         }
         "get" => {
-            let args = parse_args(argv, &["--allow-shared"], &[])?;
-            let id: u64 = args.expect(2)?[1].parse().map_err(|_| "the id must be a number".to_owned())?;
+            let args = parse_args(argv, &["--allow-shared", "--live"], &[])?;
+            let [id] = after_file(&args)? else { return Err(USAGE.into()) };
+            let id: u64 = id.parse().map_err(|_| "the id must be a number".to_owned())?;
+            if args.flag("--live") {
+                return live("get_object", json!({"id": id}));
+            }
             apply(&mut open(&args)?, &[("get_object".into(), json!({"id": id}))])
         }
         "guide" => {
@@ -243,28 +283,43 @@ fn run(mut argv: Vec<String>) -> Result<Output, String> {
             std::process::exit(0);
         }
         "call" => {
-            let args = parse_args(argv, &["--allow-shared", "--dry-run", "--brief"], &["--batch"])?;
-            let calls = match (args.value("--batch"), args.positional.as_slice()) {
-                (Some(source), [_]) => parse_batch(&read_input(source)?)?,
-                (None, [_, tool]) => vec![(tool.clone(), json!({}))],
-                (None, [_, tool, arguments]) => {
+            let args = parse_args(argv, &["--allow-shared", "--dry-run", "--brief", "--live"], &["--batch"])?;
+            let calls = match (args.value("--batch"), after_file(&args)?) {
+                (Some(source), []) => parse_batch(&read_input(source)?)?,
+                (None, [tool]) => vec![(tool.clone(), json!({}))],
+                (None, [tool, arguments]) => {
                     let text = if arguments == "-" { read_input("-")? } else { arguments.clone() };
                     vec![(tool.clone(), parse_object(&text, "ARGS")?)]
                 }
                 _ => return Err(USAGE.into()),
             };
             let batch = args.value("--batch").is_some();
-            let mut output = run_calls(&mut open(&args)?, &calls, !args.flag("--dry-run"), batch)?;
-            if args.flag("--dry-run") {
+            let dry_run = args.flag("--dry-run");
+            let mut output = if !args.flag("--live") {
+                run_calls(&mut open(&args)?, &calls, !dry_run, batch)?
+            } else if batch || dry_run {
+                let list: Vec<Value> = calls.iter().map(|(tool, arguments)| json!({"tool": tool, "arguments": arguments})).collect();
+                // `single`: one call takes "$" text as written and answers
+                // with its own result, as without --live.
+                live("run_batch", json!({"calls": list, "dry_run": dry_run, "single": !batch}))?
+            } else {
+                let (tool, arguments) = calls.into_iter().next().ok_or(USAGE)?;
+                live(&tool, arguments)?
+            };
+            if dry_run && output.value.is_object() {
                 output.value["dry_run"] = json!(true);
             }
             if args.flag("--brief") {
-                project::brief(&mut output.value);
+                benchup_tools::batch::brief(&mut output.value);
             }
             Ok(output)
         }
         "undo" | "redo" => {
-            let args = parse_args(argv, &["--allow-shared"], &[])?;
+            let args = parse_args(argv, &["--allow-shared", "--live"], &[])?;
+            if args.flag("--live") {
+                args.expect(0)?;
+                return live("undo", json!({"redo": command == "redo"}));
+            }
             args.expect(1)?;
             let value = open(&args)?.step_history(command == "redo")?;
             let ok = value["ok"] == true;
@@ -278,6 +333,7 @@ fn run(mut argv: Vec<String>) -> Result<Output, String> {
             });
             Ok(ok(launch::open(path, app.as_deref())?))
         }
+        "bridge" => bridge_command(argv),
         "mcp" => {
             let args = parse_args(argv, &["--allow-shared"], &[])?;
             args.expect(1)?;
@@ -288,6 +344,56 @@ fn run(mut argv: Vec<String>) -> Result<Output, String> {
         }
         _ => Err(format!("unknown command {command}\n\n{USAGE}")),
     }
+}
+
+/// `benchup bridge`: listens for BenchUp on 127.0.0.1 and serves MCP on
+/// stdio, or only listens (`--no-mcp`) for `--live` commands.
+fn bridge_command(argv: Vec<String>) -> Result<Output, String> {
+    let mut no_mcp = false;
+    let mut config = bridge::Config::new(bridge::token_from_env()?);
+    config.port = bridge::port_from_env()?;
+    let mut idle_exit = None;
+    let mut it = argv.into_iter();
+    while let Some(arg) = it.next() {
+        let mut value = |name: &str| it.next().ok_or(format!("{name} needs a value"));
+        match arg.as_str() {
+            "--no-mcp" => no_mcp = true,
+            "--port" => config.port = value("--port")?.parse().map_err(|_| "--port must be a port number")?,
+            "--allow-origin" => config.extra_origins.push(value("--allow-origin")?),
+            "--idle-exit" => {
+                let seconds: u64 = value("--idle-exit")?.parse().map_err(|_| "--idle-exit is a number of seconds")?;
+                idle_exit = Some(std::time::Duration::from_secs(seconds.max(1)));
+            }
+            _ => return Err(format!("unknown option {arg}\n\n{USAGE}")),
+        }
+    }
+    let target = match bridge::Hub::start(config.clone()) {
+        Ok(hub) => {
+            eprintln!("benchup bridge: waiting for BenchUp on ws://127.0.0.1:{}", hub.port());
+            if let Some(idle) = idle_exit {
+                hub.exit_when_idle(idle);
+            }
+            bridge::Target::Hub(hub)
+        }
+        // Another bridge holds the port: serve MCP through it, and take the
+        // port over if it exits.
+        Err(bridge::StartError::InUse(port)) if !no_mcp => {
+            eprintln!("benchup bridge: another bridge is listening on port {port}; forwarding to it");
+            let client = bridge::Client::new(port, config.token.clone(), "agent");
+            let mut backend = bridge::Live::forwarding(client, config);
+            mcp::serve(stdin().lock(), stdout().lock(), &mut backend).map_err(|e| e.to_string())?;
+            std::process::exit(0);
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    if no_mcp {
+        loop {
+            std::thread::park();
+        }
+    }
+    let mut backend = bridge::Live::new(target);
+    mcp::serve(stdin().lock(), stdout().lock(), &mut backend).map_err(|e| e.to_string())?;
+    std::process::exit(0);
 }
 
 fn main() -> ExitCode {

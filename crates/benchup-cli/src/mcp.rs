@@ -16,8 +16,15 @@ pub trait Backend {
     fn batch(&mut self, calls: Vec<(String, Value)>, dry_run: bool) -> (Value, bool);
     /// Undo or redo the last change to the file (`undo`).
     fn history(&mut self, redo: bool) -> (Value, bool);
-    /// A PNG of the model from a view, and what it shows (`render_view`).
-    fn render(&mut self, view: &str, width: u32, height: u32) -> Result<(Vec<u8>, Value), String>;
+    /// A PNG of the model from a view, as base64, and what it shows
+    /// (`render_view`).
+    fn render(&mut self, view: &str, width: u32, height: u32) -> Result<(String, Value), String>;
+    /// What the agent is told about this server in `initialize`.
+    fn instructions(&self) -> &'static str {
+        INSTRUCTIONS
+    }
+    /// The MCP client introduced itself (`clientInfo.name`).
+    fn set_client(&mut self, _client: &str) {}
 }
 
 /// `render_view` is served here rather than by the shared tools: its result
@@ -77,7 +84,7 @@ fn render_view(backend: &mut dyn Backend, arguments: &Value) -> Value {
     match backend.render(view, size("width", 1000), size("height", 750)) {
         Ok((png, info)) => json!({
             "content": [
-                {"type": "image", "data": benchup_tools::render::base64(&png), "mimeType": "image/png"},
+                {"type": "image", "data": png, "mimeType": "image/png"},
                 {"type": "text", "text": info.to_string()},
             ],
             "isError": false,
@@ -112,12 +119,13 @@ fn handle(message: &Value, backend: &mut dyn Backend, client: &mut String) -> Op
             let version = SUPPORTED.iter().find(|v| **v == requested).unwrap_or(&SUPPORTED[0]);
             if let Some(name) = params.pointer("/clientInfo/name").and_then(Value::as_str) {
                 *client = name.to_owned();
+                backend.set_client(name);
             }
             ok(json!({
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "benchup", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": INSTRUCTIONS,
+                "instructions": backend.instructions(),
             }))
         }
         "ping" => ok(json!({})),

@@ -2,7 +2,7 @@
 
 [Documentation](README.md) · [Command line](cli.md)
 
-This guide is written for AI agents that edit BenchUp projects through the [`benchup` command line](cli.md) or its MCP server (see [Over MCP](#over-mcp) for the differences). Agents read it with `benchup guide` (over MCP, the `get_guide` tool), and it always matches the installed version.
+This guide is written for AI agents that edit BenchUp projects through the [`benchup` command line](cli.md) or its MCP server (see [Over MCP](#over-mcp) for the differences), either in a `.bup` file or in the project open in BenchUp (see [In the open app](#in-the-open-app)). Agents read it with `benchup guide` (over MCP, the `get_guide` tool), and it always matches the installed version.
 
 ## Conventions
 
@@ -21,7 +21,7 @@ This guide is written for AI agents that edit BenchUp projects through the [`ben
    - `get_object` on a joint shows its settings and status.
    - `get_cut_list` lists the boards to cut; `get_estimate` gives the time to build them.
    - `benchup render file.bup --view front` (over MCP, `render_view`) draws the model as a PNG, joints and profiles cut, with dimensions and text notes (in capitals, without accents). Its output lists dimensions whose labels overlap and the notes with their position. It shows the whole model; details of a few millimetres need `--size 2400x1800`.
-5. With the CLI, `benchup open file.bup` shows the result in the desktop app. The CLI edits the file, not the open window, but BenchUp versions after 0.7.1 reload the file by themselves about a second after each change (with older versions, run `open` again). If the project has unsaved changes in the app, BenchUp asks the user first: tell them to choose "Reload from disk" to see your edit, because keeping their changes and saving overwrites it.
+5. In the open app (`--live` or `benchup bridge`), the designer sees each change as you make it. With a file, `benchup open file.bup` shows the result in the desktop app. The CLI edits the file, not the open window, but BenchUp versions after 0.7.1 reload the file by themselves about a second after each change (with older versions, run `open` again). If the project has unsaved changes in the app, BenchUp asks the user first: tell them to choose "Reload from disk" to see your edit, because keeping their changes and saving overwrites it.
 
 ### Batches, results and dry runs
 
@@ -39,6 +39,18 @@ The tools are the same. What the CLI does with flags, MCP does with three extra 
 - `render_view` returns the image of a view.
 
 Each other call is saved on its own, so prefer `run_batch` for any change of more than one call. The schemas are in the server's tool list; there is no `--brief`.
+
+### In the open app
+
+`benchup bridge` (MCP) and the CLI's `--live` commands (`benchup call --live …`, `benchup scene --live`) work on the project open in BenchUp, while the designer watches. The tools and batches are the same, with these differences:
+
+- Each changing call, and each batch, is one undo step labelled `Agent: …` in BenchUp's history. Prefer one batch per change, so the designer can undo it in one step.
+- Every call starts in the scope the designer is in. Put `enter_object` and the calls that need it in one batch, ending with `exit_to_root`.
+- `get_selection` is what the designer has selected: when they say "this" or "these", read it first. What you create or change is selected afterwards.
+- If the designer is in the middle of an operation or has taken control, BenchUp asks them to grant access and your call waits. An error saying they **denied access** or **took control** means: stop, tell them what you want to change, and wait for their go-ahead before retrying. Reading calls still work.
+- Every result has `document.name`, the open project. If it changes, or a call says the open project changed, read the scene again before going on.
+- Shared projects keep their rules: in a view-only project, or for objects someone else is editing, changing calls fail with the reason. After `select`, an edit waits until the server confirms the selection.
+- An answer too large for the bridge comes back as an error. If it says `applied: true`, the change was made: do not repeat it; ask for less (filter `get_scene`, render a smaller view).
 
 ## Groups, components and scope
 

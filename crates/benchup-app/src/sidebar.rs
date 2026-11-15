@@ -1631,6 +1631,30 @@ mod preference_tests {
     }
 
     #[test]
+    fn agent_connection_survives_reload_without_a_model_edit() {
+        let ctx = egui::Context::default();
+        let mut storage = SavedPreferences::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        app.general_settings.section = settings::Section::AgentConnection;
+        app.general_settings.agent.enabled = true;
+        app.general_settings.agent.port = 5000;
+        storage.flushed = false;
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert!(restored.general_settings.agent.enabled);
+        assert_eq!(restored.general_settings.agent.port, 5000);
+        assert_eq!(restored.general_settings.section, settings::Section::AgentConnection);
+        // Older preferences leave the connection off.
+        let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert!(!old.general.agent.enabled);
+    }
+
+    #[test]
     fn exchange_choices_survive_reload_without_a_model_edit() {
         let ctx = egui::Context::default();
         let mut storage = SavedPreferences::default();

@@ -99,6 +99,10 @@ pub(crate) mod viewport_benchmark;
 #[path = "web_viewport_benchmark.rs"]
 mod web_viewport_benchmark;
 
+#[path = "agent_link.rs"]
+mod agent_link;
+#[path = "credentials.rs"]
+mod credentials;
 #[path = "fasteners.rs"]
 mod fasteners;
 #[path = "sharing.rs"]
@@ -362,9 +366,14 @@ pub struct BenchUpApp {
     fasteners: fasteners::Preferences,
     fastener_dialog: fasteners::Dialog,
     sharing: sharing::Sharing,
+    agent_link: agent_link::AgentLink,
     #[cfg(not(target_arch = "wasm32"))]
     updates: crate::updates::Updater,
     doc: Document,
+    /// Bumped whenever another project is opened (new, open, recovery, a
+    /// different shared project), so waiting agent calls can tell. A
+    /// collaborator's revision of the open project does not bump it.
+    doc_epoch: u64,
     project: projects::Project,
     screenshot: screenshot_dialog::ScreenshotDialog,
     screenshot_gpu: Option<(eframe::wgpu::Device, eframe::wgpu::Queue)>,
@@ -558,6 +567,8 @@ impl BenchUpApp {
             fasteners: Default::default(),
             fastener_dialog: Default::default(),
             sharing: Default::default(),
+            agent_link: Default::default(),
+            doc_epoch: 0,
             doc,
             project: projects::Project {
                 modified,
@@ -828,23 +839,29 @@ impl BenchUpApp {
         }
     }
     fn finish_edit(&mut self, label: &str, before: Model, ctx: &egui::Context) {
-        let edited = before != self.doc.model;
-        if edited && !self.shared_edit_allowed(ctx) {
+        if before != self.doc.model {
+            self.commit_changed_edit(label, before, ctx);
+        }
+    }
+    /// Records an edit the caller already knows changed the model, without
+    /// comparing the models again. Returns false if it was refused (shared
+    /// project without edit access) and rolled back.
+    fn commit_changed_edit(&mut self, label: &str, before: Model, ctx: &egui::Context) -> bool {
+        if !self.shared_edit_allowed(ctx) {
             self.doc.model = before;
             self.say(ctx, self.shared_edit_block_reason(ctx));
-            return;
+            return false;
         }
-        if edited {
-            let author = self.current_history_author();
-            self.doc.history.record_applied_attributed(
-                label,
-                before,
-                &self.doc.model,
-                Some(author),
-                Some(sharing::now_timestamp()),
-            );
-            self.finish_recorded_edit(ctx, true);
-        }
+        let author = self.current_history_author();
+        self.doc.history.record_applied_attributed(
+            label,
+            before,
+            &self.doc.model,
+            Some(author),
+            Some(sharing::now_timestamp()),
+        );
+        self.finish_recorded_edit(ctx, true);
+        true
     }
     fn finish_recorded_edit(&mut self, ctx: &egui::Context, geometry_changed: bool) {
         self.solid_first = None;
@@ -3441,6 +3458,7 @@ impl BenchUpApp {
                             .color(colors.muted),
                         );
                     });
+                    self.agent_status_chip(ui);
                     ui.allocate_ui_with_layout(
                         ui.available_size(),
                         egui::Layout::left_to_right(egui::Align::Center),
@@ -7142,6 +7160,14 @@ impl eframe::App for BenchUpApp {
         self.space_mouse.filter_input(raw_input);
     }
 
+    /// Runs before `ui` every frame, and also while the window is minimized
+    /// or the browser tab hidden, when `ui` does not run.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        benchup_core::i18n::set_language(&self.general_settings.language);
+        // Agent calls must be answered even when BenchUp is not on screen.
+        self.poll_agent_link(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         benchup_core::i18n::set_language(&self.general_settings.language);
@@ -7216,6 +7242,7 @@ impl eframe::App for BenchUpApp {
         }
         self.account.show(&ctx);
         self.share_dialog(&ctx);
+        self.agent_access_window(&ctx);
         self.material_removal_window(&ctx);
         if self.about {
             self.about_window(&ctx);

@@ -20,6 +20,7 @@ pub(super) enum Section {
     Rendering,
     Tools,
     ExportScales,
+    AgentConnection,
 }
 
 impl Section {
@@ -39,12 +40,12 @@ impl Section {
             ),
             (
                 tr!("settings.system"),
-                &[Self::Diagnostics, Self::Rendering, Self::ExportScales],
+                &[Self::Diagnostics, Self::Rendering, Self::ExportScales, Self::AgentConnection],
             ),
         ]
     }
     #[cfg(test)]
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 12] = [
         Self::Units,
         Self::Navigation,
         Self::Shortcuts,
@@ -56,6 +57,7 @@ impl Section {
         Self::Rendering,
         Self::Tools,
         Self::ExportScales,
+        Self::AgentConnection,
     ];
     fn label(self) -> &'static str {
         match self {
@@ -70,6 +72,7 @@ impl Section {
             Self::Rendering => tr!("settings.rendering"),
             Self::Tools => tr!("settings.tools"),
             Self::ExportScales => tr!("settings.export_scales"),
+            Self::AgentConnection => tr!("agent_link.title"),
         }
     }
 
@@ -86,6 +89,7 @@ impl Section {
             Self::Rendering => "settings_colors",
             Self::Tools => "settings_shortcuts",
             Self::ExportScales => "units",
+            Self::AgentConnection => "share",
         }
     }
 
@@ -208,6 +212,7 @@ pub(super) struct GeneralSettings {
     pub tool_keys: Vec<String>,
     pub stock: stock_settings::Settings,
     pub export_scale: export_scale::Preferences,
+    pub agent: agent_link::Preferences,
 }
 
 impl Default for GeneralSettings {
@@ -231,6 +236,7 @@ impl Default for GeneralSettings {
             default_units: Default::default(),
             stock: Default::default(),
             export_scale: Default::default(),
+            agent: Default::default(),
             tool_keys: TOOLS.iter().map(|(_, key)| key.to_string()).collect(),
         }
     }
@@ -293,6 +299,7 @@ impl GeneralSettings {
         self.space_mouse.normalize();
         self.stock.normalize();
         self.export_scale.normalize();
+        self.agent.normalize();
         // Earlier builds saved bare codes; every catalog now uses language_REGION.
         match self.language.as_str() {
             "en" => self.language = "en_US".into(),
@@ -580,6 +587,7 @@ impl BenchUpApp {
                                     Section::Rendering => "settings/rendering",
                                     Section::Tools => "settings/tools",
                                     Section::ExportScales => "settings/export_scales",
+                                    Section::AgentConnection => "settings/agent_connection",
                                 };
                                 let scroll = sidebar::restored_scroll_area(
                                     ui,
@@ -634,6 +642,7 @@ impl BenchUpApp {
     fn settings_contents(&mut self, ui: &mut egui::Ui) {
         match self.general_settings.section {
             Section::ExportScales => self.general_settings.export_scale.settings_ui(ui),
+            Section::AgentConnection => self.agent_link_settings(ui),
             Section::Tools => {
                 ui.checkbox(
                     &mut self.general_settings.reset_axis_locks_on_action,
