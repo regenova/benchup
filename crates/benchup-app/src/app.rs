@@ -3904,7 +3904,7 @@ impl BenchUpApp {
         );
         let resize = ui.interact(
             handle,
-            ui.id().with("tool_rail_resize"),
+            ui.scope_id().with("tool_rail_resize"),
             Sense::click_and_drag(),
         );
         if resize.hovered() || resize.dragged() {
@@ -4382,7 +4382,7 @@ impl BenchUpApp {
             );
             let resize = ui.interact(
                 handle,
-                ui.id().with("inspector_resize"),
+                ui.scope_id().with("inspector_resize"),
                 Sense::click_and_drag(),
             );
             if resize.hovered() || resize.dragged() {
