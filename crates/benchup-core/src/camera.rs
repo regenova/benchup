@@ -295,6 +295,7 @@ impl Camera {
 
 /// Viewport-dependent math shared by all geometry in one pass. This is separate
 /// from Camera so direct camera edits can never leave a stale cached matrix.
+#[derive(Clone)]
 pub struct CameraView {
     matrix: DMat4,
     inverse: std::cell::OnceCell<DMat4>,
