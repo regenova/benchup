@@ -4,7 +4,7 @@ USER REQUEST:
 "{request}"
 
 SETUP AND RULES
-- Your working folder is {dir} . Work only there. Start EVERY shell command with: export PATH={bin}:$PATH && cd {dir} &&
+- Your working folder is {dir} . Work only there. Start EVERY shell command with: export {exports} && cd {dir} &&
 {access}
 - Do NOT read any source code, README, docs or file of the BenchUp repository, ~/.cargo, or other evaluation folders ({root}), or anywhere else about benchup. No web searches. A real user would not have them.
 - Do NOT run `benchup open` (several evaluations run at once and would fight over the desktop app). Everything else is allowed.
