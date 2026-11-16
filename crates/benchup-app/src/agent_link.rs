@@ -25,7 +25,7 @@
 //! denying refuses the waiting calls. While the agent is editing, the status
 //! bar offers "Take control", after which its changes wait for a grant again.
 use super::*;
-use benchup_tools::{Call, ToolEnv, batch, pairing};
+use benchup_tools::{Call, ToolEnv, ToolOutcome, batch, pairing};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 
@@ -1312,6 +1312,19 @@ impl BenchUpApp {
             let outcome = match arguments {
                 Err(error) => Err(json!({"ok": false, "error": error,
                     "hint": "Refer to an earlier call as \"$N.field\" (N counts calls from 1), e.g. \"$1.created[0]\"."})),
+                // Activity reports are calls of their own. Agents following
+                // the guide sometimes put one in a batch; skipping it keeps
+                // the batch, and the $N numbering of the calls after it.
+                Ok(_) if name == "agent_activity" => Ok(ToolOutcome {
+                    result: json!({"ok": true, "ignored": true,
+                        "note": "agent_activity is reported as a call of its own; inside a batch it is ignored."}),
+                    ok: true,
+                    mutated: false,
+                    created: Vec::new(),
+                    modified: Vec::new(),
+                    erased: Vec::new(),
+                    joints: Vec::new(),
+                }),
                 Ok(_) if matches!(name.as_str(), "run_batch" | "undo" | "render_view") => {
                     Err(json!({"ok": false, "error": tr!("agent_link.error.nested_session", tool = name)}))
                 }
