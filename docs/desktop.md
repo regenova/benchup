@@ -4,7 +4,7 @@
 
 ## Install a packaged release
 
-Download the installer or AppImage from [Releases](https://github.com/BenchUp3D/editor/releases).
+Download the installer or AppImage from [Releases](https://github.com/BenchUp3D/benchup/releases).
 Workflow artifacts are also available on the run's summary page for 14 days.
 On Linux, keep the AppImage in a user-writable location, run `chmod +x` on it,
 and launch it. AppImage mounting may require your distro's FUSE 2 compatibility
@@ -59,9 +59,14 @@ extension. macOS registers the document type from the installed application
 bundle. Opening a project uses the existing save/discard/cancel prompt when
 local recovery contains unsaved work.
 
-Desktop saves embed a viewport preview in the project file. Save older projects
-once to add it. Explorer uses the system image thumbnail provider; Finder uses
-PNG type conformance; Linux desktops use the installed freedesktop thumbnailer.
+Desktop and browser saves embed a viewport preview when GPU capture is available.
+Save older projects once to add it. The browser cannot install desktop file
+associations or thumbnail handlers; launch the installed desktop app once to
+register them, even if you normally edit in the browser. Explorer uses the system
+image thumbnail provider; Finder uses PNG type conformance; Linux desktops use
+the installed freedesktop thumbnailer. Linux registration prefers the system
+Glycin or GdkPixbuf image thumbnailer so GNOME's sandbox can access it even when
+BenchUp runs from your home directory or an AppImage.
 Thumbnail display must be enabled in the file manager. Linux desktops without
 freedesktop thumbnailer support may need their own thumbnail plugin.
 

@@ -43,6 +43,9 @@ jobs:
       - name: Test browser 3D Mouse connection
         run: node --test scripts/test_space_mouse_web.mjs
 
+      - name: Test browser loading progress and translations
+        run: node --test scripts/test_web_loading.mjs scripts/test_web_i18n.cjs
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 

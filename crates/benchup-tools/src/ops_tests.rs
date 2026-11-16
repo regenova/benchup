@@ -605,6 +605,24 @@ fn erasing_a_board_removes_its_joints() {
 }
 
 #[test]
+fn erasing_a_component_board_reports_removed_peer_joints() {
+    let (mut model, mut env) = (Model::default(), ToolEnv::default());
+    let (side, shelf, _) = joined_pair(&mut model, &mut env);
+    let first = model.make_object(&BTreeSet::from([side, shelf]), true, "Assembly").unwrap();
+    let copy = model.copy_entities(&BTreeSet::from([first]));
+    model.paste_entities(&copy, DVec3::Z * 2.);
+    assert!(model.enter_object(first));
+    let shelf = model.objects[&first].entities.iter().copied()
+        .find(|id| model.objects.get(id).is_some_and(|object| object.name == "Shelf"))
+        .unwrap();
+    let expected: Vec<_> = model.connections.keys().copied().collect();
+    assert_eq!(expected.len(), 2);
+    let outcome = ok(&mut model, &mut env, "erase", json!({"ids": [shelf]}));
+    assert_eq!(outcome.result["removed_joints"], json!(expected));
+    assert!(model.connections.is_empty());
+}
+
+#[test]
 fn joints_are_removed_with_remove_joint_not_erase() {
     let (mut model, mut env) = (Model::default(), ToolEnv::default());
     let (side, shelf, joint) = joined_pair(&mut model, &mut env);
@@ -624,8 +642,12 @@ fn joints_are_removed_with_remove_joint_not_erase() {
 fn the_scene_flags_joints_whose_board_is_gone() {
     let (mut model, mut env) = (Model::default(), ToolEnv::default());
     let (_, shelf, joint) = joined_pair(&mut model, &mut env);
-    // What the app leaves behind today (BenchUp3D/editor#36).
-    model.erase(&BTreeSet::from([shelf]));
+    // Projects saved before the core removed joints with their boards
+    // (BenchUp3D/benchup#36) can still contain such a joint.
+    let saved = model.connections[&joint].clone();
+    assert_eq!(model.erase(&BTreeSet::from([shelf])), vec![joint], "the core removes the joint with its board");
+    assert!(model.connections.is_empty());
+    model.connections.insert(joint, saved);
     let scene = ok(&mut model, &mut env, "get_scene", json!({})).result;
     assert_eq!(scene["joints"][0]["missing_boards"], json!([shelf]));
     // Such a joint can still be removed.
@@ -872,6 +894,61 @@ fn same_named_materials_are_told_apart_by_assignment() {
     let mut stock: Vec<_> = materials.iter().map(|m| (m["material"].clone(), m["stock_mm"]["thickness"].clone(), m["stock_mm"]["width"].clone())).collect();
     stock.sort_by_key(|(_, t, _)| t.as_f64().unwrap() as i64);
     assert_eq!(stock, [(json!("Plywood"), json!(12.0), json!(610.0)), (json!("Plywood"), json!(18.0), json!(1220.0))]);
+}
+
+#[test]
+fn existing_pocket_joints_can_be_inspected_estimated_and_flipped() {
+    for (kind, name, discrete, minutes) in [
+        (JointKind::Biscuit, "biscuit", true, 5.),
+        (JointKind::Domino, "domino", true, 5.),
+        (JointKind::Groove, "groove", false, 5.),
+        (JointKind::LooseTongue, "loose_tongue", false, 8.),
+    ] {
+        let (mut model, mut env) = (Model::default(), ToolEnv::default());
+        let a = board(&mut model, &mut env, "A", [0., 0., 0.], [300., 100., 40.]);
+        let b = board(&mut model, &mut env, "B", [250., 0., 0.], [300., 100., 40.]);
+        let settings = JointSettings {
+            kind, pocket_width: 0.035, pocket_thickness: 0.006,
+            pocket_depth: 0.012, pocket_count: 2, ..Default::default()
+        };
+        let joint = model.add_connection(Connection {
+            members: [a, b], entry_face: None,
+            operation: ConnectionOperation::Joinery(settings.clone()),
+        }).unwrap();
+        let scene = ok(&mut model, &mut env, "get_scene", json!({})).result;
+        assert_eq!(scene["joints"][0]["kind"], name);
+        for flipped in [false, true] {
+            if flipped {
+                ok(&mut model, &mut env, "flip_joint", json!({"ids": [joint]}));
+                assert_eq!(model.connections[&joint].members, [b, a]);
+                assert_eq!(model.connections[&joint].operation, ConnectionOperation::Joinery(settings.clone()));
+            }
+            let detail = ok(&mut model, &mut env, "get_object", json!({"id": joint})).result;
+            assert_eq!(detail["kind"], name);
+            assert_eq!(detail["status"], "ok", "{detail}");
+            assert!(detail.get("geometry").is_none(), "pocket cuts must not report traditional profile bounds: {detail}");
+            assert_eq!(detail["params"]["width_axis_name"], "y");
+            assert_eq!(detail["params"]["pocket_thickness_mm"], 6.0);
+            assert_eq!(detail["params"]["pocket_depth_mm"], 12.0);
+            if discrete {
+                assert_eq!(detail["params"]["pocket_width_mm"], 35.0);
+                assert_eq!(detail["params"]["pocket_count"], 2);
+            } else {
+                assert!(detail["params"].get("pocket_width_mm").is_none());
+                assert!(detail["params"].get("pocket_count").is_none());
+            }
+            assert!(detail["params"].get("width_ratio").is_none());
+            let estimate = ok(&mut model, &mut env, "get_estimate", json!({})).result;
+            assert_eq!(estimate["joinery"], json!([{"kind": name, "count": 1, "work_minutes": minutes}]));
+            assert_eq!(estimate["total"]["by_category"]["joinery_work_minutes"], minutes);
+            assert_eq!(estimate["total"]["work_minutes"], minutes);
+            let scoped = ok(&mut model, &mut env, "get_estimate", json!({"ids": [a, b]})).result;
+            assert_eq!(scoped["joinery"], estimate["joinery"]);
+            let one = ok(&mut model, &mut env, "get_estimate", json!({"ids": [a]})).result;
+            assert_eq!(one["joinery"], json!([]));
+            assert_eq!(one["total"]["by_category"]["joinery_work_minutes"], 0.);
+        }
+    }
 }
 
 #[test]

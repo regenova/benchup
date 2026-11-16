@@ -8,6 +8,7 @@ pub enum Language {
     BrazilianPortuguese,
     Vietnamese,
     Spanish,
+    Italian,
 }
 
 thread_local! {
@@ -21,6 +22,7 @@ pub fn set_language(language: &str) {
         "pt_BR" | "pt-BR" => Language::BrazilianPortuguese,
         "vi_VN" | "vi-VN" => Language::Vietnamese,
         "es_419" | "es-419" => Language::Spanish,
+        "it_IT" | "it-IT" => Language::Italian,
         _ => Language::English,
     });
 }
@@ -56,6 +58,7 @@ pub(crate) fn catalog_message(language: &str, key: &str) -> String {
         "pt_BR" => include_str!("../../../assets/i18n/pt_BR.json"),
         "vi_VN" => include_str!("../../../assets/i18n/vi_VN.json"),
         "es_419" => include_str!("../../../assets/i18n/es_419.json"),
+        "it_IT" => include_str!("../../../assets/i18n/it_IT.json"),
         "en_US" => include_str!("../../../assets/i18n/en_US.json"),
         _ => panic!("unsupported test language: {language}"),
     };
@@ -65,6 +68,22 @@ pub(crate) fn catalog_message(language: &str, key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn image_tool_name_and_instructions_follow_the_selected_language() {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                super::set_language("en_US");
+            }
+        }
+        let _reset = Reset;
+        for language in ["en_US", "zh_CN", "pt_BR", "vi_VN", "es_419", "it_IT"] {
+            super::set_language(language);
+            assert_eq!(crate::Tool::Image.label(), super::catalog_message(language, "image_tools.image"));
+            assert_eq!(crate::Tool::Image.instructions(), super::catalog_message(language, "tools.image_instructions"));
+        }
+    }
+
     #[test]
     fn language_switches_labels_formats_and_plurals_without_restart() {
         struct Reset;

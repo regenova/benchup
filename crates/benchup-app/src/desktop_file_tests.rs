@@ -1,6 +1,30 @@
 use super::*;
 use benchup_core::tr;
 
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_thumbnails_prefer_sandbox_visible_image_decoders() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let quoted = "\"/home/user/BenchUp AppImage\"";
+    let gdk = directory.path().join("gdk-pixbuf-thumbnailer");
+    let glycin = directory.path().join("glycin-thumbnailer");
+    let fallback = format!("[Thumbnailer Entry]\nExec={quoted} --thumbnail %i %o\nMimeType=application/x-benchup;\n");
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), fallback);
+    std::fs::write(&gdk, b"").unwrap();
+    std::fs::set_permissions(&gdk, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), fallback, "ignore non-executables");
+    std::fs::set_permissions(&gdk, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), format!(
+        "[Thumbnailer Entry]\nTryExec={}\nExec={} -s %s %u %o\nMimeType=application/x-benchup;\n", gdk.display(), gdk.display(),
+    ));
+    std::fs::write(&glycin, b"").unwrap();
+    std::fs::set_permissions(&glycin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(linux_thumbnailer(quoted, directory.path()), format!(
+        "[Thumbnailer Entry]\nTryExec={}\nExec={} --input %u --output %o --size %s\nMimeType=application/x-benchup;\n", glycin.display(), glycin.display(),
+    ));
+}
+
 #[test]
 fn skp_conversion_writes_the_same_document_as_import_then_save() {
     let directory = tempfile::tempdir().unwrap();
@@ -37,4 +61,27 @@ fn skp_conversion_rejects_bad_or_missing_input_without_writing_output() {
     assert!(convert_skp(&input, &output).is_err());
     assert!(convert_skp(&directory.path().join("missing.skp"), &output).is_err());
     assert!(!output.exists());
+}
+
+#[test]
+fn repeated_document_requests_open_once_with_the_latest_last() {
+    // Uses a local queue: app tests drain the shared queue on every frame.
+    let mut queue = VecDeque::new();
+    let first = PathBuf::from("/tmp/launch-first.bup");
+    let second = PathBuf::from("/tmp/launch-second.bup");
+    push_latest(&mut queue, first.clone());
+    push_latest(&mut queue, second.clone());
+    push_latest(&mut queue, first.clone());
+    assert_eq!(queue, [second, first]);
+}
+
+#[test]
+fn only_project_paths_are_queued_and_made_absolute() {
+    assert_eq!(project_path("https://example.com/share/abc".into()), None);
+    assert_eq!(project_path("/tmp/notes.txt".into()), None);
+    let absolute = std::env::temp_dir().join("Chair.BUP");
+    assert_eq!(project_path(absolute.clone()), Some(absolute));
+    let relative = project_path("chair.bup".into()).unwrap();
+    assert!(relative.is_absolute());
+    assert_eq!(relative, std::env::current_dir().unwrap().join("chair.bup"));
 }

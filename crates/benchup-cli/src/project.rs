@@ -1,6 +1,7 @@
 //! A `.bup` file opened for tool calls. Every change is recorded in the
 //! document history (so BenchUp can undo it) and saved atomically.
 use benchup_core::{Document, Model};
+use benchup_tools::batch::{Applied, report, resolve};
 use benchup_tools::{Call, ToolEnv, execute, files, is_mutating};
 use serde_json::{Value, json};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -29,14 +30,6 @@ pub struct Project {
     counter: u64,
     /// The file as last read or written; a PNG preview is kept when saving.
     saved: Vec<u8>,
-}
-
-/// Result of applying one or more calls.
-pub enum Applied {
-    /// Every call succeeded; one result per call.
-    Ok(Vec<Value>),
-    /// Call `index` failed; nothing was changed or saved; `earlier` holds the results of the calls before it.
-    Failed { index: usize, result: Value, earlier: Vec<Value> },
 }
 
 impl Project {
@@ -189,92 +182,6 @@ fn load(path: &Path, bytes: &[u8], allow_shared: bool) -> Result<Document, Strin
     Ok(doc)
 }
 
-/// One step of a reference after `$N`.
-enum Step<'a> {
-    Field(&'a str),
-    Index(i64),
-}
-
-/// `$N` followed by `.field` and `[index]` steps (N counts calls from 1,
-/// negative indexes count from the end), or `None` when `text` is ordinary
-/// text such as "$12.50 hardware" or "$5 shelf".
-fn parse_reference(text: &str) -> Option<(usize, Vec<Step<'_>>)> {
-    let body = text.strip_prefix('$')?;
-    let digits = body.find(|c: char| !c.is_ascii_digit()).unwrap_or(body.len());
-    let call = body[..digits].parse().ok()?;
-    let mut rest = &body[digits..];
-    let mut steps = Vec::new();
-    while !rest.is_empty() {
-        if let Some(tail) = rest.strip_prefix('.') {
-            let end = tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len());
-            let field = &tail[..end];
-            if !field.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                return None;
-            }
-            steps.push(Step::Field(field));
-            rest = &tail[end..];
-        } else if let Some(tail) = rest.strip_prefix('[') {
-            let end = tail.find(']')?;
-            steps.push(Step::Index(tail[..end].parse().ok()?));
-            rest = &tail[end + 1..];
-        } else {
-            return None;
-        }
-    }
-    Some((call, steps))
-}
-
-/// Replaces every `$N.path` reference with that value from an earlier result.
-fn resolve(value: &Value, results: &[Value]) -> Result<Value, String> {
-    match value {
-        Value::String(text) => match parse_reference(text) {
-            Some((call, steps)) => reference(text, call, &steps, results),
-            None => Ok(value.clone()),
-        },
-        // A reference to a list of ids inside a list is spliced in, so
-        // "ids": ["$1.created", "$2.created"] joins both lists. Other lists,
-        // such as a point, stay one item.
-        Value::Array(items) => {
-            let mut out = Vec::with_capacity(items.len());
-            for item in items {
-                let is_reference = matches!(item, Value::String(t) if parse_reference(t).is_some());
-                match resolve(item, results)? {
-                    Value::Array(inner) if is_reference && inner.iter().all(|v| v.is_u64() || v.is_i64()) => {
-                        out.extend(inner)
-                    }
-                    other => out.push(other),
-                }
-            }
-            Ok(Value::Array(out))
-        }
-        Value::Object(map) => map
-            .iter()
-            .map(|(k, v)| resolve(v, results).map(|v| (k.clone(), v)))
-            .collect::<Result<_, _>>()
-            .map(Value::Object),
-        other => Ok(other.clone()),
-    }
-}
-
-fn reference(text: &str, call: usize, steps: &[Step], results: &[Value]) -> Result<Value, String> {
-    let mut current = call
-        .checked_sub(1)
-        .and_then(|i| results.get(i))
-        .ok_or(format!("{text} refers to call {call}, but only {} earlier calls ran", results.len()))?;
-    for step in steps {
-        let next = match step {
-            Step::Field(field) => current.get(field),
-            Step::Index(index) => {
-                let items = current.as_array().ok_or(format!("{text}: not a list"))?;
-                let index = if *index < 0 { items.len() as i64 + index } else { *index };
-                usize::try_from(index).ok().and_then(|i| items.get(i))
-            }
-        };
-        current = next.ok_or(format!("{text} does not exist in the result of call {call}"))?;
-    }
-    Ok(current.clone())
-}
-
 impl Project {
     /// Undo (`redo == false`) or redo the last history entry and save.
     pub fn step_history(&mut self, redo: bool) -> Result<Value, String> {
@@ -309,6 +216,41 @@ impl crate::mcp::Backend for Project {
             Ok(Applied::Failed { result, .. }) => (result, false),
             Err(error) => (json!({"ok": false, "error": error}), false),
         }
+    }
+
+    fn batch(&mut self, calls: Vec<(String, Value)>, dry_run: bool) -> (Value, bool) {
+        if let Err(error) = self.refresh() {
+            return (json!({"ok": false, "error": error}), false);
+        }
+        match self.run(&calls, !dry_run) {
+            Ok(applied) => {
+                let (mut value, ok) = report(&calls, applied, true);
+                if dry_run {
+                    value["dry_run"] = json!(true);
+                }
+                (value, ok)
+            }
+            Err(error) => (json!({"ok": false, "error": error}), false),
+        }
+    }
+
+    fn history(&mut self, redo: bool) -> (Value, bool) {
+        if let Err(error) = self.refresh() {
+            return (json!({"ok": false, "error": error}), false);
+        }
+        match self.step_history(redo) {
+            Ok(value) => {
+                let ok = value["ok"] == true;
+                (value, ok)
+            }
+            Err(error) => (json!({"ok": false, "error": error}), false),
+        }
+    }
+
+    fn render(&mut self, view: &str, width: u32, height: u32) -> Result<(String, Value), String> {
+        self.refresh()?;
+        let rendered = benchup_tools::render::render(&self.doc.model, view, width, height)?;
+        Ok((benchup_tools::render::base64(&rendered.png), rendered.info))
     }
 }
 
@@ -351,20 +293,6 @@ mod tests {
         assert_eq!(saved.model.root_entities().len(), 1);
         let (scene, _) = project.call("agent", "get_scene", json!({}));
         assert_eq!(scene["project"]["name"], "Saved elsewhere");
-    }
-
-    #[test]
-    fn references_are_strict_and_only_lists_of_ids_are_spliced() {
-        let results = [json!({"created": [7, 8], "center_mm": [1.5, 2.0, 3.0]})];
-        let text = json!({"text": "$12.50 hardware", "name": "$5 shelf", "note": "$1.", "cost": "$3.99"});
-        assert_eq!(resolve(&text, &results).unwrap(), text);
-        let points = json!({"points_mm": ["$1.center_mm", [0, 0, 0]], "ids": ["$1.created", 9]});
-        assert_eq!(
-            resolve(&points, &results).unwrap(),
-            json!({"points_mm": [[1.5, 2.0, 3.0], [0, 0, 0]], "ids": [7, 8, 9]})
-        );
-        assert_eq!(resolve(&json!("$1.created[-1]"), &results).unwrap(), json!(8));
-        assert!(resolve(&json!("$2.created"), &results).is_err(), "a reference to a missing call is an error");
     }
 
     #[test]

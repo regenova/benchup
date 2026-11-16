@@ -20,13 +20,14 @@
 | Paste in place | Ctrl/Command Shift V; retains the copied coordinates |
 | Automatic geometry snapping | Snap menu → Snap to edge, Snap to face, and Snap to face center; independent, enabled by default, and remembered across restarts |
 | Automatic axis snapping | Snap menu → Snap to axes; enabled by default and remembered across restarts |
-| Drawing tools | Click the Line item in the left toolbar to choose Line, Rectangle, Circle, Polygon, or Freehand; the item remembers your choice |
+| Drawing tools | Click the drawing item in the left toolbar to activate its last-used tool; hover to choose Line, Rectangle, Circle, Polygon, Arc, or Freehand |
 | Line | L; click start and end, then continue drawing |
 | Rectangle | R; click the first corner, then click the opposite corner or type width,height + Enter (for example, `5m,50mm`) |
 | Circle | C; click the center, then set the radius by pointer or type a length + Enter (48 segments) |
-| Polygon | G; click the center, then a vertex or type a radius + Enter; choose 3–64 sides in the drawing menu |
+| Polygon | G; click the center, then a vertex or type a radius + Enter; choose 3–64 sides in the top-right viewport controls |
 | Freehand | D; drag to draw connected edges; release to finish, or type a total stroke length + Enter |
 | Push/Pull | P; click a face, move along its normal, click to confirm or type a length + Enter |
+| Follow Me | Advanced → Follow Me; preselect a connected path and click the profile face, or click the profile and trace connected edges |
 | Union flyout | Union button in the left toolbar: Flip, Combine, Union, Intersect, Trim, Split |
 | Flip | Choose Flip, then click a colored mirror plane or use Right / Left / Up for X / Y / Z |
 | Scale | S; select geometry, click a reference point, move or type a scale factor + Enter; axis locks constrain scaling |
@@ -50,6 +51,8 @@
 | Pan | **Hold Shift while orbiting**, including middle-drag |
 | Zoom | Mouse wheel; anchors at the pointer on the camera target plane |
 | Fit all geometry | Fit view button |
+| Standard view | Click an axis on the compass: Top, Bottom, Front, Back, Left, or Right |
+| New view | **+** after the view tabs above the viewport |
 | Focus on Edited Group | Enabled by default. View → Focus on Edited Group toggles the group/component currently being edited solid and everything else in muted wireframe, regardless of selection. Has no visual effect outside a group/component |
 | Toggle right sidebar | Tab, or the model inspector button |
 | Ground, sky, and horizon colors | Model inspector → Display → Environment; color pickers, Sky/Ground toggles, and reset colors |
@@ -58,6 +61,12 @@
 | Shortcuts | F1, or Help → Keyboard shortcuts |
 
 Orbiting always uses the combined bounding-box center of all objects, including hidden objects, or the origin in an empty model. Orbiting preserves the current framing and zoom after panning or zooming; the model center stays at its current viewport position. Shift may be pressed or released during an orbit gesture. Panning changes the camera position and target together without changing camera orientation. Temporary middle-button navigation preserves the active tool and unfinished line. While using Line, Rectangle, Circle, Polygon, or Freehand, holding Ctrl or Command makes cursor movement orbit without holding a mouse button. Releasing the modifier restores drawing without placing a point; unfinished geometry, axis locks, and typed lengths are preserved. Holding Shift also pans during this temporary orbit.
+
+## Views and cameras
+
+Click an axis label on the compass to look along it: −Y is the Front view, +X Right, +Y Back, −X Left, +Z Top, and −Z Bottom. The front of a model faces −Y. The sidebar's **Camera** section chooses Perspective or Parallel (orthographic) projection, sets the field of view in perspective (15–100°), and offers **Fit model**, **Fit selection**, and **Reset camera**.
+
+The tabs above the viewport are views of the same model. Each view keeps its own camera, while the model, selection, and undo history are shared; tools act in the active view. Click **+** to add a view that starts from the current camera. Drag a tab to an edge of a viewport to split the workspace, or to its center to stack it there as a tab. Right-click a tab to rename or close it; the last view cannot be closed. Each view's camera is saved in the project file. The layout, view names, and the active view are application preferences, so they are remembered across restarts but do not travel with the file.
 
 For a 3Dconnexion SpaceMouse, open Settings → Navigation and select **3D Mouse**. Tilt or twist the cap to orbit, slide it to pan, and push or pull it to zoom. The Fit button frames the model. Both navigation types share the Orbit, Pan, and Zoom controls and **Invert tilt and twist**, **Invert pan**, and **Invert zoom** options. Each type keeps its own saved values. For Mouse/Trackpad, inversion applies to orbit drags, panning, and wheel or pinch zoom.
 
@@ -91,7 +100,11 @@ Tape Measure and Protractor start in Create Guides mode. Tap Ctrl or Command to 
 
 Dimensions adds persistent linear annotations with extension lines, endpoint ticks, and a meter label. The third click places the dimension away from the measured geometry. During placement, Right / Left / Up locks the dimension line and its displayed length to X / Y / Z while preserving both picked endpoints; repeat the arrow or press Down to return to the full aligned length. If the locked axis is perpendicular to the measured span (for example, Z for two points on a horizontal face), placement moves the extension lines along that axis and preserves the full measured length instead of collapsing the dimension. The saved dimension keeps this alignment when the source geometry changes. Snapped endpoints attach to vertices, edges, or surfaces and update when that geometry moves or scales; deleting the source geometry keeps the annotation at its last position. Free points remain in world coordinates. Select a dimension by its line or label to delete, move, copy, group, or hide it. Dimensions support undo/redo, local saving, and component editing.
 
-The toolbar is ordered Select, Line, Erase, Orbit, Push/Pull, Scale, Offset, Move, Paint, Dimensions, and Union. Dimensions groups Dimensions, Tape Measure, and Protractor, with Dimensions selected by default. Every flyout entry has an icon, and each group remembers its last chosen tool.
+The toolbar is ordered Select, Line, Erase, Orbit, Push/Pull, Scale, Offset, Move, Rotate, Paint, Dimensions, Union, Router, Wood Glue, and Advanced. Drag slots to change their order. Dimensions groups Dimensions, Tape Measure, Protractor, Text, and Image, with Dimensions selected by default. Router and Wood Glue are independent buttons in the left toolbar. Every flyout entry has an icon, and each group remembers its last chosen tool across reloads and restarts. Click a group to activate its remembered tool, or hover over it to choose another tool from the flyout. For example, after using Circle, switch to Select and click the drawing group to activate Circle again.
+
+**Advanced → Follow Me** sweeps a closed planar profile along edges, polylines, segmented arcs, or closed loops. Keep the profile and path in the same editing context; open a group or component first when needed. Place the profile near one end of the path, approximately perpendicular to its first segment. Its placement determines the offset from the path. Select the path edges (or a single face to use its outside perimeter), activate Follow Me, then click the profile face. The profile becomes the swept surface, with caps on open paths and a joined seam on closed loops. Holes in the profile become inner walls.
+
+For manual tracing, clear the path selection, activate Follow Me, click the profile, then move over connected edges. The viewport previews the sweep; moving backward shortens it, and clicking finishes it. Escape cancels without changing the model. Small intermediate segments are included automatically along unbranched connections. Select **Follow Me** directly in the Advanced flyout. While Follow Me is active, **Profile rotation** in degrees and **Reverse path** appear at the top-right of each viewport, using the same layout as Orbit controls. They remain available during a sweep preview; changing either option updates the preview. These settings and the active tool are saved immediately across restarts; unfinished paths stay local to the operation. Corners are mitered, and profiles follow spatial paths with minimal twist. Tight folds, crossing sweeps, disconnected paths, and branches are rejected without changing the model. An attached profile can extend its existing boundary when the starting shape stays unchanged; isolate it before changing that starting shape or sweeping it around a closed path. Each completed sweep is one undo/redo step.
 
 Hover over a toolbar tool or flyout entry for one second to see its name, keyboard shortcut (when available), and usage instructions.
 

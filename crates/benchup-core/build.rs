@@ -43,6 +43,7 @@ const HISTORY_LABEL_KEYS: &[&str] = &[
     "core.solids.union",
     "fasteners.create_fasteners",
     "fasteners.edit_fasteners",
+    "follow_me.tool",
     "grain_direction.assign",
     "grain_direction.clear_history",
     "image_tools.add_reference_image",
@@ -132,6 +133,11 @@ fn main() {
         Translation {
             variant: "Spanish",
             catalog: read_catalog("../../assets/i18n/es_419.json", "Spanish"),
+            singular: true,
+        },
+        Translation {
+            variant: "Italian",
+            catalog: read_catalog("../../assets/i18n/it_IT.json", "Italian"),
             singular: true,
         },
     ];

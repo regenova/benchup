@@ -7,7 +7,7 @@ fn suggest_feature_opens_new_github_issue_directly() {
     let output = h.click(text_position(&output, "Suggest a feature"));
     assert!(output.platform_output.commands.iter().any(|command| {
         matches!(command, egui::OutputCommand::OpenUrl(url)
-            if url.new_tab && url.url.starts_with("https://github.com/BenchUp3D/editor/issues/new?body=")
+            if url.new_tab && url.url.starts_with("https://github.com/BenchUp3D/benchup/issues/new?body=")
                 && url.url.contains("%0A---%0A")
                 && url.url.contains("System%20Information")
                 && url.url.contains("BenchUp%20"))
@@ -26,7 +26,7 @@ fn report_bug_opens_new_github_issue_with_diagnostics() {
     assert!(output.platform_output.commands.iter().any(|command| {
         matches!(command, egui::OutputCommand::OpenUrl(url)
             if url.new_tab
-                && url.url.starts_with("https://github.com/BenchUp3D/editor/issues/new?body=")
+                && url.url.starts_with("https://github.com/BenchUp3D/benchup/issues/new?body=")
                 && url.url.contains("%0A---%0A")
                 && url.url.contains("System%20Information")
                 && url.url.contains("BenchUp%20"))

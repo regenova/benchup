@@ -3,3 +3,4 @@
 /.local/
 
 /.env
+scripts/__pycache__/*

@@ -21,6 +21,7 @@ pub mod guides;
 pub mod inference;
 pub mod measurements;
 pub mod modeling;
+pub mod follow_me;
 pub mod objects;
 mod reparent;
 pub mod selection;
@@ -103,6 +104,7 @@ pub enum Tool {
     Walk,
     WoodGlue,
     Router,
+    FollowMe,
 }
 
 impl Tool {
@@ -147,7 +149,8 @@ impl Tool {
     pub fn is_drawing(self) -> bool {
         self == Self::Image || Self::DRAWING.contains(&self)
     }
-    pub const ALL: [Self; 30] = [
+    pub const ADVANCED: [Self; 1] = [Self::FollowMe];
+    pub const ALL: [Self; 31] = [
         Self::Select,
         Self::Line,
         Self::Rectangle,
@@ -178,8 +181,9 @@ impl Tool {
         Self::Walk,
         Self::WoodGlue,
         Self::Router,
+        Self::FollowMe,
     ];
-    pub const RAIL: [Self; 14] = [
+    pub const RAIL: [Self; 15] = [
         Self::Select,
         Self::Line,
         Self::Erase,
@@ -194,13 +198,14 @@ impl Tool {
         Self::Union,
         Self::Router,
         Self::WoodGlue,
+        Self::FollowMe,
     ];
     pub fn label(self) -> &'static str {
         match self {
             Self::Select => tr!("tools.select"),
             Self::Line => tr!("tools.line"),
             Self::Rectangle => tr!("tools.rectangle"),
-            Self::Image => "Image",
+            Self::Image => tr!("image_tools.image"),
             Self::Circle => tr!("tools.circle"),
             Self::Polygon => tr!("tools.polygon"),
             Self::Freehand => tr!("tools.freehand"),
@@ -227,6 +232,7 @@ impl Tool {
             Self::Walk => "Walk",
             Self::WoodGlue => tr!("wood_glue.tool"),
             Self::Router => tr!("router.router"),
+            Self::FollowMe => tr!("follow_me.tool"),
         }
     }
     pub fn shortcut(self) -> &'static str {
@@ -253,7 +259,7 @@ impl Tool {
             Self::TapeMeasure => "T",
             Self::Protractor => "A",
             Self::Dimensions => "I",
-            Self::Arc | Self::Text | Self::GrainDirection | Self::Walk | Self::WoodGlue | Self::Router => "",
+            Self::Arc | Self::Text | Self::GrainDirection | Self::Walk | Self::WoodGlue | Self::Router | Self::FollowMe => "",
             Self::Erase => "E",
             Self::Orbit => "O",
         }
@@ -265,7 +271,7 @@ impl Tool {
                 tr!("tools.click_to_start_a_line_arrow_keys_lock")
             }
             Self::Rectangle => tr!("tools.click_two_opposite_corners_arrow_keys_lock_the"),
-            Self::Image => "Click two opposite corners, then choose a local image. Arrow keys lock the drawing plane; enter width, height for precise placement.",
+            Self::Image => tr!("tools.image_instructions"),
             Self::Circle => {
                 tr!("tools.click_the_center_then_a_point_on_the")
             }
@@ -315,6 +321,7 @@ impl Tool {
             Self::GrainDirection => tr!("tools.place_the_grain_anchor"),
             Self::WoodGlue => tr!("wood_glue.instructions"),
             Self::Router => tr!("router.click_edges"),
+            Self::FollowMe => tr!("follow_me.instructions"),
             Self::Walk => "Click a floor face to start walking at eye level. Escape exits Walk.",
         }
     }

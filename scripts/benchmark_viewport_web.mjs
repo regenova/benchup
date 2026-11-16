@@ -160,9 +160,13 @@ if window is None: raise RuntimeError('Cannot find the benchmark browser window'
 d.x.XRaiseWindow.argtypes=[C.c_void_p,C.c_ulong];d.x.XRaiseWindow(d.display,window)
 class Message(C.Structure):
  _fields_=[('type',C.c_int),('serial',C.c_ulong),('send_event',C.c_int),('display',C.c_void_p),('window',C.c_ulong),('message_type',C.c_ulong),('format',C.c_int),('data',C.c_long*5)]
+class Event(C.Union):
+ _fields_=[('client',Message),('padding',C.c_long*24)]
 m=Message(type=33,display=d.display,window=window,message_type=d.x.XInternAtom(d.display,b'_NET_ACTIVE_WINDOW',0),format=32)
 m.data[0]=2
-message=module.Event();C.memmove(C.byref(message),C.byref(m),C.sizeof(m))
+message=Event(client=m)
+d.x.XSendEvent.argtypes=[C.c_void_p,C.c_ulong,C.c_int,C.c_long,C.POINTER(Event)]
+d.x.XSendEvent.restype=C.c_int
 d.x.XSendEvent(d.display,d.root,0,(1<<19)|(1<<20),C.byref(message))
 d.x.XSetInputFocus(d.display,window,2,0);d.x.XFlush(d.display);time.sleep(.1)
 if d.property(d.root,'_NET_ACTIVE_WINDOW') != [window]: raise RuntimeError('The benchmark browser is not the active X11 window')
@@ -204,7 +208,10 @@ if d.property(d.root,'_NET_ACTIVE_WINDOW') != [window]: raise RuntimeError('The 
   if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));
   return r.result.value;
  };
- await until(()=>evaluate(`window.benchupViewportBenchmarkState`),'loaded workspace');
+ await until(async()=>{
+  if(diagnostics.includes('panicked at') || diagnostics.includes('Runtime.exceptionThrown'))throw Error(diagnostics);
+  return evaluate(`window.benchupViewportBenchmarkState`);
+ },'loaded workspace');
  const loadedNonce=await evaluate(`window.benchupBenchmarkLoadNonce`);
  const loadedWasmUrl=await evaluate(`performance.getEntriesByType('resource').find(r=>r.name.endsWith('.wasm'))?.name`);
  let loadedWasmHash;
@@ -247,11 +254,11 @@ if d.property(d.root,'_NET_ACTIVE_WINDOW') != [window]: raise RuntimeError('The 
  result.shadows=shadowState.shadows;result.shadow_builds=shadowState.shadow_builds;
  if(args.includes('--require-shadows')&&(!result.shadows||!(result.shadow_builds>0)))throw Error('Shadows were not enabled during the benchmark');
  if(args.includes('--require-shadows')&&['orbit','select','groups'].includes(mode)&&result.shadow_builds!==1)throw Error('Unchanged sunlight was rebuilt during camera/selection/scope changes: '+result.shadow_builds);
- if(args.includes('--validate-markers'))result.marker_regression=await evaluate(`(${validateMarkers.toString()})(${JSON.stringify(await readFile(new URL('../crates/benchup-app/src/resident_scene.wgsl',import.meta.url),'utf8'))})`);
- if(args.includes('--validate-shadows'))result.shadow_regression=await evaluate(`(${validateSunlight.toString()})(${JSON.stringify(await readFile(new URL('../crates/benchup-app/src/resident_scene.wgsl',import.meta.url),'utf8'))})`);
+ if(args.includes('--validate-markers'))result.marker_regression=await evaluate(`(${validateMarkers.toString()})(${JSON.stringify((await Promise.all(['surface_appearance.wgsl','agent_effects.wgsl','resident_scene.wgsl'].map(name=>readFile(new URL('../crates/benchup-app/src/'+name,import.meta.url),'utf8')))).join('\n'))})`);
+ if(args.includes('--validate-shadows'))result.shadow_regression=await evaluate(`(${validateSunlight.toString()})(${JSON.stringify((await Promise.all(['surface_appearance.wgsl','agent_effects.wgsl','resident_scene.wgsl'].map(name=>readFile(new URL('../crates/benchup-app/src/'+name,import.meta.url),'utf8')))).join('\n'))})`);
  if(mode==='erase-edge'&&scope==='leaf')result.cache_regression=await evaluate(`(${validateEraseCaches.toString()})(${eraseSetup.context},${eraseSetup.edge})`);
  if(args.includes('--validate-snapping'))result.snapping_regression=await evaluate(`(${validateSnapping.toString()})()`);
- if(args.includes('--validate-shader'))result.visibility_regression=await evaluate(`(${validateVisibility.toString()})(${JSON.stringify(await readFile(new URL('../crates/benchup-app/src/resident_scene.wgsl',import.meta.url),'utf8'))})`);
+ if(args.includes('--validate-shader'))result.visibility_regression=await evaluate(`(${validateVisibility.toString()})(${JSON.stringify((await Promise.all(['surface_appearance.wgsl','agent_effects.wgsl','resident_scene.wgsl'].map(name=>readFile(new URL('../crates/benchup-app/src/'+name,import.meta.url),'utf8')))).join('\n'))})`);
  result.project=project;
  result.browser_executable=executable;result.unsafe_webgpu=args.includes('--unsafe-webgpu');result.x11=args.includes('--x11');
  result.scope=scope;
@@ -718,11 +725,11 @@ async function validateSunlight(shader) {
   device.pushErrorScope('validation');
   const module=device.createShaderModule({code:shader+`
 @vertex
-fn test_sun_vertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Output {
+fn test_sun_vertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> FaceOutput {
  let positions=array<vec2<f32>,3>(vec2<f32>(-1.0,-1.0),vec2<f32>(3.0,-1.0),vec2<f32>(-1.0,3.0));
  let depths=array<f32,8>(0.45,0.45,0.6,0.3,0.4000005,0.40001,0.4,0.6);
  let centers=array<f32,8>(-0.5,-0.5,0.5,-0.5,-0.5,-0.5,-0.5,0.0);
- var value: Output;
+ var value: FaceOutput;
  value.position=vec4<f32>(positions[vertex],0.5,1.0);
  let xy=vec2<f32>(centers[instance],0.0)+positions[vertex]*0.01;
  value.shadow=vec3<f32>(xy,depths[instance]+0.2*(xy.x-centers[instance]));
@@ -730,7 +737,7 @@ fn test_sun_vertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) 
  return value;
 }
 @fragment
-fn test_sun_fragment(value: Output) -> @location(0) vec4<f32> {
+fn test_sun_fragment(value: FaceOutput) -> @location(0) vec4<f32> {
  return vec4<f32>(shadow_coverage(value),0.0,0.0,1.0);
 }`});
   const compilation=await module.getCompilationInfo();
@@ -741,8 +748,8 @@ fn test_sun_fragment(value: Output) -> @location(0) vec4<f32> {
   const bits=new Uint32Array(32*32*2),f=new Float32Array(1),u=new Uint32Array(f.buffer);
   for(let y=0;y<32;y++)for(let x=0;x<16;x++){const i=(y*32+x)*2;bits[i]=11;f[0]=.3+.4*(x+.5)/32;bits[i+1]=u[0];}
   device.queue.writeTexture({texture:sunlight},bits,{bytesPerRow:256},[32,32]);
-  const uniform=device.createBuffer({size:480,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const camera=new Float32Array(120);camera[32]=.35;camera[34]=.000002;
+  const uniform=device.createBuffer({size:496,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const camera=new Float32Array(124);camera[32]=.35;camera[34]=.000002;
   const bind0=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}}]});
   const bind1=device.createBindGroup({layout:pipeline.getBindGroupLayout(1),entries:[{binding:1,resource:sunlight.createView()}]});
   const target=device.createTexture({size:[8,1],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
@@ -827,8 +834,8 @@ async function validateMarkers(shader) {
   const vertices=device.createBuffer({size:values.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(vertices,0,values);
   const states=device.createTexture({size:[512,1],format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
   const flags=new Uint32Array(512);flags[1]=1;flags[3]=65;flags[4]=1;device.queue.writeTexture({texture:states},flags,{bytesPerRow:2048},[512,1]);
-  const uniform=device.createBuffer({size:480,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const camera=new Float32Array(120);for(let i=0;i<4;i++)camera[i*5]=1;camera.set([64,64,1,1.8],64);camera.set([1,0,0,1],88);camera.set([1,1,1,1],108);
+  const uniform=device.createBuffer({size:496,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const camera=new Float32Array(124);for(let i=0;i<4;i++)camera[i*5]=1;camera.set([64,64,1,1.8],64);camera.set([1,0,0,1],88);camera.set([1,1,1,1],108);
   const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:states.createView()}]});
   const target=device.createTexture({size:[64,64],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
   const readback=device.createBuffer({size:16384,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});

@@ -1,14 +1,15 @@
 """Offline checks for the release gate protecting already-installed updaters."""
 import unittest
+from io import BytesIO
 from urllib.error import HTTPError
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import verify_update_transfer as migration
 
 
 class TransferTests(unittest.TestCase):
     def fetch(self, old=None, new=None, old_releases=None, new_releases=None):
-        repo = {"id": 1234, "full_name": migration.CURRENT}
+        repo = {"id": 1234, "full_name": migration.CURRENT, "private": False}
         return Mock(side_effect=[
             repo if old is None else old, repo if new is None else new,
             [{"id": 42}] if old_releases is None else old_releases,
@@ -16,7 +17,7 @@ class TransferTests(unittest.TestCase):
         ])
 
     def test_transferred_repository_retains_numeric_identity_and_public_release_access(self):
-        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor"]:
+        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor", "BenchUp3D/editor", "benchup3d/BENCHUP"]:
             fetch = self.fetch()
             self.assertIn("Verified", migration.verify(source, fetch))
             self.assertEqual(fetch.call_args_list[2].args[0],
@@ -25,6 +26,8 @@ class TransferTests(unittest.TestCase):
 
     def test_recreated_old_repository_or_wrong_transfer_blocks_release(self):
         for old in [{"id": 999, "full_name": migration.LEGACY},
+                    {"id": 1234, "full_name": migration.CURRENT, "private": True},
+                    {"id": 1234, "full_name": migration.CURRENT},
                     {"id": 1234, "full_name": "someone/else"}, {}, []]:
             with self.subTest(old=old), self.assertRaisesRegex(ValueError, "same repository"):
                 migration.verify(migration.CURRENT, self.fetch(old=old))
@@ -44,3 +47,40 @@ class TransferTests(unittest.TestCase):
         fetch.assert_not_called()
         with self.assertRaises(ValueError):
             migration.verify("../invalid/repository", fetch)
+
+    def test_authenticated_fallback_drafts_are_not_public_releases(self):
+        fetch = self.fetch(old_releases=[{"id": 42}, {"id": 99, "draft": True}])
+        self.assertIn("Verified", migration.verify(migration.CURRENT, fetch))
+
+    @patch.dict("os.environ", {"GH_TOKEN": "test-workflow-token"}, clear=True)
+    def test_rate_limit_retries_with_workflow_token(self):
+        for status, headers in [(403, {"X-RateLimit-Remaining": "0"}), (429, {})]:
+            error = HTTPError("url", status, "rate limited", headers, None)
+            authorizations = []
+
+            def open_request(request, timeout):
+                authorizations.append(request.get_header("Authorization"))
+                if len(authorizations) == 1:
+                    raise error
+                return BytesIO(b'{"id":1234}')
+
+            with self.subTest(status=status), patch.object(
+                migration.urllib.request, "urlopen", side_effect=open_request
+            ):
+                self.assertEqual(migration.fetch_json(migration.API + migration.LEGACY), {"id": 1234})
+                self.assertEqual(authorizations, [None, "Bearer test-workflow-token"])
+
+    def test_missing_redirects_and_rate_limits_without_token_still_fail(self):
+        for status, headers, token in [
+            (404, {}, "test-workflow-token"),
+            (403, {}, "test-workflow-token"),
+            (403, {"X-RateLimit-Remaining": "0"}, ""),
+        ]:
+            error = HTTPError("url", status, "blocked", headers, None)
+            self.addCleanup(error.close)
+            with self.subTest(status=status, token=bool(token)), patch.dict(
+                "os.environ", {"GH_TOKEN": token}, clear=True
+            ), patch.object(migration.urllib.request, "urlopen", side_effect=error) as fetch:
+                with self.assertRaises(HTTPError):
+                    migration.fetch_json(migration.API + migration.LEGACY)
+                fetch.assert_called_once()

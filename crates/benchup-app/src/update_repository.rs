@@ -1,5 +1,5 @@
 //! Build-time update source normalization, shared with the regression tests.
-pub const REPOSITORY: &str = "BenchUp3D/editor";
+pub const REPOSITORY: &str = "BenchUp3D/benchup";
 
 pub fn url(value: &str) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/').trim_end_matches(".git");
@@ -26,7 +26,7 @@ pub fn url(value: &str) -> Result<String, String> {
     let official_owner = ["Ketchup3D", "BenchUp3D"]
         .iter()
         .any(|owner| parts[0].eq_ignore_ascii_case(owner));
-    let official_name = ["app", "editor"]
+    let official_name = ["app", "editor", "benchup"]
         .iter()
         .any(|name| parts[1].eq_ignore_ascii_case(name));
     let repository = if official_owner && official_name {
@@ -44,20 +44,20 @@ mod tests {
     #[test]
     fn transfer_and_rename_in_either_order_resolve_to_the_new_official_feed() {
         for owner in ["Ketchup3D", "BenchUp3D", "ketchup3d", "benchup3d"] {
-            for name in ["app", "editor"] {
+            for name in ["app", "editor", "benchup", "BENCHUP"] {
                 for input in [
                     format!("{owner}/{name}"),
                     format!("https://github.com/{owner}/{name}/"),
                     format!("git@github.com:{owner}/{name}.git"),
                     format!("ssh://git@github.com/{owner}/{name}.git"),
                 ] {
-                    assert_eq!(url(&input).unwrap(), "https://github.com/BenchUp3D/editor");
+                    assert_eq!(url(&input).unwrap(), "https://github.com/BenchUp3D/benchup");
                 }
             }
         }
         assert_eq!(
             url(REPOSITORY).unwrap(),
-            "https://github.com/BenchUp3D/editor"
+            "https://github.com/BenchUp3D/benchup"
         );
     }
 

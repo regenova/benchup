@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod resident;
 #[path = "scale_handles.rs"]
 mod scale_handles;
+#[path = "agent_effects.rs"]
+pub(crate) mod agent_effects;
 #[path = "scene_buffers.rs"]
 mod scene_buffers;
 use scene_buffers::GpuBuffers;
@@ -60,6 +62,7 @@ struct Vertex {
     lateral: f32,
     shadow_color: [u8; 4],
     dash_phase: f32,
+    effect: f32,
 }
 
 /// Optional stream for the projected face path. Untextured scenes and all
@@ -130,7 +133,9 @@ pub struct ModelSnapshot {
     model: Option<Arc<Model>>,
     revision: u64,
     source_revision: Option<u64>,
+    evaluated_source: Option<(u64, Option<u64>)>,
     assigned_stock: bool,
+    bounds: Option<(DVec3, DVec3)>,
 }
 
 pub(crate) struct GroupMarker {
@@ -167,7 +172,16 @@ impl ModelSnapshot {
         self.assigned_stock
     }
 
+    pub(crate) fn bounds(&self) -> Option<(DVec3, DVec3)> { self.bounds }
+
     fn set_model(&mut self, model: Arc<Model>) {
+        // Include hidden geometry: display preferences can reveal it without
+        // changing this snapshot, and its faces must remain inside the slab.
+        self.bounds = model.vertices.values().map(|vertex| vertex.position)
+            .chain(model.dimensions.values().flat_map(|dimension| dimension.annotation_points(&model)))
+            .chain(model.texts.values().flat_map(|text| text.layout(&model)))
+            .fold(None, |bounds, point| Some(bounds.map_or((point, point), |(lo, hi): (DVec3, DVec3)|
+                (lo.min(point), hi.max(point)))));
         self.assigned_stock = !model.stock_materials.is_empty() || model.objects.values().any(|object| {
             object.stock_material_id.is_some() || object.stock_material.is_some()
         });
@@ -177,6 +191,7 @@ impl ModelSnapshot {
 
     pub(crate) fn update_scene(&mut self, model: &Model) -> u64 {
         self.source_revision = None;
+        self.evaluated_source = None;
         if self
             .model
             .as_deref()
@@ -195,14 +210,29 @@ impl ModelSnapshot {
     /// A caller that already compared the source document can share that
     /// revision with a derived snapshot, instead of scanning it again.
     pub(crate) fn update_from_source(&mut self, model: Arc<Model>, source_revision: u64) -> u64 {
+        self.evaluated_source = None;
         if self.source_revision != Some(source_revision) {
             self.set_model(model);
             self.source_revision = Some(source_revision);
         }
         self.revision
     }
+    /// Committed machining has already validated this document revision. Keep
+    /// its snapshot across camera frames without scanning the derived mesh.
+    /// Source and evaluated stamps are separate: equal counters never alias a
+    /// source board snapshot with its cut result. Scope still affects the mesh.
+    pub(crate) fn update_evaluated(&mut self, model: &Model, source_revision: u64) -> u64 {
+        let stamp = (source_revision, model.edit_context);
+        self.source_revision = None;
+        if self.evaluated_source != Some(stamp) {
+            self.set_model(Arc::new(model.clone()));
+            self.evaluated_source = Some(stamp);
+        }
+        self.revision
+    }
     pub fn update(&mut self, model: &Model) -> u64 {
         self.source_revision = None;
+        self.evaluated_source = None;
         if self.model.as_deref() != Some(model) {
             self.set_model(Arc::new(model.clone()));
         }
@@ -232,9 +262,12 @@ pub struct SceneKey {
 #[derive(Default)]
 pub struct SceneCache {
     pub(crate) scale_transform: Option<ScaleTransform>,
+    pub(crate) agent_effects: agent_effects::Frame,
+    pub(crate) agent_effects_cache: agent_effects::Cache,
     image_matrix: Option<glam::DMat4>,
     image_depth: Option<[f32; 4]>,
     resident: resident::Cache,
+    scope_bounds: Option<((u64, Option<u64>, u64), Option<(DVec3, DVec3)>)>,
     annotations: Option<(Rect, [usize; 2], Vec<egui::Shape>)>,
     joint_surfaces: JointSurfaceCache,
     occlusion: Occlusion,
@@ -267,6 +300,17 @@ pub(crate) fn scale_preview_supported(camera: &Camera, display: &benchup_core::D
 }
 
 impl SceneCache {
+    /// Scope bounds depend on geometry and inherited visibility, not on orbit.
+    pub(crate) fn context_bounds(&mut self, model: &Model, faces: &FaceCache,
+        entities: &EntityCache, revision: u64) -> Option<(DVec3, DVec3)> {
+        let key = (revision, model.edit_context, entities.revision());
+        if let Some((saved, bounds)) = self.scope_bounds {
+            if saved == key { return bounds; }
+        }
+        let bounds = faces.context_bounds(model, entities);
+        self.scope_bounds = Some((key, bounds));
+        bounds
+    }
     pub(crate) fn image_projection(&self) -> (glam::DMat4, [f32; 4]) {
         (self.image_matrix.unwrap_or(glam::DMat4::IDENTITY), self.image_depth.unwrap_or([0.; 4]))
     }
@@ -284,7 +328,7 @@ impl SceneCache {
             if let Some(callback) = &self.retained {
                 painter.add(egui_wgpu::Callback::new_paint_callback(
                     rect,
-                    SharedScene(Arc::clone(callback)),
+                    SharedScene(Arc::clone(callback), agent_effects::Projected::new(&self.agent_effects, &key.camera, rect)),
                 ));
                 if let Some((_, _, annotations)) = &self.annotations {
                     painter.extend(annotations.iter().cloned());
@@ -339,6 +383,7 @@ struct JointSurfaceCache {
     size: DVec2,
     sections: [Option<f64>; 3],
     view_revision: u64,
+    clip_planes: Option<(f64, f64)>,
     entries: BTreeMap<u64, CachedJointSurface>,
     used: std::collections::BTreeSet<u64>,
 }
@@ -350,6 +395,7 @@ struct CachedJointSurface {
 }
 
 pub struct Mesh {
+    agent_effects: agent_effects::Frame,
     joint_guide_bounds: BTreeMap<u64, (DVec2, DVec2)>,
     visible_joint_surfaces: BTreeMap<u64, (Arc<JointSurface>, Arc<JointSurface>, (u64, u64))>,
     joint_surfaces: JointSurfaceCache,
@@ -407,6 +453,7 @@ impl Mesh {
     }
     pub fn new(camera: &Camera, size: DVec2) -> Self {
         Self {
+            agent_effects: Default::default(),
             joint_guide_bounds: BTreeMap::new(),
             visible_joint_surfaces: BTreeMap::new(),
             joint_surfaces: JointSurfaceCache {
@@ -437,6 +484,9 @@ impl Mesh {
             gpu_pool: Default::default(),
         }
     }
+    pub(crate) fn remap_agent_effects(&mut self, model: &Model) {
+        self.agent_effects.remap(model);
+    }
     pub fn cached(camera: &Camera, size: DVec2, cache: &mut SceneCache) -> Self {
         cache.key = None;
         #[cfg(test)]
@@ -444,6 +494,7 @@ impl Mesh {
             cache.mesh_builds += 1;
         }
         let mut mesh = Self::new(camera, size);
+        mesh.agent_effects = cache.agent_effects.clone();
         mesh.joint_surfaces = std::mem::take(&mut cache.joint_surfaces);
         mesh.joint_surfaces.used.clear();
         if mesh.joint_surfaces.camera != *camera || mesh.joint_surfaces.size != size {
@@ -475,6 +526,20 @@ impl Mesh {
             surfaces.clear();
         }
         mesh
+    }
+    /// Give the projected path the retained renderer's depth precision. With
+    /// a fixed 5 mm near plane, curved pocket walls at workshop distances land
+    /// in the same f32 depth layer and force expensive CPU precision clipping.
+    /// Bounds are captured with the model snapshot, never scanned per orbit.
+    pub(crate) fn set_scene_clip_planes(&mut self, camera: &Camera, bounds: Option<(DVec3, DVec3)>) {
+        let planes = bounds.map(|bounds| resident::clip_planes(camera, bounds));
+        if self.joint_surfaces.clip_planes != planes {
+            self.joint_surfaces.clip_planes = planes;
+            self.joint_surfaces.view_revision = self.joint_surfaces.view_revision.wrapping_add(1);
+        }
+        if let Some((near, far)) = planes {
+            self.view = camera.view_with_clip_planes(self.size, near, far);
+        }
     }
     pub(crate) fn reference_image_depth_bounds(&mut self, model: &Model) {
         if !self.parallel { return; }
@@ -965,6 +1030,8 @@ impl Mesh {
     fn draw_face(&mut self, face: &FaceDraw<'_>) {
         let start = self.vertices.len();
         self.draw_face_flat(face);
+        let stamp = self.agent_effects.stamp(face.face.id);
+        for vertex in &mut self.vertices[start..] { vertex.effect = stamp; }
         let Some((model, lighting)) = face.smooth else { return };
         // The precision path already projects/clips faces on the CPU. Adjust
         // only the routed vertices it produced; the retained path interpolates
@@ -1055,7 +1122,11 @@ impl Mesh {
                     .chunks(faces.len().div_ceil(workers))
                     .map(|chunk| {
                         let mut mesh = Self::new(&self.joint_surfaces.camera, self.size);
+                        // Faces and overlays must use the same scene clip planes.
+                        // Rebuilding the default view puts them in different depth ranges.
+                        mesh.view = self.view.clone();
                         mesh.display = self.display.clone();
+                        mesh.agent_effects = self.agent_effects.clone();
                         (chunk, mesh)
                     })
                     .collect();
@@ -1122,6 +1193,7 @@ impl Mesh {
         let surfaces = std::mem::take(&mut self.edge_surfaces);
         self.paint_overlays_with_outlines(edges, 128, self.clip_stroke_footprints, |mesh, edge| {
             mesh.set_entity(Some(edge.id));
+            let start = mesh.vertices.len();
             let [a, b] = edge.points;
             if edge.back {
                 mesh.overlay_line(a, b, 1., edge.color.gamma_multiply(0.4), true);
@@ -1144,6 +1216,8 @@ impl Mesh {
                     );
                 }
             }
+            let stamp = mesh.agent_effects.stamp(edge.id);
+            for vertex in &mut mesh.vertices[start..] { vertex.effect = stamp; }
         });
         self.edge_surfaces = surfaces;
     }
@@ -1239,6 +1313,8 @@ impl Mesh {
     #[cfg(not(target_arch = "wasm32"))]
     fn overlay_worker(&self, read_outlines: bool) -> Self {
         let mut mesh = Self::new(&self.joint_surfaces.camera, self.size);
+        mesh.view = self.view.clone();
+        mesh.agent_effects = self.agent_effects.clone();
         mesh.display = self.display.clone();
         mesh.pixels_per_point = self.pixels_per_point;
         mesh.gpu_edge_occlusion = self.gpu_edge_occlusion;
@@ -1271,6 +1347,7 @@ impl Mesh {
         axis: DVec3,
         width: f64,
         color: Color32,
+        opaque_surface: bool,
     ) {
         let Some(plane) = face.plane else { return };
         let tangent = axis - plane.normal * plane.normal.dot(axis);
@@ -1304,6 +1381,10 @@ impl Mesh {
             let delta = point - anchor;
             DVec2::new(delta.dot(along), delta.dot(across))
         };
+        if self.gpu_edge_occlusion && opaque_surface {
+            self.surface_grain_gpu(face, anchor, along, across, end_grain, width, color);
+            return;
+        }
         let (lo, hi) = face
             .positions
             .iter()
@@ -1365,52 +1446,87 @@ impl Mesh {
                         continue;
                     };
                     let origin = projected[0];
-                    for region in self.visible_stroke_polygons(
-                        projected.map(DVec3::truncate).to_vec(),
-                        origin,
-                        gradient,
-                    ) {
-                        let (min, max) = region.iter().copied().fold(
-                            (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)),
-                            |(lo, hi), point| (lo.min(point), hi.max(point)),
-                        );
-                        let area = region
-                            .windows(2)
-                            .map(|edge| (edge[0] - region[0]).perp_dot(edge[1] - region[0]))
-                            .sum::<f64>();
-                        if !area.is_finite() || area.abs() <= 1e-12 {
-                            continue;
+                    let region = projected.map(DVec3::truncate);
+                    let min = region.into_iter().reduce(DVec2::min).unwrap();
+                    let max = region.into_iter().reduce(DVec2::max).unwrap();
+                    let area = (region[1] - region[0]).perp_dot(region[2] - region[0]);
+                    if !area.is_finite() || area.abs() <= 1e-12 { continue; }
+                    let mut footprint = Vec::new();
+                    let mut clipped = Vec::new();
+                    for (outline, start, normal, mark_min, mark_max) in &marks {
+                        if !mark_max.cmpge(min).all() || !mark_min.cmple(max).all() { continue; }
+                        footprint.clear();
+                        footprint.extend_from_slice(outline);
+                        for (&a, &b) in region.iter().zip(region.iter().cycle().skip(1)).take(3) {
+                            clip_polygon_into(&footprint,
+                                |p| area.signum() * (b - a).perp_dot(p - a), &mut clipped);
+                            std::mem::swap(&mut footprint, &mut clipped);
+                            if footprint.is_empty() { break; }
                         }
-                        let mut footprint = Vec::new();
-                        let mut clipped = Vec::new();
-                        for (outline, start, normal, mark_min, mark_max) in &marks {
-                            if !mark_max.cmpge(min).all() || !mark_min.cmple(max).all() {
-                                continue;
+                        if footprint.is_empty() { continue; }
+                        // A rounded pocket can give a face hundreds of long,
+                        // thin triangles. Never subtract the entire scene from
+                        // each triangle just to draw a few tiny grain strokes.
+                        // Clip each actual mark to its owner first, then keep
+                        // only the f64 depth ties the GPU cannot distinguish.
+                        for visible in self.visible_stroke_polygons_with_depth(
+                            footprint.clone(), origin, gradient, self.gpu_edge_occlusion) {
+                            if opaque_surface {
+                                // Ink lies on a face that already occludes
+                                // annotations at this exact depth. Repeating
+                                // every clipped glyph in that hierarchy adds
+                                // thousands of redundant triangles per orbit.
+                                self.emit_stroke_geometry(&visible, origin, gradient, *start, *normal, color, None);
+                            } else {
+                                self.emit_stroke_polygon(&visible, origin, gradient, *start, *normal, color);
                             }
-                            footprint.clear();
-                            footprint.extend_from_slice(outline);
-                            for (&a, &b) in region.iter().zip(region.iter().cycle().skip(1)) {
-                                clip_polygon_into(
-                                    &footprint,
-                                    |p| area.signum() * (b - a).perp_dot(p - a),
-                                    &mut clipped,
-                                );
-                                std::mem::swap(&mut footprint, &mut clipped);
-                                if footprint.is_empty() {
-                                    break;
-                                }
-                            }
-                            if footprint.is_empty() {
-                                continue;
-                            }
-                            self.emit_stroke_polygon(
-                                &footprint, origin, gradient, *start, *normal, color,
-                            );
                         }
                     }
                 }
             }
         }
+    }
+
+    /// The shader evaluates the same fixed, staggered marks in face space.
+    /// Submit the actual triangles once, so rasterization clips holes and
+    /// pocket walls instead of building a CPU mesh for every individual dash.
+    fn surface_grain_gpu(&mut self, face: &CachedFace, anchor: DVec3, along: DVec3,
+        across: DVec3, end_grain: bool, width: f64, color: Color32) {
+        let start = self.indices.len() as u32;
+        let color = self.fog_color(color, face.center).to_array();
+        for &triangle in &face.triangles {
+            let (section, len) = self.display.section_triangle(triangle);
+            for i in 1..len.saturating_sub(1) {
+                for projected in self.view.triangle_depth([section[0], section[i], section[i + 1]]) {
+                    let base = self.vertices.len() as u32;
+                    self.material_vertices.resize(self.vertices.len(), MaterialVertex::default());
+                    for p in projected {
+                        let (world, inv_w) = self.view.unproject_depth(p);
+                        let delta = world - anchor;
+                        let w = inv_w as f32;
+                        self.material_vertices.push(MaterialVertex {
+                            grain: [(delta.dot(along) * 10.) as f32 * w,
+                                (delta.dot(across) * 10.) as f32 * w,
+                                if end_grain { w } else { 0. }, w],
+                            // Reserved overlay marker, distinct from wood and glue.
+                            finish: [254, 255, 254, (width * self.pixels_per_point * 255. / 8.).round().clamp(1., 255.) as u8],
+                        });
+                        self.vertices.push(Vertex {
+                            effect: -2.,
+                            position: [(p.x / self.size.x * 2. - 1.) as f32,
+                                (1. - p.y / self.size.y * 2.) as f32, p.z.clamp(0., 1.) as f32],
+                            // Match the underlying surface's vertices and depth exactly.
+                            // LessEqual draws its ink without a bias that could leak
+                            // through close foreground faces or require CPU clipping.
+                            color, lateral: 0., shadow_color: [0, 0, 0, 1], dash_phase: -1.,
+                        });
+                    }
+                    self.indices.extend([base, base + 1, base + 2]);
+                }
+            }
+        }
+        let end = self.indices.len() as u32;
+        if start != end { self.triangle_ranges.push(start..end); }
     }
 
     #[cfg(test)]
@@ -1588,6 +1704,7 @@ impl Mesh {
         for &(endpoint, lateral) in strip {
             let p = [a, b][endpoint] + n * lateral;
             self.vertices.push(Vertex {
+                effect: -2.,
                 dash_phase: -1.,
                 position: [
                     (p.x / self.size.x * 2. - 1.) as f32,
@@ -1684,6 +1801,7 @@ impl Mesh {
         for &p in polygon {
             let depth = origin.z + gradient.dot(p - origin.truncate());
             self.vertices.push(Vertex {
+                effect: -2.,
                 position: [
                     (p.x / self.size.x * 2. - 1.) as f32,
                     (1. - p.y / self.size.y * 2.) as f32,
@@ -1772,6 +1890,10 @@ impl Mesh {
         for triangle in self.annotation_occluders.drain(..) {
             self.occlusion.insert(triangle);
         }
+        // CPU text placement still needs an exact annotation mask. Rounded
+        // joints add thousands of small guide triangles here: use the linear
+        // hierarchy construction already used for dense outline masks.
+        self.occlusion.outline_order = true;
     }
 
     pub fn begin_selected_edges(&mut self) {
@@ -1946,6 +2068,7 @@ impl Mesh {
         for (endpoint, lateral) in [(0, 1.), (0, -1.), (1, 1.), (1, -1.)] {
             let p = [a, b][endpoint] + offset * lateral;
             self.vertices.push(Vertex {
+                effect: -2.,
                 dash_phase: -1.,
                 position: [
                     (p.x / self.size.x * 2. - 1.) as f32,
@@ -2025,6 +2148,7 @@ impl Mesh {
             view.for_each_triangle_depth([polygon[0], polygon[i], polygon[i + 1]], |triangle| {
                 for p in triangle {
                     vertices.push(Vertex {
+                        effect: -2.,
                         dash_phase: -1.,
                         position: [
                             (p.x / size.x * 2. - 1.) as f32,
@@ -2063,7 +2187,7 @@ impl Mesh {
                         .len()
                         .div_ceil(crate::viewport_workers::parallelism()),
                 )
-                .map(|chunk| (chunk, self.joint_surfaces.camera.view(self.size)))
+                .map(|chunk| (chunk, self.view.clone()))
                 .collect();
             let display = &self.display;
             let size = self.size;
@@ -2144,6 +2268,7 @@ impl Mesh {
                         });
                     }
                     vertices.push(Vertex {
+                        effect: -2.,
                         dash_phase: -1.,
                         position: [
                             (p.x / size.x * 2. - 1.) as f32,
@@ -2174,10 +2299,11 @@ impl Mesh {
         self.edge_surfaces
             .retain(|_, surfaces| !surfaces.is_empty());
         cache.edge_surfaces = std::mem::take(&mut self.edge_surfaces);
+        let effects = agent_effects::Projected::new(&cache.agent_effects, &self.joint_surfaces.camera, rect);
         let callback = self.retain(cache);
         painter.add(egui_wgpu::Callback::new_paint_callback(
             rect,
-            SharedScene(callback),
+            SharedScene(callback, effects),
         ));
     }
 
@@ -3335,7 +3461,7 @@ pub(crate) fn install_resources(
 ) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("BenchUp edges"),
-        source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("edges.wgsl")).into()),
+        source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("agent_effects.wgsl"), "\n", include_str!("edges.wgsl")).into()),
     });
     let face_pipeline = create_pipeline(device, &shader, format, PipelinePass::Faces);
     let edge_pipeline = create_pipeline(device, &shader, format, PipelinePass::Edges);
@@ -3370,6 +3496,8 @@ pub(crate) fn install_resources(
     resident::install(device, format, renderer);
     crate::reference_image_gpu::install(device, format, renderer);
     scale_handles::install(device, format, renderer);
+    agent_effects::install(device, format, renderer);
+    agent_effects::install_projected(device, format, renderer);
 }
 #[derive(Clone, Copy, PartialEq)]
 enum PipelinePass {
@@ -3399,8 +3527,15 @@ fn create_pipeline_with_samples(
     pass: PipelinePass,
     samples: u32,
 ) -> wgpu::RenderPipeline {
+    create_pipeline_with_effects(device, shader, format, pass, samples, false)
+}
+
+fn create_pipeline_with_effects(
+    device: &wgpu::Device, shader: &wgpu::ShaderModule, format: wgpu::TextureFormat,
+    pass: PipelinePass, samples: u32, effects: bool,
+) -> wgpu::RenderPipeline {
     let material = matches!(pass, PipelinePass::MaterialFaces | PipelinePass::MaterialShadowFaces);
-    let attributes = wgpu::vertex_attr_array![0=>Float32x3,1=>Unorm8x4,2=>Float32,3=>Unorm8x4,4=>Float32];
+    let attributes = wgpu::vertex_attr_array![0=>Float32x3,1=>Unorm8x4,2=>Float32,3=>Unorm8x4,4=>Float32,7=>Float32];
     let material_attributes = wgpu::vertex_attr_array![5=>Float32x4,6=>Unorm8x4];
     let mut layouts = vec![Some(wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<Vertex>() as u64,
@@ -3414,6 +3549,10 @@ fn create_pipeline_with_samples(
             attributes: &material_attributes,
         }));
     }
+    let effect_layout = effects.then(|| agent_effects::projected_layout(device));
+    let layout = effect_layout.as_ref().map(|group| device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Agent precision geometry layout"), bind_group_layouts: &[Some(group)], immediate_size: 0,
+    }));
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(match pass {
             PipelinePass::Faces => "BenchUp filled faces",
@@ -3425,7 +3564,7 @@ fn create_pipeline_with_samples(
             PipelinePass::MaskShadow => "BenchUp shadow coverage",
             PipelinePass::ShadowFaces => "BenchUp faces with antialiased shadows",
         }),
-        layout: None,
+        layout: layout.as_ref(),
         vertex: wgpu::VertexState {
             module: shader,
             entry_point: Some(match (material, format.is_srgb()) {
@@ -3439,13 +3578,18 @@ fn create_pipeline_with_samples(
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: Some(match pass {
-                PipelinePass::EdgeDepth => "fragment_edge_depth",
-                PipelinePass::MaskBase => "fragment_mask_base",
-                PipelinePass::MaskShadow => "fragment_mask_shadow",
-                PipelinePass::ShadowFaces => "fragment_shadow_faces",
-                PipelinePass::MaterialFaces => "fragment_material_faces",
-                PipelinePass::MaterialShadowFaces => "fragment_material_shadow_faces",
+            entry_point: Some(match (pass, effects) {
+                (PipelinePass::EdgeDepth, true) => "fragment_edge_depth_effect",
+                (PipelinePass::ShadowFaces, true) => "fragment_shadow_faces_effect",
+                (PipelinePass::MaterialFaces, true) => "fragment_material_faces_effect",
+                (PipelinePass::MaterialShadowFaces, true) => "fragment_material_shadow_faces_effect",
+                (_, true) => "fragment_main_effect",
+                (PipelinePass::EdgeDepth, false) => "fragment_edge_depth",
+                (PipelinePass::MaskBase, false) => "fragment_mask_base",
+                (PipelinePass::MaskShadow, false) => "fragment_mask_shadow",
+                (PipelinePass::ShadowFaces, false) => "fragment_shadow_faces",
+                (PipelinePass::MaterialFaces, false) => "fragment_material_faces",
+                (PipelinePass::MaterialShadowFaces, false) => "fragment_material_shadow_faces",
                 _ => "fragment_main",
             }),
             targets: &[Some(wgpu::ColorTargetState {
@@ -3479,6 +3623,7 @@ fn create_pipeline_with_samples(
 
 struct AntialiasedScene {
     bind_group: wgpu::BindGroup,
+    view: wgpu::TextureView,
 }
 
 struct SceneCallback {
@@ -3495,7 +3640,7 @@ struct SceneCallback {
     antialiased: OnceLock<AntialiasedScene>,
 }
 
-struct SharedScene(Arc<SceneCallback>);
+struct SharedScene(Arc<SceneCallback>, Option<agent_effects::Projected>);
 
 impl egui_wgpu::CallbackTrait for SharedScene {
     fn prepare(
@@ -3506,7 +3651,9 @@ impl egui_wgpu::CallbackTrait for SharedScene {
         encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        self.0.prepare(device, queue, screen, encoder, resources)
+        let commands = self.0.prepare(device, queue, screen, encoder, resources);
+        if let Some(effects) = &self.1 { effects.prepare(&self.0, device, resources); }
+        commands
     }
 
     fn paint(
@@ -3515,7 +3662,9 @@ impl egui_wgpu::CallbackTrait for SharedScene {
         pass: &mut wgpu::RenderPass<'static>,
         resources: &egui_wgpu::CallbackResources,
     ) {
-        self.0.paint(info, pass, resources);
+        if !self.1.as_ref().is_some_and(|effects| effects.paint(&self.0, pass, resources)) {
+            self.0.paint(info, pass, resources);
+        }
     }
 }
 
@@ -3648,7 +3797,7 @@ impl egui_wgpu::CallbackTrait for SceneCallback {
                         },
                     ],
                 });
-                AntialiasedScene { bind_group }
+                AntialiasedScene { bind_group, view: resolved }
             });
         }
         vec![]
@@ -4022,6 +4171,127 @@ impl CachedFace {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn scope_bounds_follow_geometry_visibility_and_navigation() {
+        use super::*;
+        let mut model = Model::default();
+        let edge = model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+        let group = model.make_object(&std::collections::BTreeSet::from([edge]), false, "Group").unwrap();
+        assert!(model.enter_object(group));
+        let mut faces = FaceCache::default(); faces.update(&model);
+        let mut entities = EntityCache::default(); entities.update(&model);
+        let mut cache = SceneCache::default();
+        for _ in 0..60 {
+            assert_eq!(cache.context_bounds(&model, &faces, &entities, 1), Some((DVec3::ZERO, DVec3::X)));
+        }
+        let vertex = model.edges[&edge].b;
+        model.vertices.get_mut(&vertex).unwrap().position = DVec3::X * 2.;
+        faces.update(&model);
+        assert_eq!(cache.context_bounds(&model, &faces, &entities, 2), Some((DVec3::ZERO, DVec3::X * 2.)));
+        model.hidden.insert(edge); entities.update(&model);
+        assert!(cache.context_bounds(&model, &faces, &entities, 2).is_none());
+        model.hidden.clear(); model.edit_context = None; entities.update(&model);
+        assert!(cache.context_bounds(&model, &faces, &entities, 2).is_none());
+    }
+
+    #[test]
+    fn gpu_grain_uses_face_triangles_instead_of_per_mark_meshes_or_annotation_masks() {
+        use super::*;
+        for extent in [0.4, 20.] {
+            let mut model = Model::default();
+            let points = [DVec3::new(-extent, -extent, 0.), DVec3::new(extent, -extent, 0.),
+                DVec3::new(extent, extent, 0.), DVec3::new(-extent, extent, 0.)];
+            for i in 0..4 { model.ensure_edge(points[i], points[(i + 1) % 4]).unwrap(); }
+            let mut faces = FaceCache::default();
+            faces.update(&model);
+            let (&id, face) = model.faces.iter().next().unwrap();
+            let cached = faces.get(id);
+            let size = DVec2::new(800., 650.);
+            let mut camera = Camera { distance: extent * 6., projection: benchup_core::Projection::Parallel, ..Default::default() };
+            camera.set_standard_view(benchup_core::StandardView::Top);
+            let mut mesh = Mesh::new(&camera, size);
+            mesh.enable_gpu_edge_occlusion();
+            mesh.draw_faces(&[FaceDraw { face, cached, color: Color32::WHITE,
+                surface: None, smooth: None, shadow: None }]);
+            let base = mesh.vertices.len();
+            mesh.surface_grain(cached, DVec3::X, 0.85, Color32::BLACK, true);
+            assert_eq!(mesh.vertices.len() - base, base, "the same two triangles cover any mark density");
+            assert_eq!(mesh.vertices[..base].iter().map(|v| v.position).collect::<Vec<_>>(),
+                mesh.vertices[base..].iter().map(|v| v.position).collect::<Vec<_>>(),
+                "ink shares the surface depth exactly, without a foreground-leaking bias");
+            assert_eq!(mesh.occlusion.polygon_queries, 0,
+                "GPU grain must never clip a mark or face on the CPU");
+            assert!(mesh.annotation_occluders.is_empty(), "opaque ink already has its owning face's depth");
+            assert!(mesh.stroke_triangles().is_empty(), "grain is a GPU surface overlay");
+            assert!(mesh.material_vertices[base..].iter().all(|vertex| vertex.finish[..3] == [254, 255, 254]));
+            assert!(mesh.vertices[base..].iter().all(|vertex| vertex.shadow_color[3] > 0),
+                "grain must leave the underlying shadow receiver intact");
+        }
+    }
+
+    #[test]
+    fn projected_scene_depth_separates_pocket_walls_without_clipping_stock() {
+        use super::*;
+        let bounds = (DVec3::ZERO, DVec3::new(0.55, 0.8, 0.04));
+        let camera = Camera { target: (bounds.0 + bounds.1) * 0.5, distance: 1.5, ..Default::default() };
+        let size = DVec2::new(900., 600.);
+        let mut mesh = Mesh::new(&camera, size);
+        let p = camera.target;
+        let q = p + (camera.eye() - p).normalize() * 0.0001;
+        let old_gap = (mesh.view.project_depth(p).unwrap().z - mesh.view.project_depth(q).unwrap().z).abs();
+        mesh.set_scene_clip_planes(&camera, Some(bounds));
+        let gap = (mesh.view.project_depth(p).unwrap().z - mesh.view.project_depth(q).unwrap().z).abs();
+        assert!(gap > old_gap * 16.);
+        assert!(gap > 4. * f64::from(f32::EPSILON), "ordinary pocket walls should use GPU depth");
+        for x in [bounds.0.x, bounds.1.x] {
+            for y in [bounds.0.y, bounds.1.y] {
+                for z in [bounds.0.z, bounds.1.z] {
+                    assert!((0. ..1.).contains(&mesh.view.project_depth(DVec3::new(x, y, z)).unwrap().z));
+                }
+            }
+        }
+        let revision = mesh.joint_surfaces.view_revision;
+        mesh.set_scene_clip_planes(&camera, Some(bounds));
+        assert_eq!(mesh.joint_surfaces.view_revision, revision);
+        mesh.set_scene_clip_planes(&camera, Some((bounds.0, bounds.1 * 1.1)));
+        assert!(mesh.joint_surfaces.view_revision > revision, "depth changes invalidate stock-skin projections");
+    }
+
+    #[test]
+    fn evaluated_snapshots_reuse_camera_frames_and_distinguish_source_edits_and_scope() {
+        use super::*;
+        let mut source = Model::default();
+        let edge = source.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+        let object = source.make_object(&std::collections::BTreeSet::from([edge]), false, "Stock").unwrap();
+        let source = Arc::new(source);
+        let mut evaluated = source.as_ref().clone();
+        evaluated.move_selection(&std::collections::BTreeSet::from([object]), DVec3::Z).unwrap();
+        let mut snapshot = ModelSnapshot::default();
+        snapshot.update_from_source(Arc::clone(&source), 1);
+        let source_revision = snapshot.revision();
+        snapshot.update_evaluated(&evaluated, 1);
+        assert!(snapshot.revision() > source_revision, "source and machined revisions cannot alias");
+        assert_eq!(snapshot.shared().as_ref(), &evaluated);
+        let first = snapshot.shared();
+        let revision = snapshot.revision();
+        for _ in 0..60 {
+            assert_eq!(snapshot.update_evaluated(&evaluated, 1), revision);
+            assert!(Arc::ptr_eq(&first, &snapshot.shared()));
+        }
+        evaluated.move_selection(&std::collections::BTreeSet::from([object]), DVec3::Z).unwrap();
+        assert!(snapshot.update_evaluated(&evaluated, 2) > revision);
+        assert_eq!(snapshot.shared().as_ref(), &evaluated);
+        let revision = snapshot.revision();
+        assert!(evaluated.enter_object(object));
+        assert!(snapshot.update_evaluated(&evaluated, 2) > revision);
+        assert_eq!(snapshot.shared().edit_context, Some(object));
+        // Returning to stock with the same source counter still replaces cuts.
+        snapshot.update_from_source(Arc::clone(&source), 2);
+        assert!(Arc::ptr_eq(&source, &snapshot.shared()));
+        snapshot.update_evaluated(&evaluated, 2);
+        assert_eq!(snapshot.shared().as_ref(), &evaluated);
+    }
+
+    #[test]
     fn grain_rows_are_staggered_and_closer_across_than_along_the_grain() {
         use super::*;
 
@@ -4226,7 +4496,7 @@ mod tests {
         use super::*;
         let camera = Camera::default();
         let size = DVec2::splat(512.);
-        let inverse = camera.matrix(size).inverse();
+        let inverse = camera.matrix_with_clip_planes(size, 0.5, 100.).inverse();
         let world = |x, y, z| inverse.project_point3(DVec3::new(x / 256. - 1., 1. - y / 256., z));
         let mut model = Model::default();
         for i in 0..96 {
@@ -4246,6 +4516,8 @@ mod tests {
         for antialias in [false, true] {
             let build = |parallel: bool| {
                 let mut mesh = Mesh::new(&camera, size);
+                mesh.set_scene_clip_planes(&camera, model.bounds());
+                assert_ne!(mesh.view.matrix(), camera.matrix(size));
                 mesh.display.fog = true;
                 mesh.display.shadow_antialiasing = antialias;
                 // An existing prefix checks both vertex and index offsets.
@@ -4262,6 +4534,8 @@ mod tests {
             };
             let serial = build(false);
             let parallel = build(true);
+            assert!(!serial.vertices.is_empty());
+            if antialias { assert!(!serial.shadow_vertices.is_empty()); }
             assert_eq!(serial.indices, parallel.indices);
             assert_eq!(serial.triangle_ranges, parallel.triangle_ranges);
             assert_eq!(bytemuck::cast_slice::<_, u8>(&serial.vertices), bytemuck::cast_slice::<_, u8>(&parallel.vertices));
@@ -4272,6 +4546,47 @@ mod tests {
                 let other = &parallel.edge_surfaces[key];
                 surfaces.iter().map(|s| (s.gradient, s.inward)).eq(other.iter().map(|s| (s.gradient, s.inward)))
             }));
+        }
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn parallel_faces_and_grain_share_scene_depth_in_both_projections() {
+        use super::*;
+        for projection in [benchup_core::Projection::Perspective, benchup_core::Projection::Parallel] {
+            let camera = Camera { projection, distance: 4., ..Default::default() };
+            let size = DVec2::splat(512.);
+            let mut model = Model::default();
+            for i in 0..96 {
+                let x = f64::from(i % 12) * 0.1;
+                let y = f64::from(i / 12) * 0.1;
+                let points = [DVec3::new(x, y, 0.), DVec3::new(x + 0.08, y, 0.),
+                    DVec3::new(x, y + 0.08, 0.)];
+                for j in 0..3 { model.add_edge(points[j], points[(j + 1) % 3]).unwrap(); }
+            }
+            let mut cache = FaceCache::default();
+            cache.update(&model);
+            assert_eq!(model.faces.len(), 96);
+            let faces: Vec<_> = model.faces.values().map(|face| FaceDraw {
+                face, cached: cache.get(face.id), color: Color32::WHITE,
+                surface: None, smooth: None, shadow: None,
+            }).collect();
+            let mut mesh = Mesh::new(&camera, size);
+            mesh.set_scene_clip_planes(&camera, model.bounds());
+            mesh.enable_gpu_edge_occlusion();
+            mesh.draw_faces(&faces);
+            let base = mesh.vertices.len();
+            assert!(base >= 96 * 3);
+            for face in &faces {
+                mesh.surface_grain(face.cached, DVec3::X, 0.85, Color32::BLACK, true);
+            }
+            mesh.normalize_parallel_depth();
+            assert_eq!(mesh.vertices[..base].iter().map(|v| v.position).collect::<Vec<_>>(),
+                mesh.vertices[base..].iter().map(|v| v.position).collect::<Vec<_>>(),
+                "batched surfaces and their grain must have identical GPU depths: {projection:?}");
+            let worker = mesh.overlay_worker(false);
+            assert_eq!(mesh.view.matrix(), worker.view.matrix(),
+                "batched edges and joint guides must share the surfaces' depth range");
         }
     }
 
@@ -4327,7 +4642,7 @@ mod tests {
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("edges.wgsl")).into()),
+            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("agent_effects.wgsl"), "\n", include_str!("edges.wgsl")).into()),
         });
         let pipelines = [
             PipelinePass::Faces,
@@ -5532,6 +5847,7 @@ mod tests {
                     [-0.8, 0.8, 0.5],
                 ]
                 .map(|position| Vertex {
+                    effect: -2.,
                     dash_phase: -1.,
                     position,
                     color: [255, 0, 0, 255],
@@ -5546,6 +5862,7 @@ mod tests {
                         [0.1, 0.6, 0.5_f32.next_down()],
                     ]
                     .map(|position| Vertex {
+                        effect: -2.,
                         dash_phase: -1.,
                         position,
                         color: if enabled { [255; 4] } else { [0, 0, 0, 255] },
@@ -5611,6 +5928,7 @@ mod tests {
                     let y1 = -0.8 + 1.6 * (y + 1) as f32 / 48.;
                     for [x, y] in [[x0, y0], [x1, y0], [x1, y1], [x0, y0], [x1, y1], [x0, y1]] {
                         fragmented_mesh.shadow_vertices.push(Vertex {
+                            effect: -2.,
                             dash_phase: -1.,
                             position: [x, y, depth(x, y)],
                             color: [255; 4],
@@ -5928,6 +6246,7 @@ mod tests {
         mesh.vertices = depths
             .into_iter()
             .map(|z| Vertex {
+                effect: -2.,
                 dash_phase: -1.,
                 position: [0., 0., z],
                 color: Color32::WHITE.to_array(),
@@ -6074,6 +6393,7 @@ mod tests {
             material_vertices: Vec::new(),
             shadow_range: 1..1,
             vertices: vec![Vertex {
+                effect: -2.,
                 dash_phase: -1.,
                 position: [0., 0., 0.5],
                 color: [255; 4],
@@ -6146,7 +6466,7 @@ mod tests {
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("edges.wgsl")).into()),
+            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("agent_effects.wgsl"), "\n", include_str!("edges.wgsl")).into()),
         });
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let pipelines = [PipelinePass::EdgeDepth, PipelinePass::Edges]
@@ -6321,7 +6641,7 @@ mod tests {
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("edges.wgsl")).into()),
+            source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("agent_effects.wgsl"), "\n", include_str!("edges.wgsl")).into()),
         });
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let pipelines = [PipelinePass::EdgeDepth, PipelinePass::Edges]

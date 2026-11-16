@@ -47,7 +47,8 @@ impl Server {
                 "name": "v0.6.6", "prerelease": false,
                 "published_at": "2026-11-08T00:00:00Z",
                 "assets": assets
-            }])).unwrap();
+            }]))
+            .unwrap();
             while !stop.load(Ordering::Relaxed) {
                 let (mut stream, _) = match listener.accept() {
                     Ok(connection) => connection,
@@ -57,6 +58,9 @@ impl Server {
                     }
                     Err(error) => panic!("Mock updater server: {error}"),
                 };
+                // macOS can inherit the listener's nonblocking mode. Wait for
+                // complete headers instead of routing an early WouldBlock as 404.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
@@ -92,21 +96,21 @@ impl Server {
                     ("301 Moved Permanently", b"")
                 } else if let Some(tail) = path.strip_prefix("/api/v3/repos/BenchUp3D/app/") {
                     location = Some(format!(
-                        "{server_base}/api/v3/repos/BenchUp3D/editor/{tail}"
+                        "{server_base}/api/v3/repos/BenchUp3D/benchup/{tail}"
                     ));
                     ("301 Moved Permanently", b"")
-                } else if path.starts_with("/api/v3/repos/BenchUp3D/editor/releases?") {
+                } else if path.starts_with("/api/v3/repos/BenchUp3D/benchup/releases?") {
                     ("200 OK", &releases)
                 } else if let Some(tail) = path.strip_prefix("/Ketchup3D/app/releases/download/") {
                     location = Some(format!(
-                        "{server_base}/BenchUp3D/editor/releases/download/{tail}"
+                        "{server_base}/BenchUp3D/benchup/releases/download/{tail}"
                     ));
                     ("302 Found", b"")
-                } else if path == format!("/BenchUp3D/editor/releases/download/v0.6.6/{feed_name}")
+                } else if path == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{feed_name}")
                 {
                     ("200 OK", &feed)
                 } else if path
-                    == format!("/BenchUp3D/editor/releases/download/v0.6.6/{package_name}")
+                    == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{package_name}")
                 {
                     ("200 OK", &package)
                 } else {
@@ -142,6 +146,34 @@ impl Drop for Server {
             worker.join().unwrap();
         }
     }
+}
+
+#[test]
+fn mock_server_waits_for_delayed_and_fragmented_request_headers() {
+    let server = Server::new("win-x64");
+    let mut stream = TcpStream::connect(server.base.trim_start_matches("http://")).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    // Give the nonblocking listener time to accept before any data arrives,
+    // then pause again with only part of the request target sent.
+    std::thread::sleep(Duration::from_millis(50));
+    stream.write_all(b"GET /api/v3/repos/Ketch").unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+    stream
+        .write_all(b"up3D/app/releases?per_page=10&page=1 HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 301 Moved Permanently\r\n"));
+    assert!(response.contains(&format!(
+        "Location: {}/api/v3/repos/BenchUp3D/app/releases?per_page=10&page=1\r\n",
+        server.base
+    )));
+    assert_eq!(
+        *server.requests.lock().unwrap(),
+        ["/api/v3/repos/Ketchup3D/app/releases?per_page=10&page=1"]
+    );
 }
 
 #[test]
@@ -203,7 +235,7 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
         );
         std::fs::write(&config.ManifestPath, new_manifest).unwrap();
         let new_manager = UpdateManager::new(
-            GithubSource::new(&format!("{}/BenchUp3D/editor", server.base), None, false),
+            GithubSource::new(&format!("{}/BenchUp3D/benchup", server.base), None, false),
             None,
             Some(config),
         )
@@ -228,7 +260,7 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
                     && path.ends_with(".nupkg"))
         );
         assert!(seen.iter().any(
-            |path| path.starts_with("/BenchUp3D/editor/releases/download/")
+            |path| path.starts_with("/BenchUp3D/benchup/releases/download/")
                 && path.ends_with(".nupkg")
         ));
     }

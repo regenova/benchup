@@ -1,16 +1,16 @@
 # BenchUp
 
-![BenchUp editor screenshot](assets/screenshots/benchup.jpg)
+![BenchUp editor screenshot](assets/screenshots/benchup.jpg?v=2026-11-15)
 
-[![Try BenchUp in your browser](https://img.shields.io/badge/Try_BenchUp_in_your_browser-d63b32?style=for-the-badge)](https://benchup3d.github.io/editor/play/)
+[![Try BenchUp in your browser](https://img.shields.io/badge/Try_BenchUp_in_your_browser-d63b32?style=for-the-badge)](https://benchup3d.github.io/benchup/play/)
 
 ## Download for desktop
 
-[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
-[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
-[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
-[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
-[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/BenchUp3D/editor/releases/latest)
+[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
+[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
+[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
+[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
+[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest)
 
 A free, open-source 3D modeling app for woodworking and furniture design, written in Rust. Plan individual boards, wood joints, and complete assemblies with exact measurements before heading to the workshop. The same editor runs as a native Windows, macOS, or Linux application and in a desktop browser through WebAssembly.
 
@@ -22,9 +22,9 @@ Model shelves, tables, cabinets, workbenches, and other furniture with precisely
 
 ### Wood joinery
 
-Create mortise-and-tenon, half-lap, tongue-and-groove, rabbet, dovetail, and finger joints between boards, including angled connections. Adjust joint dimensions and clearance with live previews. Dynamic joints update automatically when either board moves. Inspect machining diagnostics and cut guides, and trim excess material past a joint while keeping the original boards editable.
+Create mortise-and-tenon, half-lap, tongue-and-groove, rabbet, dovetail, finger, Lamello/biscuit, Domino/loose-tenon, groove, and groove-and-loose-tongue joints between boards, including angled connections. Adjust joint dimensions and clearance with live previews. Dynamic joints update automatically when either board moves. Inspect machining diagnostics and cut guides, and trim excess material past a joint while keeping the original boards editable. Biscuit and Domino pockets have adjustable width, thickness, insertion depth, and count; continuous grooves have adjustable thickness and depth. Position boards with a shared volume: the new pocket joints meet halfway through it. Loose inserts are separate parts and are not generated.
 
-![Dovetail joint between two selected boards, with joint types, tail width, pin width, angle, and clearance controls](assets/screenshots/wood-joinery-dovetail.png)
+![Dovetail joint between two selected boards, with joint types, tail width, pin width, angle, and clearance controls](assets/screenshots/wood-joinery-dovetail.jpg)
 
 ### Procedural wood material
 
@@ -32,13 +32,13 @@ Set the grain direction on groups and components and show grain-direction guides
 
 In the Materials face style, parts with assigned wood stock show procedural grain and the result of their sanding and finishing steps. Set the wood color and product appearance in the material catalog, then adjust the recipe and appearance overrides in the part's inspector. Work rates and drying times affect estimates only. Explicit face colors and Color by Tag take precedence over the finish preview.
 
-![Shelving with procedural wood grain visible across the horizontal shelves and vertical boards](assets/screenshots/procedural-wood.png)
+![Shelving with procedural wood grain visible across the horizontal shelves and vertical boards](assets/screenshots/procedural-wood.jpg)
 
 ### Router tool
 
 Select an edge with Router, then choose a profile in Properties to apply it immediately. Shape edges with chamfer, bevel, roundover, cove, rabbet, groove, Roman ogee, and bead profiles. Adjust the profile dimensions, change it later, or choose None to remove routing while preserving the original stock. Lines drawn on a solid face can also define routing paths. Saved routes contribute their length and work time to project estimates.
 
-![Close-up of a routed bead along a board edge, with the Bead profile selected in Properties](assets/screenshots/router-tool.png)
+![Close-up of a routed bead along a board edge, with the Bead profile selected in Properties](assets/screenshots/router-tool.jpg)
 
 ### Plan materials and workshop work
 
@@ -48,13 +48,23 @@ Assign stock materials and wood types to parts, configure sanding and finishing 
 
 Use the Tools menu to turn the model into printable workshop documents. Each report includes the BenchUp header, project name, and generation date.
 
-![BenchUp PDF exports, from left to right: Time & Cost Estimates with material costs and work times, Cutting Plan with a color-coded stock layout, and Workshop Labels with part marks and dimensions](assets/screenshots/pdf-exports.png)
+![BenchUp PDF exports, from left to right: Time & Cost Estimates with material costs and work times, Cutting Plan with a color-coded stock layout, and Workshop Labels with part marks and dimensions](assets/screenshots/pdf-exports.jpg)
 
 - **Time & Cost Estimates** summarizes material costs, hands-on work, drying and waiting time, and the sequential total. Detailed tables break down stock and finishing supplies, workshop tasks, and joinery allowances. Use it to plan purchases and time; labor is not included in the material price.
 - **Cutting Plan** groups matching parts by material and size, lists quantities and finished cutting dimensions, and lays out marked parts on the selected stock. Color-coded diagrams show part placement, saw kerf, and offcuts, with grain direction and rotation settings taken into account. Parts that do not fit the stock are flagged separately.
 - **Workshop Labels** creates one printable label per piece, with the part mark, group or component name, and dimensions. Cut along the dotted borders and attach the labels to keep similar boards identifiable during assembly. The marks match those in the cutting plan.
 
 Cutting plans and labels can cover selected parts or all visible parts in the project. Assign stock materials to the parts first, and verify dimensions before cutting.
+
+## Create with your AI agent
+
+Ask your AI coding agent to build a model in BenchUp: “Use benchup to create a small bookshelf.” With the BenchUp command-line tool installed, agents such as Codex, Claude Code, and Cursor can create and edit `.bup` projects, add boards and joints, check the model, and generate previews. Open the result in BenchUp to inspect it and keep editing.
+
+![An AI agent using the BenchUp CLI to create a small bookshelf, shown in the editor with dimensions and joints alongside the agent's completion message](assets/screenshots/ai-agent-bookshelf.jpg)
+
+The example above is a 600 × 300 × 900 mm birch plywood bookshelf with three compartments and a recessed base. The agent reports that all 12 joints passed validation.
+
+Start with the [CLI installation and setup](docs/cli.md), then have your agent read `benchup guide` for modeling conventions and woodworking recipes. The same tools are also available through the CLI's MCP server for agents that support MCP.
 
 ## Documentation
 
@@ -213,8 +223,9 @@ python3 scripts/desktop_release.py version --tag vX.Y.Z
 python3 scripts/desktop_release.py notes --tag vX.Y.Z
 ```
 
-Refresh the README screenshot by launching an existing desktop executable as
-described below. Deploy requests do not run local builds or tests; GitHub Actions
+Deployments reuse the existing README and website screenshots. Refresh them only
+when explicitly requested, using the procedure below. Deploy requests do not run
+local builds or tests; GitHub Actions
 performs the desktop and browser builds, tests, and packaging. Commit and push
 the release changes and notes before creating and pushing the matching tag.
 Release validation rejects missing or mismatched notes. The same
@@ -306,8 +317,8 @@ explicitly. It launches the desktop app in an isolated temporary profile, loads
 camera and display settings, dismisses open dialogs and popups, captures the
 settled window at 1920 × 1080, and updates `assets/screenshots/benchup.jpg` and its
 README link. Visually verify that no modal remains open before using the image.
-For a release, update the landing page and its social preview references to
-the same capture.
+When refreshing the screenshot, update the landing page and its social preview
+references to the same capture.
 It never compiles the app, runs tests, or starts benchmarks. The screenshot
 reflects the existing executable; a missing executable is reported without
 building one.

@@ -36,12 +36,14 @@ jobs:
         run: |
           python scripts/desktop_release.py version --tag "$TAG_NAME"
           python -m unittest discover -s scripts -p 'test_install_linux_dependencies.py'
+          python -m unittest discover -s scripts -p 'test_install_linux_desktop.py'
           python -m unittest discover -s scripts -p 'test_desktop_release.py'
           python -m unittest discover -s scripts -p 'test_verify_update_transfer.py'
 
       - name: Verify old updater URLs survived the repository transfer
         env:
           SOURCE_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: python scripts/verify_update_transfer.py --repository "$SOURCE_REPOSITORY"
 
   build:
@@ -234,6 +236,11 @@ jobs:
 
       - name: Test native import and export fixtures
         run: bash scripts/ci_cargo.sh test -p benchup-io -p benchup-skp --profile ci-test --locked --target "${{ matrix.target }}"
+
+      # Includes the replay of the agent evaluation's reference solutions
+      # (crates/benchup-cli/tests/evals.rs); the agent rounds themselves are run on demand.
+      - name: Test the agent tools and command line
+        run: bash scripts/ci_cargo.sh test -p benchup-tools -p benchup-cli --profile ci-test --locked --target "${{ matrix.target }}"
 
   wasm:
     name: Build WebAssembly

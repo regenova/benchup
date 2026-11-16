@@ -140,7 +140,38 @@ fn selected_guides_render_a_distinct_highlight() {
 }
 
 #[test]
-fn tape_guide_follows_the_tape_from_an_edge_and_supports_exact_entry_and_undo() {
+fn eraser_strokes_highlight_the_guides_they_will_delete() {
+    let mut h = Harness::new();
+    let id = h.app.doc.model.add_guide(DVec3::Y, Some(DVec3::X)).unwrap();
+    h.app.set_tool(Tool::Erase);
+    let point = h.at(DVec3::new(1., 1., 0.));
+    let erased_color = |h: &mut Harness| {
+        let rect = h.app.viewport;
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, h.size)),
+            time: Some(h.time),
+            ..Default::default()
+        };
+        let output = h.ctx.run_test_ui(input, |ui| {
+            h.app.paint_construction_guides(ui.painter(), rect);
+        });
+        output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::LineSegment { stroke, .. } if stroke.color == Color32::from_rgb(220, 91, 76)))
+    };
+    h.pointer(point - egui::vec2(0., 20.), egui::PointerButton::Primary, true, false);
+    h.frame(
+        vec![egui::Event::PointerMoved(point + egui::vec2(0., 20.))],
+        egui::Modifiers::NONE,
+    );
+    assert!(h.app.doc.model.guides.contains_key(&id));
+    assert!(erased_color(&mut h), "pending erase must tint the guide");
+    h.pointer(point + egui::vec2(0., 20.), egui::PointerButton::Primary, false, false);
+    assert!(!h.app.doc.model.guides.contains_key(&id));
+    assert!(!erased_color(&mut h));
+}
+
+#[test]
+fn tape_guide_from_an_edge_is_parallel_to_it_and_supports_exact_entry_and_undo() {
     let mut h = Harness::new();
     h.app
         .doc
@@ -157,14 +188,16 @@ fn tape_guide_follows_the_tape_from_an_edge_and_supports_exact_entry_and_undo() 
     );
     let tape_direction = h.app.snap.unwrap().point.normalize();
     assert!(tape_direction.x > 0.1 && tape_direction.y < -0.1);
+    // Dragging away from a horizontal edge offsets a horizontal guide.
     let preview = h.app.measurement_guide().unwrap();
-    assert!(preview.direction.unwrap().distance(tape_direction) < 1e-6);
+    assert!(preview.direction.unwrap().dot(DVec3::X).abs() > 1. - 1e-6);
     h.app.length_input = "250mm".into();
     h.key(Key::Enter);
     let guide = h.app.doc.model.guides.values().next().unwrap();
-    assert!(guide.direction.unwrap().distance(tape_direction) < 1e-6);
-    assert!(guide.origin.distance(tape_direction * 0.25) < 1e-6);
-    assert!(guide.origin.cross(guide.direction.unwrap()).length() < 1e-6);
+    assert!(guide.direction.unwrap().dot(DVec3::X).abs() > 1. - 1e-6);
+    // Exact entry is the perpendicular offset from the edge.
+    assert!((guide.origin.y + 0.25).abs() < 1e-6);
+    assert!(guide.origin.z.abs() < 1e-6);
     assert_eq!(h.app.doc.model.edges, geometry.edges);
     assert_eq!(h.app.doc.model.vertices, geometry.vertices);
     assert!(h.app.doc.model.faces.is_empty());

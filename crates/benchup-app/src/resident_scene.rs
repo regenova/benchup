@@ -84,6 +84,7 @@ struct Uniform {
     marker_fill: [f32; 4],
     scale_pivot: [f32; 4],
     scale_factors: [f32; 4],
+    agent_effect: [f32; 4],
 }
 #[derive(Default)]
 pub(super) struct Cache {
@@ -644,10 +645,11 @@ impl SceneCache {
         let toward_eye = (eye - key.camera.target).normalize();
         let light =
             (toward_eye * 0.8 - key.camera.right() * 0.45 + key.camera.up() * 0.65).normalize();
-        let appearance = self.resident.hierarchy.as_ref().unwrap().update(
+        let appearance = self.resident.hierarchy.as_ref().unwrap().update_with_effects(
             &mut self.resident.appearance,
             key,
             &self.resident.removed,
+            &self.agent_effects.starts,
         );
         if self.resident.state_capacity != appearance.len() {
             self.resident.states = Arc::new(OnceLock::new());
@@ -720,6 +722,7 @@ impl SceneCache {
                     (scale.pivot - geometry.origin).extend(1.).as_vec4().to_array()),
                 scale_factors: self.scale_transform.map_or([1.; 4], |scale|
                     scale.factors.extend(0.).as_vec4().to_array()),
+                agent_effect: self.agent_effects.parameters(&key.camera, rect),
                 flags: [
                     0.,
                     if key.camera.projection == benchup_core::Projection::Parallel {
@@ -744,7 +747,7 @@ impl SceneCache {
 /// A conservative camera-space bounds test increases depth precision without
 /// clipping any model geometry. Close/inside views retain the original near
 /// plane; parallel views use finite scene bounds instead of a 100,000 km slab.
-fn clip_planes(camera: &Camera, bounds: (DVec3, DVec3)) -> (f64, f64) {
+pub(super) fn clip_planes(camera: &Camera, bounds: (DVec3, DVec3)) -> (f64, f64) {
     let center = (bounds.0 + bounds.1) * 0.5;
     let half = (bounds.1 - bounds.0) * 0.5;
     let forward = (camera.target - camera.eye()).normalize();
@@ -1011,7 +1014,7 @@ pub(super) fn install(
 ) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("BenchUp resident world geometry"),
-        source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("resident_scene.wgsl")).into()),
+        source: wgpu::ShaderSource::Wgsl(concat!(include_str!("surface_appearance.wgsl"), "\n", include_str!("agent_effects.wgsl"), "\n", include_str!("resident_scene.wgsl")).into()),
     });
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Resident camera"),
@@ -1105,7 +1108,7 @@ pub(super) fn install(
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some(if visibility {
-                    "fragment_visibility"
+                    "fragment_visibility_effect"
                 } else if depth {
                     "edge_depth"
                 } else if edge {
@@ -1512,8 +1515,9 @@ mod tests {
             ..Default::default()
         };
         let shared = include_str!("surface_appearance.wgsl");
-        for shader in [include_str!("resident_scene.wgsl"), include_str!("edges.wgsl")] {
-            let source = format!("{shared}\n{shader}");
+        for shader in [include_str!("resident_scene.wgsl"), include_str!("edges.wgsl"), include_str!("agent_robot.wgsl")] {
+            let effects = include_str!("agent_effects.wgsl");
+            let source = format!("{shared}\n{effects}\n{shader}");
             let module = wgsl::parse_str(&source).unwrap();
             let info = valid::Validator::new(Default::default(), Default::default())
                 .validate(&module)
@@ -2026,6 +2030,59 @@ mod tests {
         assert_ne!(flags(&values, face) & REMOVED, 0);
         let values = hierarchy.update(&mut cache, &key, &Default::default());
         assert_eq!(flags(&values, face) & (ERASING | REMOVED), 0);
+    }
+
+    #[test]
+    fn agent_animation_and_selection_retain_large_scene_geometry() {
+        let model = model(4096);
+        let mut entities = EntityCache::default();
+        let mut faces = FaceCache::default();
+        entities.update(&model);
+        faces.update(&model);
+        let mut cache = SceneCache::default();
+        let mut key = key();
+        let ctx = egui::Context::default();
+        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
+        let mut geometry = None;
+        let mut animation = agent_effects::State::default();
+        for (now, mode) in [(5., Some(agent_effects::Mode::Looking)),
+            (5.3, Some(agent_effects::Mode::Looking)),
+            (5.6, Some(agent_effects::Mode::Preparing)), (6.1, None)] {
+            key.selected = model.faces.keys().take(if now > 5. { 10 } else { 0 }).copied().collect();
+            cache.agent_effects = animation.frame(now, mode.map(|mode| (mode, 5.)), model.bounds());
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let references = cache.resident_reference_mesh(&key, &model);
+                cache.paint_resident(&key, &model, &faces, &entities, ui, rect, references);
+            });
+            output.textures_delta.clear();
+            let current = cache.resident.geometry.as_ref().unwrap();
+            if let Some(previous) = &geometry { assert!(Arc::ptr_eq(previous, current)); }
+            geometry = Some(current.clone());
+            assert_eq!(cache.resident_builds(), 1);
+        }
+    }
+
+    #[test]
+    fn agent_timestamps_update_appearance_without_rebuilding_geometry_and_restore_cleanly() {
+        let model = model(1);
+        let mut entities = EntityCache::default();
+        let mut faces = FaceCache::default();
+        entities.update(&model);
+        faces.update(&model);
+        let hierarchy = appearance::Hierarchy::new(&model, &entities, &faces);
+        let mut cache = appearance::Cache::default();
+        let key = key();
+        let id = *model.faces.keys().next().unwrap();
+        let slot = hierarchy.slot(id) as usize;
+        let starts = Arc::new(BTreeMap::from([(id, 4095.5)]));
+        let values = hierarchy.update_with_effects(&mut cache, &key, &Default::default(), &starts);
+        assert_eq!(values[slot] & 128, 128);
+        assert_eq!(values[slot] >> 8, 4_095_500);
+        assert!(Arc::ptr_eq(&values,
+            &hierarchy.update_with_effects(&mut cache, &key, &Default::default(), &starts)));
+        let restored = hierarchy.update(&mut cache, &key, &Default::default());
+        assert_eq!(restored[slot] & 128, 0);
+        assert_eq!(restored[slot] >> 8, 0);
     }
 
     #[test]

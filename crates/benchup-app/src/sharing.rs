@@ -368,11 +368,17 @@ impl BenchUpApp {
                 .map_or(0, |l| l.file_updated_at),
         });
         let path = self.project.path.clone();
+        // A collaborator's revision of the same project is not a different
+        // project: waiting agent calls still apply.
+        let other_project = self.doc.shared_project.as_ref().is_none_or(|open| open.id != remote.id);
         // Do not replace the whole project: preserve file operation / unsaved prompts.
         let edit_context = self.doc.model.edit_context;
         let previous_selection = self.sharing.desired.clone();
         self.doc.project_author = doc.project_author;
         self.doc.model = doc.model;
+        if other_project {
+            self.doc_epoch += 1;
+        }
         self.doc.model.edit_context =
             edit_context.filter(|id| self.doc.model.objects.contains_key(id));
         self.doc.name = doc.name;
@@ -741,6 +747,54 @@ impl BenchUpApp {
                 && self.sharing.frame_selection.as_ref().unwrap_or(&self.selected)
                     == &self.sharing.confirmed
                 && self.sharing.desired == self.sharing.confirmed)
+    }
+    /// The project is shared with this user for viewing only.
+    pub(super) fn shared_view_only(&self) -> bool {
+        self.account.sharing_available() && self.doc.shared_project.is_some() && self.sharing.role == "view"
+    }
+    /// Editing waits only for the server to confirm the selection lease:
+    /// access, connection and project data are all fine.
+    pub(super) fn shared_lease_pending(&self, ctx: &egui::Context) -> bool {
+        self.account.sharing_available()
+            && self.doc.shared_project.is_some()
+            && matches!(self.sharing.role.as_str(), "owner" | "edit")
+            && self.sharing.conflict.is_none()
+            && self.sharing.baseline.is_some()
+            && ctx.input(|i| i.time) - self.sharing.last_ack < 10.
+            && (self.sharing.frame_selection.as_ref().unwrap_or(&self.selected) != &self.sharing.confirmed
+                || self.sharing.desired != self.sharing.confirmed)
+    }
+    /// Puts the shared-project state where agent tests need it: `role`
+    /// access, a live connection (acknowledged at time 0), and the lease
+    /// `desired` and `confirmed` so far.
+    #[cfg(test)]
+    pub(super) fn simulate_shared_access(&mut self, role: &str, desired: BTreeSet<u64>, confirmed: BTreeSet<u64>) {
+        self.sharing.role = role.into();
+        self.sharing.baseline = Some(serde_json::json!({}));
+        self.sharing.last_ack = 0.;
+        self.sharing.desired = desired;
+        self.sharing.confirmed = confirmed;
+    }
+    /// The selection changed outside the frame's own bookkeeping (an agent
+    /// call runs in `App::logic`, before `sharing_before_frame`): ask the
+    /// server for the lease on it, as `sharing_after_frame` does for clicks.
+    pub(super) fn selection_changed_outside_frame(&mut self, before: &BTreeSet<u64>) {
+        if self.account.sharing_available() && self.doc.shared_project.is_some() && *before != self.selected {
+            self.sharing.desired = self.selected.clone();
+            self.sharing.selection_dirty = true;
+        }
+    }
+    /// The selection this user asked the server for, and whether it still has
+    /// to be sent.
+    #[cfg(test)]
+    pub(super) fn requested_shared_selection(&self) -> (&BTreeSet<u64>, bool) {
+        (&self.sharing.desired, self.sharing.selection_dirty)
+    }
+    /// The entities this user holds the edit lease on, when the project is
+    /// shared and sharing is available; `None` means edits are unrestricted.
+    pub(super) fn shared_lease(&self) -> Option<BTreeSet<u64>> {
+        (self.account.sharing_available() && self.doc.shared_project.is_some())
+            .then(|| self.sharing.confirmed.clone())
     }
     pub(super) fn shared_edit_block_reason(&self, ctx: &egui::Context) -> &'static str {
         if !matches!(self.sharing.role.as_str(), "owner" | "edit") {
@@ -1928,6 +1982,36 @@ mod websocket_state_tests {
         assert_eq!(app.selected, BTreeSet::from([edge]));
         assert_eq!(app.sharing.desired, BTreeSet::from([edge]));
         assert!(!app.sharing.selection_dirty);
+    }
+    #[test]
+    fn a_collaborator_revision_keeps_waiting_agent_calls_but_another_project_does_not() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.doc.shared_project = Some(benchup_core::SharedProject {
+            server: "https://sharing.example".into(),
+            id: "a".repeat(48),
+            revision: 1,
+            server_updated_at: 100,
+            file_updated_at: 100,
+        });
+        let remote = |app: &BenchUpApp, id: &str, revision: u64| Remote {
+            id: id.repeat(48),
+            role: "edit".into(),
+            revision,
+            updated_at: 100,
+            server_time: 100,
+            document: Some(serde_json::to_value(app.doc.clone()).unwrap()),
+            requests: vec![],
+            locks: vec![],
+            actor: None,
+        };
+        let epoch = app.doc_epoch;
+        let revision = remote(&app, "a", 2);
+        app.apply_shared_remote(&ctx, &revision).unwrap();
+        assert_eq!(app.doc_epoch, epoch, "a revision of the open project is the same project");
+        let other = remote(&app, "b", 3);
+        app.apply_shared_remote(&ctx, &other).unwrap();
+        assert_eq!(app.doc_epoch, epoch + 1);
     }
 }
 
