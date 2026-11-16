@@ -16,10 +16,12 @@ pub(super) enum Section {
     Grid,
     StockPricing,
     SurfaceTreatment,
-    Diagnostics,
+    // Older preferences opened this page under its former Diagnostics name.
+    #[serde(alias = "Diagnostics")]
     Rendering,
     Tools,
     ExportScales,
+    AgentConnection,
 }
 
 impl Section {
@@ -39,7 +41,7 @@ impl Section {
             ),
             (
                 tr!("settings.system"),
-                &[Self::Diagnostics, Self::Rendering, Self::ExportScales],
+                &[Self::AgentConnection, Self::Rendering, Self::ExportScales],
             ),
         ]
     }
@@ -52,10 +54,10 @@ impl Section {
         Self::Colors,
         Self::StockPricing,
         Self::SurfaceTreatment,
-        Self::Diagnostics,
         Self::Rendering,
         Self::Tools,
         Self::ExportScales,
+        Self::AgentConnection,
     ];
     fn label(self) -> &'static str {
         match self {
@@ -66,10 +68,10 @@ impl Section {
             Self::Grid => tr!("settings.grid"),
             Self::StockPricing => tr!("settings.material"),
             Self::SurfaceTreatment => tr!("settings.sanding_finishing"),
-            Self::Diagnostics => tr!("settings.diagnostics"),
             Self::Rendering => tr!("settings.rendering"),
             Self::Tools => tr!("settings.tools"),
             Self::ExportScales => tr!("settings.export_scales"),
+            Self::AgentConnection => tr!("agent_link.title"),
         }
     }
 
@@ -82,10 +84,10 @@ impl Section {
             Self::Grid => "settings_grid",
             Self::StockPricing => "settings_stock",
             Self::SurfaceTreatment => "time_estimates_sanding",
-            Self::Diagnostics => "diagnostics",
             Self::Rendering => "settings_colors",
             Self::Tools => "settings_shortcuts",
             Self::ExportScales => "units",
+            Self::AgentConnection => "share",
         }
     }
 
@@ -209,6 +211,7 @@ pub(super) struct GeneralSettings {
     pub tool_keys: Vec<String>,
     pub stock: stock_settings::Settings,
     pub export_scale: export_scale::Preferences,
+    pub agent: agent_link::Preferences,
 }
 
 impl Default for GeneralSettings {
@@ -233,6 +236,7 @@ impl Default for GeneralSettings {
             volume: Default::default(),
             stock: Default::default(),
             export_scale: Default::default(),
+            agent: Default::default(),
             tool_keys: TOOLS.iter().map(|(_, key)| key.to_string()).collect(),
         }
     }
@@ -296,6 +300,7 @@ impl GeneralSettings {
         self.stock.normalize();
         self.export_scale.normalize();
         self.volume.sanitize();
+        self.agent.normalize();
         // Earlier builds saved bare codes; every catalog now uses language_REGION.
         match self.language.as_str() {
             "en" => self.language = "en_US".into(),
@@ -579,10 +584,10 @@ impl BenchUpApp {
                                     Section::Grid => "settings/grid",
                                     Section::StockPricing => "settings/stock",
                                     Section::SurfaceTreatment => "settings/treatment",
-                                    Section::Diagnostics => "settings/diagnostics",
                                     Section::Rendering => "settings/rendering",
                                     Section::Tools => "settings/tools",
                                     Section::ExportScales => "settings/export_scales",
+                                    Section::AgentConnection => "settings/agent_connection",
                                 };
                                 let scroll = sidebar::restored_scroll_area(
                                     ui,
@@ -637,6 +642,7 @@ impl BenchUpApp {
     fn settings_contents(&mut self, ui: &mut egui::Ui) {
         match self.general_settings.section {
             Section::ExportScales => self.general_settings.export_scale.settings_ui(ui),
+            Section::AgentConnection => self.agent_link_settings(ui),
             Section::Tools => {
                 ui.checkbox(
                     &mut self.general_settings.reset_axis_locks_on_action,
@@ -727,9 +733,6 @@ impl BenchUpApp {
             Section::Rendering => {
                 ui.checkbox(&mut self.doc.display.shadow_antialiasing, tr!("settings.shadow_antialiasing"))
                     .on_hover_text(tr!("settings.smooth_shadow_boundaries_with_4_multisampling_only_shadows"));
-            }
-            Section::Diagnostics => {
-                ui.text_weak(tr!("settings.tools_for_checking_performance_and_troubleshooting"));
                 ui.checkbox(&mut self.general_settings.show_fps, tr!("settings.show_frames_per_second"))
                     .on_hover_text(tr!("settings.display_the_rendering_frame_rate_in_the_lower"));
             }
@@ -1126,6 +1129,23 @@ mod tests {
         assert_eq!(grouped.len(), super::Section::ALL.len());
         for section in super::Section::ALL {
             assert_eq!(grouped.iter().filter(|&&value| value == section).count(), 1);
+        }
+    }
+
+    #[test]
+    fn rendering_includes_frame_rate_and_loads_the_former_diagnostics_page() {
+        let legacy: GeneralSettings = serde_json::from_str(r#"{"section":"Diagnostics","show_fps":true}"#).unwrap();
+        assert_eq!(legacy.section, Section::Rendering);
+        assert!(legacy.show_fps);
+        assert_eq!(serde_json::to_value(&legacy).unwrap()["section"], "Rendering");
+
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.general_settings = legacy;
+        let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
+        let text = rendered_text(&output.shapes);
+        for label in [tr!("settings.shadow_antialiasing"), tr!("settings.show_frames_per_second")] {
+            assert!(text.iter().any(|value| value == label));
         }
     }
     use super::*;

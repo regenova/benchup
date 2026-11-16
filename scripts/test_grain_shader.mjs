@@ -25,7 +25,7 @@ try {
  socket.onmessage=event=>{const m=JSON.parse(event.data);const p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result)}};
  const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}))});
  await call('Page.navigate',{url:'http://127.0.0.1:8080/'});
- const source=(await Promise.all(['surface_appearance.wgsl','edges.wgsl'].map(n=>readFile(new URL('../crates/benchup-app/src/'+n,import.meta.url),'utf8')))).join('\n');
+ const source=(await Promise.all(['surface_appearance.wgsl','agent_effects.wgsl','edges.wgsl'].map(n=>readFile(new URL('../crates/benchup-app/src/'+n,import.meta.url),'utf8')))).join('\n');
  const pairs=Array.from({length:32},(_,i)=>[i%2?-i*31:i*47,i%3?i-17:-i*113]);
  const expected=pairs.map(([column,row])=>{
   const mask=(1n<<64n)-1n;

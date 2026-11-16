@@ -5,7 +5,7 @@ description: Design or edit furniture and woodworking projects in BenchUp (.bup 
 
 # BenchUp projects
 
-Use the `benchup` CLI to read and edit `.bup` projects. It edits the file, not an open BenchUp window.
+Use the `benchup` CLI to read and edit `.bup` projects. Without `--live` it edits the file, not an open BenchUp window. When the user wants you to edit the project open in BenchUp and `BENCHUP_AGENT_TOKEN` is set (Settings → Agent connection in BenchUp), use `--live` instead of the file name: `benchup scene --live`, `benchup call --live --batch -`, `benchup render --live`.
 
 1. Run `benchup guide` once and follow it. It explains the axes (the front faces -Y), joint roles, the batch workflow and recipes.
 2. Read the project with `benchup scene file.bup` (on big projects, filter it: `benchup scene file.bup '{"depth":0}'`). Create a new one with `benchup new file.bup --name "..."`.

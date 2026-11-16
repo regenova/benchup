@@ -94,6 +94,7 @@ pub(super) struct InspectorPreferences {
     section_aliases: std::collections::BTreeMap<String, String>,
     scroll_positions: std::collections::BTreeMap<String, [f32; 2]>,
     modal_sizes: std::collections::BTreeMap<String, [f32; 2]>,
+    agent_setup_tab: agent_link::SetupTab,
 }
 
 impl Default for InspectorPreferences {
@@ -142,6 +143,7 @@ impl Default for InspectorPreferences {
             section_aliases: Default::default(),
             scroll_positions: Default::default(),
             modal_sizes: Default::default(),
+            agent_setup_tab: Default::default(),
         }
     }
 }
@@ -177,6 +179,26 @@ mod guide_preference_tests {
         fn set_string(&mut self, key: &str, value: String) { self.values.insert(key.into(), value); }
         fn remove_string(&mut self, key: &str) { self.values.remove(key); }
         fn flush(&mut self) { self.flushed = true; }
+    }
+
+    #[test]
+    fn agent_setup_tab_defaults_and_saves_without_a_model_edit() {
+        let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.agent_setup_tab, agent_link::SetupTab::ClaudeCode);
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = Storage::default();
+        for tab in agent_link::SetupTab::ALL {
+            app.agent_link.setup_tab = tab;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.agent_link.setup_tab, tab);
+            storage.flushed = false;
+        }
     }
 
     #[test]
@@ -907,6 +929,7 @@ impl BenchUpApp {
         self.account.open = preferences.account_open;
         self.account.menu_open = preferences.account_menu_open;
         self.general_settings = preferences.general.clone();
+        self.agent_link.setup_tab = preferences.agent_setup_tab;
         if first_launch {
             self.general_settings.language = detect_language().into();
         }
@@ -1127,6 +1150,7 @@ impl BenchUpApp {
                     .positions
                     .clone()
             }),
+            agent_setup_tab: self.agent_link.setup_tab,
         }
     }
 
@@ -1818,6 +1842,30 @@ mod preference_tests {
         assert_eq!(restored.general_settings.export_scale.factor(), Some(2.5 / 7.));
         let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
         assert_eq!(old.general.export_scale, export_scale::Preferences::default());
+    }
+
+    #[test]
+    fn agent_connection_survives_reload_without_a_model_edit() {
+        let ctx = egui::Context::default();
+        let mut storage = SavedPreferences::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        app.general_settings.section = settings::Section::AgentConnection;
+        app.general_settings.agent.enabled = true;
+        app.general_settings.agent.port = 5000;
+        storage.flushed = false;
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert!(restored.general_settings.agent.enabled);
+        assert_eq!(restored.general_settings.agent.port, 5000);
+        assert_eq!(restored.general_settings.section, settings::Section::AgentConnection);
+        // Older preferences leave the connection off.
+        let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert!(!old.general.agent.enabled);
     }
 
     #[test]
@@ -2549,13 +2597,13 @@ mod preference_tests {
     }
 
     #[test]
-    fn frame_rate_diagnostics_save_immediately_and_default_off() {
+    fn frame_rate_rendering_settings_save_immediately_and_default_off() {
         let ctx = egui::Context::default();
         let mut storage = SavedPreferences::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         for enabled in [true, false] {
             app.general_settings.show_fps = enabled;
-            app.general_settings.section = settings::Section::Diagnostics;
+            app.general_settings.section = settings::Section::Rendering;
             storage.flushed = false;
             app.persist_inspector_changes(&ctx, Some(&mut storage), false);
             assert!(storage.flushed);
@@ -2563,10 +2611,29 @@ mod preference_tests {
             let mut restored = BenchUpApp::with_document(Document::default(), None, true);
             restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
             assert_eq!(restored.general_settings.show_fps, enabled);
-            assert_eq!(restored.general_settings.section, settings::Section::Diagnostics);
+            assert_eq!(restored.general_settings.section, settings::Section::Rendering);
         }
         let old: settings::GeneralSettings = serde_json::from_str("{}").unwrap();
         assert!(!old.show_fps);
+    }
+
+    #[test]
+    fn saved_diagnostics_page_restores_as_rendering_without_losing_preferences() {
+        let mut storage = SavedPreferences::default();
+        let mut legacy = InspectorPreferences::default();
+        legacy.general.section = settings::Section::Rendering;
+        legacy.general.show_fps = true;
+        legacy.general.orbit_speed = 2.;
+        eframe::set_value(&mut storage, PREFERENCE_KEY, &legacy);
+        // Exercise the storage format used by desktop and browser installs.
+        let saved = storage.values.get_mut(PREFERENCE_KEY).unwrap();
+        assert!(saved.contains("Rendering"));
+        *saved = saved.replacen("Rendering", "Diagnostics", 1);
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(app.general_settings.section, settings::Section::Rendering);
+        assert!(app.general_settings.show_fps);
+        assert_eq!(app.general_settings.orbit_speed, 2.);
     }
 
     #[test]

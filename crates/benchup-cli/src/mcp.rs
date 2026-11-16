@@ -16,8 +16,17 @@ pub trait Backend {
     fn batch(&mut self, calls: Vec<(String, Value)>, dry_run: bool) -> (Value, bool);
     /// Undo or redo the last change to the file (`undo`).
     fn history(&mut self, redo: bool) -> (Value, bool);
-    /// A PNG of the model from a view, and what it shows (`render_view`).
-    fn render(&mut self, view: &str, width: u32, height: u32) -> Result<(Vec<u8>, Value), String>;
+    /// A PNG of the model from a view, as base64, and what it shows
+    /// (`render_view`).
+    fn render(&mut self, view: &str, width: u32, height: u32) -> Result<(String, Value), String>;
+    /// What the agent is told about this server in `initialize`.
+    fn instructions(&self) -> &'static str {
+        INSTRUCTIONS
+    }
+    /// Only live sessions can report activity in the open app.
+    fn supports_activity(&self) -> bool { false }
+    /// The MCP client introduced itself (`clientInfo.name`).
+    fn set_client(&mut self, _client: &str) {}
 }
 
 /// `render_view` is served here rather than by the shared tools: its result
@@ -31,6 +40,17 @@ fn render_view_tool() -> Value {
             "width": {"type": "integer", "minimum": benchup_tools::render::MIN_SIZE, "maximum": benchup_tools::render::MAX_SIZE},
             "height": {"type": "integer", "minimum": benchup_tools::render::MIN_SIZE, "maximum": benchup_tools::render::MAX_SIZE}},
             "additionalProperties": false},
+    })
+}
+
+fn agent_activity_tool() -> Value {
+    json!({
+        "name": "agent_activity",
+        "description": "Report the lifetime of your work in the open BenchUp app. Call with phase: analyzing BEFORE you start reading/planning, preparing while preparing changes, and finished AFTER your final verification and BEFORE replying to the user, including when stopping after an error. The robot stays visible between tool calls until finished. Ordinary calls update its looking/gear animation automatically. This changes no model data, selection or undo history. Only available in live mode.",
+        "inputSchema": {"type": "object", "properties": {
+            "phase": {"type": "string", "enum": ["analyzing", "preparing", "finished"]}
+        }, "required": ["phase"], "additionalProperties": false},
+        "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
     })
 }
 
@@ -77,7 +97,7 @@ fn render_view(backend: &mut dyn Backend, arguments: &Value) -> Value {
     match backend.render(view, size("width", 1000), size("height", 750)) {
         Ok((png, info)) => json!({
             "content": [
-                {"type": "image", "data": benchup_tools::render::base64(&png), "mimeType": "image/png"},
+                {"type": "image", "data": png, "mimeType": "image/png"},
                 {"type": "text", "text": info.to_string()},
             ],
             "isError": false,
@@ -112,12 +132,13 @@ fn handle(message: &Value, backend: &mut dyn Backend, client: &mut String) -> Op
             let version = SUPPORTED.iter().find(|v| **v == requested).unwrap_or(&SUPPORTED[0]);
             if let Some(name) = params.pointer("/clientInfo/name").and_then(Value::as_str) {
                 *client = name.to_owned();
+                backend.set_client(name);
             }
             ok(json!({
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "benchup", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": INSTRUCTIONS,
+                "instructions": backend.instructions(),
             }))
         }
         "ping" => ok(json!({})),
@@ -125,6 +146,7 @@ fn handle(message: &Value, backend: &mut dyn Backend, client: &mut String) -> Op
             let mut tools = benchup_tools::mcp_tools();
             tools.push(render_view_tool());
             tools.extend(session_tools());
+            if backend.supports_activity() { tools.push(agent_activity_tool()); }
             ok(json!({"tools": tools}))
         }
         "tools/call" => {
@@ -172,4 +194,40 @@ pub fn serve<R: BufRead, W: Write>(reader: R, mut writer: W, backend: &mut dyn B
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[derive(Default)]
+    struct ActivityBackend { live: bool, calls: Vec<(String, Value)> }
+    impl Backend for ActivityBackend {
+        fn supports_activity(&self) -> bool { self.live }
+        fn call(&mut self, _: &str, name: &str, arguments: Value) -> (Value, bool) {
+            self.calls.push((name.into(), arguments));
+            (json!({"ok": true}), true)
+        }
+        fn batch(&mut self, _: Vec<(String, Value)>, _: bool) -> (Value, bool) { unreachable!() }
+        fn history(&mut self, _: bool) -> (Value, bool) { unreachable!() }
+        fn render(&mut self, _: &str, _: u32, _: u32) -> Result<(String, Value), String> { unreachable!() }
+    }
+
+    #[test]
+    fn activity_tool_is_advertised_only_for_live_backends_and_reports_are_forwarded() {
+        let mut backend = ActivityBackend::default();
+        let mut client = "test-agent".into();
+        let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
+        let offline = handle(&list, &mut backend, &mut client).unwrap();
+        assert!(!offline["result"]["tools"].as_array().unwrap().iter().any(|tool| tool["name"] == "agent_activity"));
+        backend.live = true;
+        let live = handle(&list, &mut backend, &mut client).unwrap();
+        let tool = live["result"]["tools"].as_array().unwrap().iter().find(|tool| tool["name"] == "agent_activity").unwrap();
+        assert_eq!(tool["inputSchema"]["properties"]["phase"]["enum"], json!(["analyzing", "preparing", "finished"]));
+        for phase in ["analyzing", "preparing", "finished"] {
+            let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "agent_activity", "arguments": {"phase": phase}}});
+            let answer = handle(&call, &mut backend, &mut client).unwrap();
+            assert_eq!(answer["result"]["isError"], false);
+            assert_eq!(backend.calls.last().unwrap(), &("agent_activity".to_owned(), json!({"phase": phase})));
+        }
+    }
 }
