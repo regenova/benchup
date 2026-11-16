@@ -64,6 +64,8 @@ Orbiting always uses the combined bounding-box center of all objects, including 
 
 ## Views and cameras
 
+View → Reference volume, below Sections, controls a fixed reference box and its width (X), depth (Y), and height (Z) in the workspace's length units. The box is centered on the origin with its base at Z = 0. Face portions beyond its bounds receive a transparent red tint and trigger a warning. The box and its dimensions are remembered across projects and are never selectable or exported. Assign or clear **Toggle reference volume** in Settings → Shortcuts management; it is unassigned by default.
+
 Click an axis label on the compass to look along it: −Y is the Front view, +X Right, +Y Back, −X Left, +Z Top, and −Z Bottom. The front of a model faces −Y. The sidebar's **Camera** section chooses Perspective or Parallel (orthographic) projection, sets the field of view in perspective (15–100°), and offers **Fit model**, **Fit selection**, and **Reset camera**.
 
 The tabs above the viewport are views of the same model. Each view keeps its own camera, while the model, selection, and undo history are shared; tools act in the active view. Click **+** to add a view that starts from the current camera. Drag a tab to an edge of a viewport to split the workspace, or to its center to stack it there as a tab. Right-click a tab to rename or close it; the last view cannot be closed. Each view's camera is saved in the project file. The layout, view names, and the active view are application preferences, so they are remembered across restarts but do not travel with the file.

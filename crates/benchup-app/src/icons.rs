@@ -1605,8 +1605,18 @@ fn paint_line_icon(p: &egui::Painter, c: Pos2, kind: &str, color: Color32) {
                 s,
             ));
         }
-        "printer_volume" => {
-            // Isometric box: the printer build volume or a machine's working area.
+        "warning" => {
+            p.add(egui::Shape::convex_polygon(
+                vec![at(0., -9.), at(9., 7.), at(-9., 7.)],
+                color,
+                Stroke::NONE,
+            ));
+            let ink = Color32::from_rgb(65, 36, 0);
+            p.line_segment([at(0., -3.5), at(0., 1.)], Stroke::new(1.8, ink));
+            p.circle_filled(at(0., 4.), 1., ink);
+        }
+        "reference_volume" => {
+            // Isometric box for the fixed reference volume.
             let front = [
                 at(-8., 2.),
                 at(-2., 2.),

@@ -202,6 +202,26 @@ mod guide_preference_tests {
     }
 
     #[test]
+    fn reference_volume_menu_options_save_without_model_edits() {
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        for visible in [true, false] {
+            app.general_settings.volume.visible = visible;
+            app.general_settings.volume.size_m = [0.3, 0.2, 0.4];
+            app.general_settings.volume.hotkey = Some("V".into());
+            storage.flushed = false;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.general_settings.volume, app.general_settings.volume);
+        }
+    }
+
+    #[test]
     fn tool_rail_separators_default_and_restore_without_model_edits() {
         let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
         assert!(legacy.tool_rail_separators.is_empty());
@@ -5880,6 +5900,7 @@ impl BenchUpApp {
         }
         ui.separator();
         self.sections_menu(ui);
+        self.reference_volume_menu(ui);
     }
 
     fn display_contents(&mut self, ui: &mut egui::Ui) {

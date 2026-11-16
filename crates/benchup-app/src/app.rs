@@ -5955,15 +5955,14 @@ impl BenchUpApp {
             && self.measurement.as_ref().is_none_or(|m| {
                 m.complete && m.dimension_id.is_some() && self.length_input.trim().is_empty()
             });
+        let reference_bounds = self.general_settings.volume.visible
+            .then(|| self.general_settings.volume.bounds());
         let key = ((self.modeling.is_none() || self.tool == Tool::Scale)
             && self.grain_anchor.is_none()
             && self.paste_preview.is_none()
             && (self.measurement.is_none()
                 || matches!(self.tool, Tool::TapeMeasure | Tool::Protractor))
-            && self.text_editor.is_none()
-            // The volume overlay is not part of SceneKey, so cached shapes would
-            // replay a stale box across a toggle. Skip the cache while it is shown.
-            && !self.general_settings.volume.visible)
+            && self.text_editor.is_none())
         .then(|| renderer::SceneKey {
             joinery_members: self.joinery_edit_members(),
             joint_preview,
@@ -5975,6 +5974,7 @@ impl BenchUpApp {
             display: display.clone(),
             surface_catalog: surface_catalog.clone(),
             dark: ui.visuals().dark_mode,
+            reference_bounds,
             tool: self.tool,
             selected: selected.clone(),
             hover,
@@ -6067,7 +6067,10 @@ impl BenchUpApp {
                 && !selected_entities.is_empty();
             let mut mesh = renderer::Mesh::cached(camera, size, &mut self.scene_cache);
             mesh.remap_agent_effects(model);
-            mesh.set_scene_clip_planes(camera, self.render_model.bounds());
+            mesh.set_scene_clip_planes(camera, renderer::include_reference_bounds(
+                self.render_model.bounds(), reference_bounds,
+            ));
+            mesh.set_reference_bounds(reference_bounds);
             mesh.reference_image_depth_bounds(model);
             mesh.set_pixels_per_point(ui.ctx().pixels_per_point());
             mesh.set_display(display);
@@ -7300,7 +7303,6 @@ impl BenchUpApp {
                                     self.paint_menu(ui);
                                     ui.separator();
                                     self.walk_button(ui);
-                                    self.printer_volume_button(ui);
                                     ui.allocate_ui_with_layout(
                                         ui.available_size(),
                                         egui::Layout::left_to_right(egui::Align::Center),

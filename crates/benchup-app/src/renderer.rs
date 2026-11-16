@@ -13,6 +13,8 @@ mod scale_handles;
 pub(crate) mod agent_effects;
 #[path = "scene_buffers.rs"]
 mod scene_buffers;
+#[path = "reference_volume_gpu.rs"]
+mod reference_volume;
 use scene_buffers::GpuBuffers;
 pub(crate) use scale_handles::{Cache as ScaleHandleCache, paint as paint_scale_handles};
 pub(crate) use resident::{CaptureScene, edited_geometry as geometry_changes, supported as resident_supported};
@@ -257,6 +259,20 @@ pub struct SceneKey {
     pub hover: Option<u64>,
     pub outliner_hover: std::collections::BTreeSet<u64>,
     pub erasing: std::collections::BTreeSet<u64>,
+    /// Viewport-only references affect clipping and replay, never model geometry.
+    pub reference_bounds: Option<(DVec3, DVec3)>,
+}
+
+pub(crate) fn include_reference_bounds(
+    model: Option<(DVec3, DVec3)>,
+    reference: Option<(DVec3, DVec3)>,
+) -> Option<(DVec3, DVec3)> {
+    match (model, reference) {
+        (Some((low, high)), Some((reference_low, reference_high))) => {
+            Some((low.min(reference_low), high.max(reference_high)))
+        }
+        (bounds, None) | (None, bounds) => bounds,
+    }
 }
 
 #[derive(Default)]
@@ -295,7 +311,7 @@ pub(crate) fn scale_preview_supported(camera: &Camera, display: &benchup_core::D
         edit_context: model.edit_context, camera: camera.clone(), size: DVec2::ONE,
         pixels_per_point: 1., display: display.clone(), surface_catalog: None, dark: false,
         tool: benchup_core::Tool::Scale, selected: Default::default(), hover: None,
-        outliner_hover: Default::default(), erasing: Default::default(),
+        outliner_hover: Default::default(), erasing: Default::default(), reference_bounds: None,
     }, model, faces)
 }
 
@@ -328,7 +344,8 @@ impl SceneCache {
             if let Some(callback) = &self.retained {
                 painter.add(egui_wgpu::Callback::new_paint_callback(
                     rect,
-                    SharedScene(Arc::clone(callback), agent_effects::Projected::new(&self.agent_effects, &key.camera, rect)),
+                    SharedScene(Arc::clone(callback), agent_effects::Projected::new(&self.agent_effects, &key.camera, rect,
+                        key.reference_bounds, self.image_projection())),
                 ));
                 if let Some((_, _, annotations)) = &self.annotations {
                     painter.extend(annotations.iter().cloned());
@@ -416,6 +433,7 @@ pub struct Mesh {
     pixels_per_point: f64,
     parallel: bool,
     image_depth_bounds: Option<(f64, f64)>,
+    reference_bounds: Option<(DVec3, DVec3)>,
     view: CameraView,
     display: benchup_core::DisplaySettings,
     buffer_pool: Option<BufferPool>,
@@ -478,6 +496,7 @@ impl Mesh {
             pixels_per_point: 1.,
             parallel: camera.projection == benchup_core::Projection::Parallel,
             image_depth_bounds: None,
+            reference_bounds: None,
             view: camera.view(size),
             display: benchup_core::DisplaySettings::default(),
             buffer_pool: None,
@@ -560,6 +579,9 @@ impl Mesh {
         }
         self.image_depth_bounds = lo.is_finite().then_some((lo, hi));
     }
+    pub(crate) fn set_reference_bounds(&mut self, bounds: Option<(DVec3, DVec3)>) {
+        self.reference_bounds = bounds;
+    }
     fn parallel_depth_range(&self) -> Option<(f64, f64)> {
         let (mut lo, mut hi) = self.image_depth_bounds.unwrap_or((f64::INFINITY, f64::NEG_INFINITY));
         for vertex in self.vertices.iter().chain(&self.shadow_vertices) {
@@ -629,6 +651,28 @@ impl Mesh {
                 self.line(a.extend(0.), b.extend(0.), width, color);
             }
         }
+    }
+
+    /// Viewport references keep their world depth, so the shared GPU depth
+    /// buffer hides them behind model faces and edges. Dash gaps use the same
+    /// fragment discard in both depth and color passes, without CPU occlusion.
+    pub fn reference_line(&mut self, a: DVec3, b: DVec3, width: f64, color: Color32, dashed: bool) {
+        let Some((a, b)) = self.section_line(a, b) else { return };
+        let color = self.fog_color(color, (a + b) * 0.5);
+        let Some((start, end)) = self.view.segment_depth(a, b) else { return };
+        let (a, b) = (start.truncate(), end.truncate());
+        let delta = b - a;
+        let length_squared = delta.length_squared();
+        if length_squared < 0.01 { return; }
+        let length = length_squared.sqrt();
+        let normal = DVec2::new(-delta.y, delta.x) / length;
+        let fringe = (normal.x.abs() + normal.y.abs()) / self.pixels_per_point;
+        let n = normal * (width + fringe) * 0.5;
+        let gradient = delta * ((end.z - start.z) / length_squared);
+        self.emit_stroke_geometry(
+            &[a + n, b + n, b - n, a - n], start, gradient, a, n, color,
+            dashed.then_some(delta / (length * 8.)),
+        );
     }
     /// Share projections between joints on the same board, and between frames
     /// whose camera and stock are unchanged. Screen-space stroke width and
@@ -2299,8 +2343,10 @@ impl Mesh {
         self.edge_surfaces
             .retain(|_, surfaces| !surfaces.is_empty());
         cache.edge_surfaces = std::mem::take(&mut self.edge_surfaces);
-        let effects = agent_effects::Projected::new(&cache.agent_effects, &self.joint_surfaces.camera, rect);
+        let camera = self.joint_surfaces.camera.clone();
+        let reference_bounds = self.reference_bounds;
         let callback = self.retain(cache);
+        let effects = agent_effects::Projected::new(&cache.agent_effects, &camera, rect, reference_bounds, cache.image_projection());
         painter.add(egui_wgpu::Callback::new_paint_callback(
             rect,
             SharedScene(callback, effects),
@@ -3579,6 +3625,7 @@ fn create_pipeline_with_effects(
         fragment: Some(wgpu::FragmentState {
             module: shader,
             entry_point: Some(match (pass, effects) {
+                (PipelinePass::Faces, true) => "fragment_faces_effect",
                 (PipelinePass::EdgeDepth, true) => "fragment_edge_depth_effect",
                 (PipelinePass::ShadowFaces, true) => "fragment_shadow_faces_effect",
                 (PipelinePass::MaterialFaces, true) => "fragment_material_faces_effect",
@@ -4254,6 +4301,66 @@ mod tests {
         assert_eq!(mesh.joint_surfaces.view_revision, revision);
         mesh.set_scene_clip_planes(&camera, Some((bounds.0, bounds.1 * 1.1)));
         assert!(mesh.joint_surfaces.view_revision > revision, "depth changes invalidate stock-skin projections");
+    }
+
+    #[test]
+    fn reference_wireframe_survives_model_moves_in_both_projections() {
+        let volume = (DVec3::new(-0.128, -0.128, 0.), DVec3::new(0.128, 0.128, 0.256));
+        let size = DVec2::new(900., 600.);
+        for projection in [benchup_core::Projection::Perspective, benchup_core::Projection::Parallel] {
+            let mut camera = Camera { projection, ..Default::default() };
+            camera.fit(Some(volume), size);
+            let forward = (camera.target - camera.eye()).normalize();
+            for distance in [-10., 0., 10., 100.] {
+                let offset = forward * camera.distance * distance;
+                let moved = (volume.0 + offset, volume.1 + offset);
+                let mut mesh = Mesh::new(&camera, size);
+                mesh.set_scene_clip_planes(&camera, include_reference_bounds(Some(moved), Some(volume)));
+                let corners: Vec<_> = (0..8).map(|bits| DVec3::new(
+                    if bits & 1 == 0 { volume.0.x } else { volume.1.x },
+                    if bits & 2 == 0 { volume.0.y } else { volume.1.y },
+                    if bits & 4 == 0 { volume.0.z } else { volume.1.z },
+                )).collect();
+                for i in 0..8 {
+                    for axis in [1, 2, 4] {
+                        if i & axis == 0 {
+                            mesh.reference_line(corners[i], corners[i | axis], 1.5, Color32::RED, true);
+                        }
+                    }
+                }
+                assert_eq!(mesh.vertices.len(), 48, "all twelve edges survive: {projection:?}, distance {distance}");
+                assert_eq!(mesh.indices.len(), 72);
+                assert!(mesh.vertices.iter().all(|vertex| vertex.position[2] > 0. && vertex.position[2] < 1.),
+                    "references must keep scene depth instead of drawing at the front of the viewport");
+            }
+            let mut mesh = Mesh::new(&camera, size);
+            mesh.set_scene_clip_planes(&camera, include_reference_bounds(None, Some(volume)));
+            assert!(mesh.view.project_depth(camera.target).is_some(), "an empty model still shows its reference");
+        }
+    }
+
+    #[test]
+    fn dashed_reference_strokes_interpolate_real_depth_without_cpu_occlusion() {
+        let size = DVec2::splat(100.);
+        for projection in [benchup_core::Projection::Perspective, benchup_core::Projection::Parallel] {
+            let camera = Camera { projection, ..Default::default() };
+            let inverse = camera.matrix(size).inverse();
+            let world = |p: DVec3| inverse.project_point3(DVec3::new(p.x / 50. - 1., 1. - p.y / 50., p.z));
+            let a = DVec3::new(20., 20., 0.4);
+            let b = DVec3::new(80., 80., 0.8);
+            let mut mesh = Mesh::new(&camera, size);
+            mesh.reference_line(world(a), world(b), 1.5, Color32::RED, true);
+            assert_eq!(mesh.vertices.len(), 4);
+            let delta = (b - a).truncate();
+            for vertex in &mesh.vertices {
+                let p = DVec2::new(1. + f64::from(vertex.position[0]), 1. - f64::from(vertex.position[1])) * 50.;
+                let t = (p - a.truncate()).dot(delta) / delta.length_squared();
+                let depth = a.z + (b.z - a.z) * t;
+                assert!((f64::from(vertex.position[2]) - depth).abs() < 2e-6);
+                assert!(vertex.dash_phase >= 0.);
+            }
+            assert_eq!(mesh.occlusion.polygon_queries, 0, "GPU depth handles occlusion");
+        }
     }
 
     #[test]
@@ -6675,7 +6782,7 @@ mod tests {
         let depth_view = depth.create_view(&Default::default());
         for (reverse, hybrid) in [false, true].into_iter().flat_map(|reverse| [false, true].map(|hybrid| (reverse, hybrid))) {
             // Depth zero is used by intentional x-ray/wireframe overlays.
-            for rear_depth in [0.7, 0.] {
+            for (rear_depth, reference) in [(0.7, false), (0., false), (0.7, true)] {
                 let mut mesh = Mesh::new(&Camera::default(), DVec2::splat(64.));
                 if hybrid { mesh.enable_gpu_edge_occlusion(); }
                 let strokes = [
@@ -6694,7 +6801,13 @@ mod tests {
                 ];
                 for index in if reverse { [1, 0] } else { [0, 1] } {
                     let (a, b, width, color) = strokes[index];
-                    mesh.line(a, b, width, color);
+                    if reference && index == 1 {
+                        let inverse = mesh.view.matrix().inverse();
+                        let world = |p: DVec3| inverse.project_point3(DVec3::new(p.x / 32. - 1., 1. - p.y / 32., p.z));
+                        mesh.reference_line(world(a), world(b), width, color, true);
+                    } else {
+                        mesh.line(a, b, width, color);
+                    }
                 }
                 let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
@@ -6783,6 +6896,9 @@ mod tests {
                     "selection color is preserved"
                 );
                 assert!(pixel(33, 16)[1] > 0, "antialiased fringe still blends");
+                if reference {
+                    assert_eq!(pixel(32, 14), [255, 255, 255, 255], "dash gaps must not write color or depth");
+                }
             }
         }
     }

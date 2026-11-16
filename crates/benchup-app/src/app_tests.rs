@@ -7717,6 +7717,27 @@ fn toggling_the_printer_volume_frames_it_and_leaves_the_camera_alone_when_hidden
 }
 
 #[test]
+fn reference_volume_is_below_sections_and_toggles_from_the_view_menu() {
+    let mut h = Harness::new();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, tr!("app.view")));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let sections = text_position(&output, tr!("view_controls.sections"));
+    let reference = text_position(&output, tr!("settings.printer_and_tool_volume"));
+    assert!(reference.y > sections.y);
+    h.click(reference);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    for label in [tr!("settings.width_x"), tr!("settings.depth_y"), tr!("settings.height_z")] {
+        text_position(&output, label);
+    }
+    h.click(text_position(&output, tr!("reference_volume.show")));
+    assert!(h.app.general_settings.volume.visible);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, tr!("reference_volume.show")));
+    assert!(!h.app.general_settings.volume.visible);
+}
+
+#[test]
 fn volume_warning_is_gated_on_visibility_and_geometry() {
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
@@ -7751,7 +7772,6 @@ fn volume_warning_is_gated_on_visibility_and_geometry() {
 fn shortcut_toggles_the_printer_volume_through_the_keyboard() {
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
         visible: false,
         hotkey: Some("V".into()),
         ..Default::default()
@@ -7774,76 +7794,6 @@ fn shortcut_toggles_the_printer_volume_through_the_keyboard() {
     assert!(!h.app.general_settings.volume.visible, "V hides it again");
 }
 
-#[test]
-fn hiding_the_volume_button_clears_the_warning() {
-    let mut h = Harness::new();
-    h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
-        visible: true,
-        size_m: [0.256, 0.256, 0.256],
-        hotkey: None,
-        ..Default::default()
-    };
-    h.app
-        .doc
-        .model
-        .add_edge(DVec3::new(-2., -2., 0.), DVec3::new(2., 2., 2.))
-        .unwrap();
-    assert!(h.app.volume_exceeded(&h.ctx, 1), "the board is outside the volume");
-
-    // The reported bug: hiding the only control left the box and warning behind.
-    h.app.general_settings.volume.show_button = false;
-    h.app.general_settings.volume.enforce();
-    assert!(!h.app.general_settings.volume.visible);
-    assert!(!h.app.volume_exceeded(&h.ctx, 1), "the warning goes with the box");
-}
-
-#[test]
-fn hiding_the_volume_button_hides_a_shortcut_controlled_box() {
-    let mut h = Harness::new();
-    h.app.general_settings.volume = printer_volume::Settings {
-        show_button: false,
-        visible: true,
-        hotkey: Some("V".into()),
-        ..Default::default()
-    };
-    h.app.general_settings.volume.enforce();
-    assert!(
-        !h.app.general_settings.volume.visible,
-        "the setting always wins over a visible box"
-    );
-    // The shortcut can bring it back.
-    h.app.general_settings.volume.toggle();
-    assert!(h.app.general_settings.volume.visible);
-}
-
-#[test]
-fn clearing_the_volume_button_through_the_settings_modal_hides_the_box() {
-    let mut h = Harness::new();
-    h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
-        visible: true,
-        ..Default::default()
-    };
-    h.app.settings_open = true;
-    h.app.general_settings.section = settings::Section::Tools;
-    h.frame(vec![], egui::Modifiers::NONE);
-    let output = h.frame(vec![], egui::Modifiers::NONE);
-
-    let label = tr!("settings.show_the_toggle_on_the_viewport_toolbar");
-    text_position(&output, label);
-    h.click(text_position(&output, label));
-
-    assert!(
-        !h.app.general_settings.volume.show_button,
-        "clicking the checkbox must clear show_button"
-    );
-    assert!(
-        !h.app.general_settings.volume.visible,
-        "clearing show_button must also hide the volume"
-    );
-}
-
 /// The volume is a viewport reference, never document content. These tests pin the
 /// boundary so saving, exporting, selecting and copying can never pick it up.
 #[test]
@@ -7857,7 +7807,6 @@ fn volume_settings_never_enter_the_saved_document() {
     let before = serde_json::to_string(&h.app.doc).unwrap();
 
     h.app.general_settings.volume.visible = true;
-    h.app.general_settings.volume.show_button = false;
     h.app.general_settings.volume.size_m = [7., 7., 7.];
     h.app.general_settings.volume.hotkey = Some("V".into());
 
@@ -7866,7 +7815,7 @@ fn volume_settings_never_enter_the_saved_document() {
         before, after,
         "volume settings must not reach the document that is saved"
     );
-    for key in ["size_m", "show_button", "hotkey"] {
+    for key in ["size_m", "hotkey"] {
         assert!(
             !after.contains(key),
             "saved document must not contain {key}"
@@ -7895,7 +7844,6 @@ fn the_volume_is_never_selectable() {
 
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
         visible: true,
         ..Default::default()
     };
@@ -7928,7 +7876,6 @@ fn the_volume_is_never_selectable() {
 fn copying_with_only_the_volume_visible_captures_nothing() {
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
         visible: true,
         ..Default::default()
     };
@@ -7966,7 +7913,6 @@ fn exports_contain_only_model_geometry() {
     let hidden = crate::interchange::export_obj(&h.app.doc.model).unwrap();
 
     h.app.general_settings.volume = printer_volume::Settings {
-        show_button: true,
         visible: true,
         size_m: [3., 3., 3.],
         ..Default::default()

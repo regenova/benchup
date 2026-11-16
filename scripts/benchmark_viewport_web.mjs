@@ -748,8 +748,8 @@ fn test_sun_fragment(value: FaceOutput) -> @location(0) vec4<f32> {
   const bits=new Uint32Array(32*32*2),f=new Float32Array(1),u=new Uint32Array(f.buffer);
   for(let y=0;y<32;y++)for(let x=0;x<16;x++){const i=(y*32+x)*2;bits[i]=11;f[0]=.3+.4*(x+.5)/32;bits[i+1]=u[0];}
   device.queue.writeTexture({texture:sunlight},bits,{bytesPerRow:256},[32,32]);
-  const uniform=device.createBuffer({size:496,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const camera=new Float32Array(124);camera[32]=.35;camera[34]=.000002;
+  const uniform=device.createBuffer({size:528,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const camera=new Float32Array(132);camera[32]=.35;camera[34]=.000002;
   const bind0=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}}]});
   const bind1=device.createBindGroup({layout:pipeline.getBindGroupLayout(1),entries:[{binding:1,resource:sunlight.createView()}]});
   const target=device.createTexture({size:[8,1],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
@@ -834,8 +834,8 @@ async function validateMarkers(shader) {
   const vertices=device.createBuffer({size:values.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(vertices,0,values);
   const states=device.createTexture({size:[512,1],format:'r32uint',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
   const flags=new Uint32Array(512);flags[1]=1;flags[3]=65;flags[4]=1;device.queue.writeTexture({texture:states},flags,{bytesPerRow:2048},[512,1]);
-  const uniform=device.createBuffer({size:496,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const camera=new Float32Array(124);for(let i=0;i<4;i++)camera[i*5]=1;camera.set([64,64,1,1.8],64);camera.set([1,0,0,1],88);camera.set([1,1,1,1],108);
+  const uniform=device.createBuffer({size:528,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const camera=new Float32Array(132);for(let i=0;i<4;i++)camera[i*5]=1;camera.set([64,64,1,1.8],64);camera.set([1,0,0,1],88);camera.set([1,1,1,1],108);
   const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:states.createView()}]});
   const target=device.createTexture({size:[64,64],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
   const readback=device.createBuffer({size:16384,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});

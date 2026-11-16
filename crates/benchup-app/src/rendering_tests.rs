@@ -235,6 +235,29 @@ fn drawing_previews_keep_the_resident_scene_and_refresh_after_commit() {
 }
 
 #[test]
+fn printer_volume_toggles_and_resizes_keep_large_scene_geometry_resident() {
+    let mut doc = Document::default();
+    doc.model = crate::picking::tests::triangle_grid(1024);
+    doc.camera.fit(doc.model.bounds(), DVec2::new(800., 600.));
+    let mut app = BenchUpApp::with_document(doc, None, true);
+    let ctx = egui::Context::default();
+    let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.));
+    render(&mut app, &ctx, rect);
+    assert_eq!(app.scene_cache.resident_builds(), 1);
+    for (visible, size) in [(true, [0.256; 3]), (true, [1.; 3]), (false, [1.; 3])] {
+        app.general_settings.volume.visible = visible;
+        app.general_settings.volume.size_m = size;
+        render(&mut app, &ctx, rect);
+        app.doc.camera.yaw += 0.1;
+        render(&mut app, &ctx, rect);
+        app.selected = app.doc.model.faces.keys().take(1).copied().collect();
+        render(&mut app, &ctx, rect);
+        assert_eq!(app.scene_cache.resident_builds(), 1, "the reference must not rebuild world geometry");
+        assert_eq!(app.scene_cache.mesh_builds, 0, "the reference must not send the large model through CPU projection");
+    }
+}
+
+#[test]
 fn tape_preview_and_saved_guides_keep_the_resident_scene() {
     let mut doc = Document::default();
     doc.model = crate::picking::tests::triangle_grid(1024);

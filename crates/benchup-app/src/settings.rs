@@ -654,81 +654,6 @@ impl BenchUpApp {
                     tr!("settings.automatically_group_new_shapes"),
                 )
                 .on_hover_text(tr!("settings.group_new_shapes_outside_existing_objects"));
-                ui.separator();
-                ui.text_label(RichText::new(tr!("settings.printer_and_tool_volume")).strong());
-                ui.text_weak(tr!("settings.a_locked_reference_box_for_a_printer_s_build"));
-                if ui
-                    .checkbox(
-                        &mut self.general_settings.volume.show_button,
-                        tr!("settings.show_the_toggle_on_the_viewport_toolbar"),
-                    )
-                    .on_hover_text(tr!("settings.hide_the_toggle_when_you_never_use_the"))
-                    .changed()
-                {
-                    // Hiding the only control must not strand a visible box.
-                    self.general_settings.volume.enforce();
-                }
-                // Present and accept the size in the workspace's display units, while
-                // the stored value stays in metres like all other geometry.
-                let units = self.doc.display.units;
-                let length = units.length;
-                let factor = length.factor();
-                let decimals = units.precision.length.unwrap_or(3) as usize;
-                for (index, label) in [
-                    (0, tr!("settings.width_x")),
-                    (1, tr!("settings.depth_y")),
-                    (2, tr!("settings.height_z")),
-                ] {
-                    inspector_field(ui, ("settings_volume_axis", index), label, |ui| {
-                        let volume = &self.general_settings.volume;
-                        let mut shown = volume.axis_in(index, length);
-                        let response = ui.add(
-                            egui::DragValue::new(&mut shown)
-                                .speed(1.)
-                                .max_decimals(decimals)
-                                .range(
-                                    super::printer_volume::MIN_M / factor
-                                        ..=super::printer_volume::MAX_M / factor,
-                                )
-                                .suffix(format!(" {}", length.symbol())),
-                        );
-                        if response.changed() {
-                            self.general_settings.volume.set_axis_from(index, shown, length);
-                        }
-                        response
-                    });
-                }
-                inspector_field(ui, "settings_volume_hotkey", tr!("settings.toggle_shortcut"), |ui| {
-                    ui.horizontal(|ui| {
-                        let shown = self
-                            .general_settings
-                            .volume
-                            .hotkey
-                            .clone()
-                            .unwrap_or_else(|| tr!("common.none").to_string());
-                        if let Some(key) =
-                            shortcut_input(ui, "settings_volume_key", &shown, 96.)
-                        {
-                            self.general_settings.volume.hotkey = Some(key);
-                        }
-                        if self.general_settings.volume.hotkey.is_some() {
-                            let clear = ui
-                                .small_button("✕")
-                                .on_hover_text(tr!("settings.clear_the_toggle_shortcut"));
-                            clear.widget_info(|| {
-                                egui::WidgetInfo::labeled(
-                                    egui::Role::Button,
-                                    true,
-                                    tr!("settings.clear_the_toggle_shortcut"),
-                                )
-                            });
-                            if clear.clicked() {
-                                self.general_settings.volume.hotkey = None;
-                            }
-                        }
-                    })
-                    .response
-                });
             }
             Section::Rendering => {
                 ui.checkbox(&mut self.doc.display.shadow_antialiasing, tr!("settings.shadow_antialiasing"))
@@ -843,11 +768,20 @@ impl BenchUpApp {
                         }
                     });
                 }
+                let reference_label = tr!("settings.toggle_reference_volume");
+                if reference_label.to_lowercase().contains(&query) {
+                    matches += 1;
+                    table.row(ui, "settings_volume_hotkey", |column, ui| {
+                        if column == 0 { ui.text_label(reference_label); }
+                        else { self.reference_volume_shortcut(ui); }
+                    });
+                }
                 if matches == 0 {
                     ui.text_weak(tr!("settings.no_tools_match_your_search"));
                 }
                 if ui.button(tr!("settings.restore_default_shortcuts")).clicked() {
                     self.general_settings.tool_keys = GeneralSettings::default().tool_keys;
+                    self.general_settings.volume.hotkey = None;
                 }
             }
             Section::Units => {
@@ -940,14 +874,12 @@ mod tests {
 
         let mut settings = GeneralSettings::default();
         settings.volume.visible = true;
-        settings.volume.show_button = false;
         settings.volume.size_m = [0.3, 0.25, 0.4];
         settings.volume.hotkey = Some("V".into());
 
         let saved = serde_json::to_string(&settings).unwrap();
         let restored: GeneralSettings = serde_json::from_str(&saved).unwrap();
         assert!(restored.volume.visible);
-        assert!(!restored.volume.show_button);
         assert_eq!(restored.volume.size_m, [0.3, 0.25, 0.4]);
         assert_eq!(restored.volume.hotkey.as_deref(), Some("V"));
     }
@@ -1445,14 +1377,35 @@ mod tests {
         assert!(text.iter().any(|label| label == "English"));
     }
     #[test]
-    fn normalize_hides_a_volume_saved_with_a_hidden_button() {
-        // Preferences written by an earlier build could hold visible=true with the
-        // toggle hidden, which strands the box on screen.
-        let mut settings = GeneralSettings::default();
-        settings.volume.show_button = false;
-        settings.volume.visible = true;
+    fn legacy_toolbar_preferences_keep_reference_volume_visibility_and_shortcut() {
+        let mut settings: GeneralSettings = serde_json::from_str(
+            r#"{"volume":{"show_button":false,"visible":true,"size_m":[0.3,0.2,0.1],"hotkey":"V"}}"#,
+        ).unwrap();
         settings.normalize();
-        assert!(!settings.volume.visible);
+        assert!(settings.volume.visible);
+        assert_eq!(settings.volume.size_m, [0.3, 0.2, 0.1]);
+        assert_eq!(settings.volume.hotkey.as_deref(), Some("V"));
+        assert!(!serde_json::to_string(&settings.volume).unwrap().contains("show_button"));
+    }
+
+    #[test]
+    fn reference_volume_shortcut_has_a_searchable_name_and_leaves_tool_settings() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.general_settings.section = Section::Tools;
+        let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
+        let text = rendered_text(&output.shapes);
+        assert!(!text.iter().any(|label| label == tr!("settings.printer_and_tool_volume")));
+        assert!(!text.iter().any(|label| label == tr!("settings.width_x")));
+
+        app.general_settings.section = Section::Shortcuts;
+        app.shortcut_filter = "reference volume".into();
+        app.general_settings.volume.hotkey = Some("V".into());
+        let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
+        let text = rendered_text(&output.shapes);
+        assert!(text.iter().any(|label| label == tr!("settings.toggle_reference_volume")));
+        assert!(text.iter().any(|label| label == "V"));
+        assert!(!text.iter().any(|label| label == tr!("settings.no_tools_match_your_search")));
     }
 
     #[test]
@@ -1465,18 +1418,17 @@ mod tests {
             ("vi_VN", include_str!("../../../assets/i18n/vi_VN.json")),
             ("zh_CN", include_str!("../../../assets/i18n/zh_CN.json")),
         ];
-        const KEYS: [&str; 11] = [
+        const KEYS: [&str; 10] = [
             "app.show_or_hide_the_printer_or_tool_volume",
             "app.the_model_is_outside_the_printer_or_tool_volume",
             "settings.printer_and_tool_volume",
             "settings.a_locked_reference_box_for_a_printer_s_build",
-            "settings.show_the_toggle_on_the_viewport_toolbar",
-            "settings.hide_the_toggle_when_you_never_use_the",
             "settings.width_x",
             "settings.depth_y",
             "settings.height_z",
-            "settings.toggle_shortcut",
             "settings.clear_the_toggle_shortcut",
+            "reference_volume.show",
+            "settings.toggle_reference_volume",
         ];
         for (language, raw) in CATALOGS {
             let catalog: serde_json::Value = serde_json::from_str(raw).unwrap();

@@ -1,23 +1,16 @@
 use super::*;
 
-/// A user-defined machine envelope — a 3D printer build volume, a CNC working
-/// area, or a planer's capacity — drawn as a locked wireframe reference in the
-/// viewport.
+/// A user-defined reference volume drawn as a locked wireframe in the viewport.
 ///
-/// The volume is a global preference, not document geometry: users print on the
-/// same printer across projects. Because it is never part of `Model`, it cannot
-/// be selected, edited, or moved, which satisfies the "locked" requirement
-/// without any locking machinery.
-/// Limits in metres. One millimetre up to a hundred metres covers a printer bed,
-/// a CNC envelope and a workshop-sized tool.
+/// The volume is a global preference, not document geometry, so the same space
+/// can be checked across projects. It cannot be selected, edited, or moved.
+/// Limits in metres, from small parts up to room-sized reference spaces.
 pub(super) const MIN_M: f64 = 0.001;
 pub(super) const MAX_M: f64 = 100.;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(super) struct Settings {
-    /// Show the toggle on the viewport toolbar.
-    pub show_button: bool,
     /// Draw the wireframe box in the viewport.
     pub visible: bool,
     /// Width (X), depth (Y) and height (Z) in metres, matching the model space.
@@ -31,10 +24,8 @@ pub(super) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            show_button: true,
             visible: false,
-            // 256 mm cubed: large enough to read clearly at the default viewport
-            // zoom. Only a starting point; the user sets their own machine.
+            // A compact starting reference; users set the space they need.
             size_m: [0.256, 0.256, 0.256],
             hotkey: None,
         }
@@ -57,17 +48,6 @@ impl Settings {
             && !super::shortcut_input::valid_tool_key(key)
         {
             self.hotkey = None;
-        }
-        self.enforce();
-    }
-
-    /// Hiding the viewport toggle always hides the box. Keeping the box alive
-    /// because a shortcut happens to exist surprised users: turning the setting
-    /// off left the volume on screen. A configured shortcut can still switch the
-    /// box back on afterwards.
-    pub(super) fn enforce(&mut self) {
-        if !self.show_button {
-            self.visible = false;
         }
     }
 
@@ -107,7 +87,7 @@ impl Settings {
     }
 
     /// True when the given bounds fit inside the volume. Touching counts as
-    /// fitting, so a model printed exactly to the bed size is not flagged.
+    /// fitting, so geometry exactly on the boundary is not flagged.
     pub(super) fn contains(&self, low: DVec3, high: DVec3) -> bool {
         let (min, max) = self.bounds();
         let tolerance = 1e-9;
@@ -131,8 +111,9 @@ impl Settings {
             .and_then(egui::Key::from_name)
     }
 
-    /// Draw the 12 edges through the retained overlay path, so the box costs no
-    /// CPU geometry per frame and shares the depth behaviour of other overlays.
+    /// The shared reference-mesh API consumes projected strips, so preparation
+    /// is bounded to twelve segments and reused on unchanged frames. Keeping
+    /// these tiny references separate leaves the model's GPU buffers resident.
     pub(super) fn paint(&self, mesh: &mut renderer::Mesh) {
         let (min, max) = self.bounds();
         let corners = [
@@ -160,48 +141,76 @@ impl Settings {
             (3, 7),
         ];
         for (a, b) in EDGES {
-            mesh.overlay_line(corners[a], corners[b], 1.5, ACCENT, true);
+            mesh.reference_line(corners[a], corners[b], 1.5, ACCENT, true);
         }
     }
 }
 
 impl BenchUpApp {
-    /// Viewport toolbar toggle. Hidden entirely when the user opts out, which is
-    /// the issue's "show/hide the button on the canvas bar" setting.
-    pub(super) fn printer_volume_button(&mut self, ui: &mut egui::Ui) {
-        if !self.general_settings.volume.show_button {
-            return;
-        }
-        let colors = Palette::for_ui(ui);
-        let active = self.general_settings.volume.visible;
-        let response = ui.add(
-            egui::Button::new("")
-                .min_size(egui::vec2(32., 32.))
-                .selected(active),
-        );
-        icons::line_icon(
-            ui.painter(),
-            response.rect.center(),
-            "printer_volume",
-            if active { colors.ink } else { colors.muted },
-        );
-        let response =
-            response.on_hover_text(tr!("app.show_or_hide_the_printer_or_tool_volume"));
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::Role::Button,
-                true,
-                tr!("app.show_or_hide_the_printer_or_tool_volume"),
-            )
-        });
-        if response.clicked() {
-            response.surrender_focus();
+    pub(super) fn reference_volume_menu(&mut self, ui: &mut egui::Ui) {
+        let button = egui::Button::new((Self::menu_item_icon(ui, Some("reference_volume")), tr!("settings.printer_and_tool_volume")))
+            .gap(ui.spacing().icon_spacing)
+            .right_text(egui::menu::SubMenuButton::arrow_atom(None));
+        egui::menu::SubMenuButton::from_button(button)
+            .config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside))
+            .ui(ui, |ui| {
+                Self::menu_style(ui.style_mut());
+                ui.set_width(264.);
+                self.reference_volume_controls(ui);
+            });
+    }
+
+    pub(super) fn reference_volume_controls(&mut self, ui: &mut egui::Ui) {
+        let mut visible = self.general_settings.volume.visible;
+        if Self::menu_checkbox(ui, &mut visible, tr!("reference_volume.show"))
+            .on_hover_text(tr!("app.show_or_hide_the_printer_or_tool_volume")).changed()
+        {
             self.toggle_printer_volume(ui.ctx());
+        }
+        ui.text_weak(tr!("settings.a_locked_reference_box_for_a_printer_s_build"));
+        ui.separator();
+        let units = self.doc.display.units;
+        let length = units.length;
+        let factor = length.factor();
+        let decimals = units.precision.length.unwrap_or(3) as usize;
+        let mut table = crate::inspector_table::InspectorTable::new(
+            ui.available_width(),
+            [crate::inspector_table::Column::flex(0.5), crate::inspector_table::Column::flex(0.5)],
+        );
+        for (axis, label) in [tr!("settings.width_x"), tr!("settings.depth_y"), tr!("settings.height_z")].into_iter().enumerate() {
+            table.row(ui, ("settings_volume_axis", axis), |column, ui| {
+                if column == 0 {
+                    ui.text_label(label);
+                } else {
+                    let mut value = self.general_settings.volume.axis_in(axis, length);
+                    if ui.add(egui::DragValue::new(&mut value).speed(1.).max_decimals(decimals)
+                        .range(MIN_M / factor..=MAX_M / factor).suffix(format!(" {}", length.symbol()))).changed()
+                    {
+                        self.general_settings.volume.set_axis_from(axis, value, length);
+                    }
+                }
+            });
         }
     }
 
-    /// Toggling on frames the volume, because a real machine envelope is only a few
-    /// pixels wide at the default zoom. Toggling off leaves the camera untouched.
+    pub(super) fn reference_volume_shortcut(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let assigned = self.general_settings.volume.hotkey.is_some();
+            let shown = self.general_settings.volume.hotkey.clone().unwrap_or_else(|| tr!("common.none").into());
+            let width = (ui.available_width() - if assigned { 32. } else { 0. }).max(24.);
+            if let Some(key) = super::shortcut_input::shortcut_input(ui, "settings_volume_key", &shown, width) {
+                self.general_settings.volume.hotkey = Some(key);
+            }
+            if assigned {
+                let clear = ui.small_button("✕").on_hover_text(tr!("settings.clear_the_toggle_shortcut"));
+                clear.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr!("settings.clear_the_toggle_shortcut")));
+                if clear.clicked() { self.general_settings.volume.hotkey = None; }
+            }
+        });
+    }
+
+    /// Toggling on frames the reference, which can be tiny at the current zoom.
+    /// Toggling off leaves the camera untouched.
     pub(super) fn toggle_printer_volume(&mut self, ctx: &egui::Context) {
         self.general_settings.volume.toggle();
         if self.general_settings.volume.visible {
@@ -253,11 +262,11 @@ impl BenchUpApp {
             tr!("app.the_model_is_outside_the_printer_or_tool_volume").to_owned(),
             FontId::proportional(12.),
             ink,
-            (rect.width() - 80.).clamp(160., 520.),
+            (rect.width() - 106.).clamp(160., 494.),
         );
         let banner = Rect::from_center_size(
             Pos2::new(rect.center().x, rect.top() + 30.),
-            galley.size() + egui::vec2(24., 16.),
+            egui::vec2(galley.size().x + 50., galley.size().y.max(18.) + 16.),
         );
         painter.rect_filled(banner, 7, paper);
         painter.rect_stroke(
@@ -266,7 +275,14 @@ impl BenchUpApp {
             Stroke::new(1., ink.gamma_multiply(0.5)),
             egui::StrokeKind::Inside,
         );
-        painter.galley(banner.min + egui::vec2(12., 8.), galley, ink);
+        icons::line_icon(
+            painter,
+            Pos2::new(banner.left() + 21., banner.center().y),
+            "warning",
+            Color32::from_rgb(245, 155, 45),
+        );
+        let text_top = banner.center().y - galley.size().y * 0.5;
+        painter.galley(Pos2::new(banner.left() + 38., text_top), galley, ink);
     }
 }
 
@@ -275,9 +291,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_are_hidden_with_a_visible_button() {
+    fn defaults_are_hidden_with_an_unassigned_shortcut() {
         let settings = Settings::default();
-        assert!(settings.show_button);
         assert!(!settings.visible);
         assert_eq!(settings.hotkey, None);
         assert_eq!(settings.size_m, [0.256, 0.256, 0.256]);
@@ -390,68 +405,7 @@ mod tests {
         assert!(settings.visible);
         settings.toggle();
         assert!(!settings.visible);
-        assert!(settings.show_button, "toggling never changes the button preference");
     }
-    #[test]
-    fn hiding_the_button_hides_the_box() {
-        // Reported bug: turning the setting off left the box on screen with no
-        // visible control to dismiss it.
-        let mut settings = Settings {
-            show_button: true,
-            visible: true,
-            ..Default::default()
-        };
-        settings.show_button = false;
-        settings.enforce();
-        assert!(!settings.visible);
-    }
-
-    #[test]
-    fn enforce_leaves_a_shown_box_visible() {
-        let mut settings = Settings {
-            show_button: true,
-            visible: true,
-            ..Default::default()
-        };
-        settings.enforce();
-        assert!(settings.visible, "a shown button never clears the box");
-    }
-
-    #[test]
-    fn enforce_preserves_size_and_shortcut() {
-        let mut settings = Settings {
-            show_button: true,
-            visible: true,
-            size_m: [0.3, 0.2, 0.1],
-            hotkey: Some("V".into()),
-            ..Default::default()
-        };
-        settings.show_button = false;
-        settings.enforce();
-        assert_eq!(settings.size_m, [0.3, 0.2, 0.1]);
-        assert_eq!(settings.hotkey.as_deref(), Some("V"), "the shortcut is independent");
-    }
-
-    #[test]
-    fn hiding_the_button_hides_the_box_even_with_a_shortcut() {
-        let mut settings = Settings {
-            show_button: true,
-            visible: true,
-            hotkey: Some("V".into()),
-            ..Default::default()
-        };
-        settings.show_button = false;
-        settings.enforce();
-        assert!(
-            !settings.visible,
-            "turning the setting off always hides the box"
-        );
-
-        // The shortcut remains a working control afterwards.
-        settings.toggle();
-        assert!(settings.visible);
-    }
-
     #[test]
     fn bounds_follow_the_configured_size() {
         for size in [[0.1, 0.2, 0.3], [1., 1., 1.], [0.256, 0.256, 0.256]] {
