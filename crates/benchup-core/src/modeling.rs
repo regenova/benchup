@@ -437,6 +437,65 @@ impl Model {
         id
     }
 
+    /// Whether the connected body holding `face_id` is a closed two-manifold
+    /// shell: every edge bounds exactly two of its faces and none is stray.
+    /// This is a topological check only, cheap enough for every Push/Pull.
+    fn closed_shell(&self, face_id: u64) -> bool {
+        let Ok(ids) = self.solid_entities(face_id) else {
+            return false;
+        };
+        let mut uses: BTreeMap<(u64, u64), usize> = BTreeMap::new();
+        for face in ids.iter().filter_map(|id| self.faces.get(id)) {
+            for ring in std::iter::once(&face.vertices).chain(&face.holes) {
+                for i in 0..ring.len() {
+                    let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                    *uses.entry((a.min(b), a.max(b))).or_default() += 1;
+                }
+            }
+        }
+        let edges: BTreeSet<_> = ids
+            .iter()
+            .filter_map(|id| self.edges.get(id))
+            .map(|edge| (edge.a.min(edge.b), edge.a.max(edge.b)))
+            .collect();
+        !uses.is_empty()
+            && uses.values().all(|&count| count == 2)
+            && edges.len() == uses.len()
+            && edges.iter().all(|key| uses.contains_key(key))
+    }
+
+    /// Erase faces together with their boundary edges and vertices that no
+    /// remaining face uses, so the removal does not leave stray geometry.
+    fn erase_enclosed_surfaces(&mut self, faces: &BTreeSet<u64>) {
+        if faces.is_empty() {
+            return;
+        }
+        let key = |a: u64, b: u64| (a.min(b), a.max(b));
+        let rings = |face: &Face| {
+            std::iter::once(&face.vertices)
+                .chain(&face.holes)
+                .flat_map(|ring| (0..ring.len()).map(move |i| key(ring[i], ring[(i + 1) % ring.len()])))
+                .collect::<Vec<_>>()
+        };
+        let boundary: BTreeSet<_> = faces
+            .iter()
+            .filter_map(|id| self.faces.get(id))
+            .flat_map(rings)
+            .collect();
+        let used: BTreeSet<_> = self
+            .faces
+            .values()
+            .filter(|face| !faces.contains(&face.id))
+            .flat_map(rings)
+            .collect();
+        let mut ids = faces.clone();
+        ids.extend(self.edges.values().filter_map(|edge| {
+            let key = key(edge.a, edge.b);
+            (boundary.contains(&key) && !used.contains(&key)).then_some(edge.id)
+        }));
+        self.erase(&ids);
+    }
+
     /// Connect new extrusion boundaries to the editable drawing before adding
     /// their explicit faces. Raw walls alone do not split an existing floor.
     fn connect_extrusion(
@@ -856,19 +915,50 @@ impl Model {
         if !keep_starting_face {
             next.connect_extrusion(&mut rings, drawing_edges, &drawing_vertices, &surfaces);
         }
+        let existing: BTreeSet<_> = next.faces.keys().copied().collect();
+        let mut coincident = BTreeSet::new();
         for ring in &rings[..walls] {
-            next.raw_face(ring.clone(), vec![], color);
+            let id = next.raw_face(ring.clone(), vec![], color);
+            if existing.contains(&id) {
+                coincident.insert(id);
+            }
         }
         let cap = next.raw_face(rings[walls].clone(), rings[walls + 1..].to_vec(), color);
+        if existing.contains(&cap) {
+            coincident.insert(cap);
+        }
+        if !keep_starting_face && !coincident.is_empty() && self.closed_shell(face_id) {
+            // On a closed body, a wall or cap retracing one of its surfaces
+            // separates removed material from the outside (a cut through the
+            // far side) or joins two volumes (a pull meeting the body). Neither
+            // side of that region is a boundary any more, so it goes, together
+            // with the edges and vertices only it used. Connecting the
+            // extrusion can also fill brand-new walls before they are added;
+            // those do not lie inside an earlier surface and are kept.
+            let body = self.solid_entities(face_id).unwrap_or_default();
+            coincident.retain(|id| {
+                let Some(triangle) = next.face_triangles(&next.faces[id]).first().copied() else {
+                    return false;
+                };
+                let point = triangle.into_iter().sum::<DVec3>() / 3.;
+                body.iter()
+                    .filter(|&&other| other != face_id)
+                    .filter_map(|other| self.faces.get(other))
+                    .any(|other| self.face_contains(other, point, false))
+            });
+            next.erase_enclosed_surfaces(&coincident);
+        }
         if !keep_starting_face && self.wood_glue.contains_key(&face_id) {
             // A Push/Pull without a retained starting surface moves its
             // coating to the cap. The extrusion walls are new stock.
             next.wood_glue.remove(&face_id);
-            let mut polygons = self.glued_polygons(face_id);
-            for point in polygons.iter_mut().flatten() {
-                *point += delta;
+            if next.faces.contains_key(&cap) {
+                let mut polygons = self.glued_polygons(face_id);
+                for point in polygons.iter_mut().flatten() {
+                    *point += delta;
+                }
+                next.transfer_glue(cap, &polygons);
             }
-            next.transfer_glue(cap, &polygons);
         }
         next.validate()?;
         *self = next;
