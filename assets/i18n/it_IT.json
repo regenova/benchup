@@ -89,6 +89,7 @@
   "agent_link.copy_shell": "Copia configurazione terminale",
   "agent_link.copy_token": "Copia token",
   "agent_link.deny": "Nega accesso",
+  "agent_link.error.activity_phase": "Fase prevista: analyzing, preparing o finished.",
   "agent_link.error.app_busy": "Un'altra finestra di BenchUp è già collegata a questo bridge",
   "agent_link.error.arguments_not_object": "Gli argomenti devono essere un oggetto JSON",
   "agent_link.error.bridge": "Il bridge ha rifiutato la connessione: {message}",

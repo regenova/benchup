@@ -189,6 +189,7 @@ mod tests {
     fn vertices(count: usize) -> Vec<Vertex> {
         (0..count)
             .map(|i| Vertex {
+                effect: -2.,
                 position: [i as f32, 0., 0.5],
                 color: [255; 4],
                 lateral: 0.,

@@ -89,6 +89,7 @@
   "agent_link.copy_shell": "Sao chép thiết lập dòng lệnh",
   "agent_link.copy_token": "Sao chép mã",
   "agent_link.deny": "Từ chối",
+  "agent_link.error.activity_phase": "Giai đoạn phải là analyzing, preparing hoặc finished.",
   "agent_link.error.app_busy": "Một cửa sổ BenchUp khác đã kết nối với cầu nối này",
   "agent_link.error.arguments_not_object": "Đối số phải là một đối tượng JSON",
   "agent_link.error.bridge": "Cầu nối đã từ chối kết nối: {message}",

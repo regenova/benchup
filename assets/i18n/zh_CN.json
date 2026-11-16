@@ -89,6 +89,7 @@
   "agent_link.copy_shell": "复制终端设置",
   "agent_link.copy_token": "复制令牌",
   "agent_link.deny": "拒绝访问",
+  "agent_link.error.activity_phase": "phase 必须为 analyzing、preparing 或 finished。",
   "agent_link.error.app_busy": "另一个 BenchUp 窗口已连接到此桥接程序",
   "agent_link.error.arguments_not_object": "参数必须是 JSON 对象",
   "agent_link.error.bridge": "桥接程序拒绝了连接：{message}",

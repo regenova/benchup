@@ -89,6 +89,7 @@
   "agent_link.copy_shell": "Copy shell setup",
   "agent_link.copy_token": "Copy token",
   "agent_link.deny": "Deny access",
+  "agent_link.error.activity_phase": "Expected phase: analyzing, preparing, or finished.",
   "agent_link.error.app_busy": "Another BenchUp window is already connected to this bridge",
   "agent_link.error.arguments_not_object": "The arguments must be a JSON object",
   "agent_link.error.bridge": "The bridge refused the connection: {message}",

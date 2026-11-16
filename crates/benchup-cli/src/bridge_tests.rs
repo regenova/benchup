@@ -112,6 +112,15 @@ fn clients_reach_the_app_through_the_bridge() {
     // MCP session tools become calls the app knows.
     let mut live = Live::new(Target::Client(client));
     live.set_client("claude-code");
+    assert!(live.supports_activity());
+    assert!(live.instructions().contains("agent_activity"));
+    for phase in ["analyzing", "preparing", "finished"] {
+        let (result, ok) = live.call("claude-code", "agent_activity", json!({"phase": phase}));
+        assert!(ok);
+        assert_eq!(result["name"], "agent_activity");
+        assert_eq!(result["arguments"], json!({"phase": phase}));
+        assert_eq!(result["client"], "claude-code");
+    }
     let (result, _) = live.batch(vec![("create_board".into(), json!({"name": "A"}))], true);
     assert_eq!(result["name"], "run_batch");
     assert_eq!(result["arguments"], json!({"calls": [{"tool": "create_board", "arguments": {"name": "A"}}], "dry_run": true}));

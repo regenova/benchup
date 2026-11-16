@@ -89,6 +89,7 @@
   "agent_link.copy_shell": "Copiar configuración de terminal",
   "agent_link.copy_token": "Copiar token",
   "agent_link.deny": "Denegar acceso",
+  "agent_link.error.activity_phase": "Se esperaba una fase: analyzing, preparing o finished.",
   "agent_link.error.app_busy": "Otra ventana de BenchUp ya está conectada a este puente",
   "agent_link.error.arguments_not_object": "Los argumentos deben ser un objeto JSON",
   "agent_link.error.bridge": "El puente rechazó la conexión: {message}",

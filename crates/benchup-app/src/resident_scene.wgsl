@@ -20,6 +20,7 @@ struct Camera {
     marker_fill: vec4<f32>,
     scale_pivot: vec4<f32>,
     scale_factors: vec4<f32>,
+    agent_effect: vec4<f32>,
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var interaction_states: texture_2d<u32>;
@@ -33,6 +34,18 @@ fn interaction_state(pair: vec2<u32>) -> u32 {
     if camera.interaction.x != 0u && camera.interaction.x == pair.y {state|=2u;}
     if (state&8u)!=0u {state|=2u;}
     return state;
+}
+fn agent_stamp(pair: vec2<u32>) -> f32 {
+    let own = slot_state(pair.y);
+    let owner = slot_state(pair.x);
+    let state = select(owner, own, (own&128u)!=0u);
+    return select(-1.0, f32(state>>8u)*0.001, (state&128u)!=0u);
+}
+fn agent_uv(clip: vec3<f32>) -> vec2<f32> {
+    return clip.xy / clip.z * vec2<f32>(0.5,-0.5) + vec2<f32>(0.5);
+}
+fn agent_color(color: vec4<f32>, stamp: f32, clip: vec3<f32>) -> vec4<f32> {
+    return agent_surface(color, stamp, agent_uv(clip), camera.viewport.xy, camera.agent_effect);
 }
 fn preview_factors(state: u32) -> vec3<f32> {
     return select(vec3<f32>(1.0), camera.scale_factors.xyz,
@@ -53,12 +66,16 @@ struct Output {
     @location(2) center: vec3<f32>,
     @location(3) @interpolate(flat) faces: vec4<u32>,
     @location(4) shadow: vec3<f32>,
+    @location(7) @interpolate(flat) stamp: f32,
+    @location(8) clip: vec3<f32>,
 }
 struct FaceOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) color: vec4<f32>,
     @location(3) @interpolate(flat) faces: vec4<u32>,
     @location(4) shadow: vec3<f32>,
+    @location(7) @interpolate(flat) stamp: f32,
+    @location(8) clip: vec3<f32>,
     @location(5) grain: vec3<f32>,
     @location(6) @interpolate(flat) finish: vec4<f32>,
 }
@@ -101,6 +118,8 @@ fn surface_vertex(position: vec3<f32>, normal: vec3<f32>, anchor: vec3<f32>, col
     var output: FaceOutput;
     output.position = camera.matrix * vec4<f32>(preview_point(position,state),1.0);
     if ((state&64u)!=0u && (camera.interaction.w&4u)==0u) || (camera.interaction.y!=0u && (state&4u)==0u) {output.position=vec4<f32>(2.0,2.0,2.0,1.0);}
+    output.stamp = agent_stamp(interaction);
+    output.clip = output.position.xyw;
     output.color = shaded;
     output.shadow = (camera.shadow_matrix * vec4<f32>(preview_point(position,state),1.0)).xyz;
     output.grain = grain;
@@ -131,6 +150,8 @@ fn shadow_vertex(@location(0) position: vec3<f32>, @location(4) face_id: u32,
         output.position=vec4<f32>(2.0,2.0,2.0,1.0);
     }
     output.faces = vec4<u32>(face_id,0u,0u,0u);
+    output.stamp = -2.0;
+    output.clip = output.position.xyw;
     return output;
 }
 // Evaluate the receiving plane at each shadow texel rather than adding a large
@@ -168,7 +189,7 @@ fn face_color(input: FaceOutput) -> @location(0) vec4<f32> {
     let amount = shadow_coverage(input);
     let dark = floor(input.color.rgb * (1.0-camera.shadow_params.x) * 255.0 + vec3<f32>(0.5))/255.0;
     let rgb = mix(input.color.rgb,dark,amount);
-    return target_color(vec4<f32>(rgb, input.color.a));
+    return target_color(agent_color(vec4<f32>(rgb, input.color.a), input.stamp, input.clip));
 }
 @fragment
 fn material_color(input: FaceOutput) -> @location(0) vec4<f32> {
@@ -176,7 +197,7 @@ fn material_color(input: FaceOutput) -> @location(0) vec4<f32> {
     let dark = floor(input.color.rgb * (1.0-camera.shadow_params.x) * 255.0 + vec3<f32>(0.5))/255.0;
     let rgb = mix(input.color.rgb,dark,amount);
     let finish = vec4<f32>(input.finish.xyz, input.finish.w * (1.0 - amount * camera.shadow_params.x));
-    return target_color(vec4<f32>(finish_color(rgb, input.color.a, input.grain, finish), input.color.a));
+    return target_color(agent_color(vec4<f32>(finish_color(rgb, input.color.a, input.grain, finish), input.color.a), input.stamp, input.clip));
 }
 // Offset depth only across the actual incident face, never its extension past
 // a silhouette. Using homogeneous planes also works at near-plane crossings.
@@ -214,6 +235,8 @@ fn edge_vertex(@location(0) world_a: vec3<f32>, @location(1) world_b: vec3<f32>,
     else if (state&1u)!=0u {edge_color=camera.edge_selected;}
     else if (state&2u)!=0u {edge_color=select(camera.edge_hovered,camera.edge_selected,(camera.interaction.w&1u)!=0u && (state&8u)==0u);}
     output.color = target_color(edge_color);
+    output.stamp = agent_stamp(interaction);
+    output.clip = vec3<f32>(0.0,0.0,1.0);
     output.center = vec3<f32>(0.0);
     output.faces = faces;
     output.lateral = 0.0;
@@ -267,6 +290,7 @@ fn edge_vertex(@location(0) world_a: vec3<f32>, @location(1) world_b: vec3<f32>,
     let biased = bitcast<f32>(bitcast<u32>(depth) - min(1u,bitcast<u32>(depth)));
     output.position = vec4<f32>(clip.xy + offset * clip.w,biased * clip.w,clip.w);
     output.lateral = selector.y;
+    output.clip = output.position.xyw;
     return output;
 }
 fn coverage(input: Output) -> f32 {
@@ -278,7 +302,7 @@ fn coverage(input: Output) -> f32 {
 fn fragment_main(input: Output) -> @location(0) vec4<f32> {
     let amount = coverage(input);
     if amount < 0.001 { discard; }
-    return input.color * amount;
+    return agent_color(input.color, input.stamp, input.clip) * amount;
 }
 // A steep incident plane must not pull a hidden edge through another object.
 // Test the unexpanded centerline as well as the stroke footprint. Incident-face
@@ -301,15 +325,24 @@ fn fragment_visibility(@builtin(position) position: vec4<f32>,
     return vec2<u32>(faces.x,bitcast<u32>(position.z));
 }
 @fragment
+fn fragment_visibility_effect(@builtin(position) position: vec4<f32>,
+    @location(3) @interpolate(flat) faces: vec4<u32>,
+    @location(7) @interpolate(flat) stamp: f32,
+    @location(8) clip: vec3<f32>) -> @location(0) vec2<u32> {
+    if agent_reveal(stamp, camera.agent_effect.x, agent_uv(clip), camera.viewport.xy) < 0.0 { discard; }
+    return vec2<u32>(faces.x,bitcast<u32>(position.z));
+}
+@fragment
 fn edge_color(input: Output) -> @location(0) vec4<f32> {
     let amount = coverage(input);
     if amount < 0.001 || hidden_center(input) { discard; }
-    return input.color * amount;
+    return agent_color(input.color, input.stamp, input.clip) * amount;
 }
 @fragment
 fn edge_depth(input: Output) -> @location(0) vec4<f32> {
     let amount = coverage(input);
     if input.position.z <= 0.0 || input.position.z >= 1.0 || input.color.a < 1.0 || amount < 0.001 || hidden_center(input) { discard; }
+    if agent_reveal(input.stamp, camera.agent_effect.x, agent_uv(input.clip), camera.viewport.xy) < 0.0 { discard; }
     return vec4<f32>(0.0);
 }
 
@@ -320,6 +353,8 @@ fn marker_vertex(@location(0) point: vec3<f32>, @location(1) edges: vec4<u32>,
     @builtin(vertex_index) vertex: u32) -> Output {
     var output: Output;
     output.position = vec4<f32>(2.0,2.0,2.0,1.0);
+    output.stamp = -2.0;
+    output.clip = vec3<f32>(0.0,0.0,1.0);
     var selected = false;
     for(var i=0u;i<4u;i++) {
         let own = slot_state(edges[i]);

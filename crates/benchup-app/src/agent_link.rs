@@ -362,6 +362,14 @@ struct Active {
     phase: Phase,
 }
 
+/// Explicit tasks span pauses; legacy callers only report individual calls.
+struct Work {
+    activity: Activity,
+    since: f64,
+    updated: f64,
+    explicit: bool,
+}
+
 pub(super) struct AgentLink {
     pub status: Status,
     /// The pairing token, loaded from this device on demand.
@@ -394,6 +402,10 @@ pub(super) struct AgentLink {
     last_change: Option<f64>,
     /// Session-only telemetry, cleared on disconnect or project replacement.
     last_activity: Option<(Activity, f64)>,
+    /// Whole tasks, including quiet planning between calls. Ended explicitly.
+    work: std::collections::BTreeMap<String, Work>,
+    /// Viewport feedback belongs to this connection and document only.
+    visuals: renderer::agent_effects::State,
     /// The last copy button pressed and until when "Copied" shows (session only).
     copied: Option<(ui::CopiedText, f64)>,
     /// The `render_view` being made on another thread: its call id, where
@@ -468,6 +480,8 @@ impl AgentLink {
             denied: false,
             last_change: None,
             last_activity: None,
+            work: Default::default(),
+            visuals: Default::default(),
             copied: None,
             #[cfg(not(target_arch = "wasm32"))]
             rendering: None,
@@ -550,6 +564,74 @@ impl AgentLink {
         }
     }
 
+    /// A task stays visible across arbitrary pauses between tool calls. A
+    /// live agent sends `agent_activity {phase: "finished"}` before replying.
+    fn observe_work(&mut self, client: &str, activity: Activity, now: f64) {
+        if self.work.len() >= QUEUE_LIMIT && !self.work.contains_key(client) { return; }
+        let work = self.work.entry(client.to_owned()).or_insert(Work {
+            activity, since: now, updated: now, explicit: false,
+        });
+        if work.activity.viewport_mode() != activity.viewport_mode() { work.since = now; }
+        work.activity = activity;
+        work.updated = now;
+    }
+
+    fn current_work(&self, now: f64) -> Option<(Activity, f64)> {
+        self.work.values()
+            .filter(|work| work.explicit || now - work.updated < ACTIVITY_LINGER)
+            .max_by(|a, b| a.updated.total_cmp(&b.updated))
+            .map(|work| (work.activity, work.since))
+    }
+
+    fn report_activity(&mut self, client: &str, arguments: &Value, now: f64) -> (bool, Value) {
+        let phase = arguments.get("phase").and_then(Value::as_str);
+        if arguments.as_object().is_none_or(|object| object.len() != 1)
+            || !matches!(phase, Some("analyzing" | "preparing" | "finished"))
+        {
+            return (false, json!({"ok": false, "error": tr!("agent_link.error.activity_phase")}));
+        }
+        match phase.unwrap() {
+            "finished" => {
+                self.work.remove(client);
+                // A completed task cannot revive the short status/robot linger.
+                self.last_activity = None;
+                if self.work.is_empty() && !self.queue.iter().any(|queued| queued.changes) {
+                    self.last_change = None;
+                    if self.control == Control::Agent { self.control = Control::Shared; }
+                }
+            }
+            phase => {
+                if self.work.len() >= QUEUE_LIMIT && !self.work.contains_key(client) {
+                    return (false, json!({"ok": false, "error": tr!("agent_link.error.busy")}));
+                }
+                self.observe_work(client, if phase == "analyzing" { Activity::Reading } else { Activity::Creating }, now);
+                if let Some(work) = self.work.get_mut(client) { work.explicit = true; }
+                self.last_activity = None;
+            }
+        }
+        (true, json!({"ok": true, "phase": phase.unwrap()}))
+    }
+
+    pub(super) fn viewport_activity(&self, now: f64) -> Option<(renderer::agent_effects::Mode, f64)> {
+        if !self.connected() { return None; }
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.rendering.as_ref().is_some_and(|(_, _, epoch)| *epoch == self.epoch) {
+            return Some((renderer::agent_effects::Mode::Looking, self.last_activity.map_or(now, |(_, at)| at)));
+        }
+        if let Some(queued) = self.queue.iter().find(|q| q.epoch == self.epoch && q.name != "agent_activity") {
+            return Some((Activity::for_call(&queued.name, &queued.arguments).viewport_mode(), queued.queued_at));
+        }
+        if let Some((activity, since)) = self.current_work(now) {
+            return Some((activity.viewport_mode(), since));
+        }
+        None
+    }
+
+    pub(super) fn viewport_frame(&mut self, now: f64, bounds: Option<(DVec3, DVec3)>) -> renderer::agent_effects::Frame {
+        let activity = self.viewport_activity(now);
+        self.visuals.frame(now, activity, bounds)
+    }
+
     /// Work the app can observe, including reads and long-running renders.
     /// Resolve labels here so changing the application language updates them.
     pub(super) fn activity_text(&self, now: f64) -> Option<String> {
@@ -570,7 +652,14 @@ impl AgentLink {
         }
         self.last_activity
             .filter(|(_, at)| now - at < ACTIVITY_LINGER)
-            .map(|(activity, _)| tr!("agent_link.activity.current", activity = activity.label()))
+            .map(|(activity, _)| activity)
+            .or_else(|| self.current_work(now).map(|(activity, _)| activity))
+            .map(|activity| {
+                // The real render is handled above. A completed render is not
+                // evidence that the agent is still rendering during its planning.
+                let activity = if activity == Activity::Rendering { Activity::Working } else { activity };
+                tr!("agent_link.activity.current", activity = activity.label())
+            })
     }
 
     fn send(&mut self, message: Value) {
@@ -625,6 +714,8 @@ impl AgentLink {
         self.control = Control::Designer;
         self.last_change = None;
         self.last_activity = None;
+        self.visuals = Default::default();
+        self.work.clear();
         self.refuse_changes(tr!("agent_link.error.taken_control"), Some(tr!("agent_link.error.denied_hint")));
     }
     /// The designer lets the agent edit again without asking.
@@ -636,6 +727,8 @@ impl AgentLink {
     pub(super) fn deny(&mut self) {
         self.denied = true;
         self.last_activity = None;
+        self.visuals = Default::default();
+        self.work.clear();
         self.refuse_changes(tr!("agent_link.error.denied"), Some(tr!("agent_link.error.denied_hint")));
     }
 
@@ -645,6 +738,8 @@ impl AgentLink {
         self.queue.clear();
         self.asking = false;
         self.last_activity = None;
+        self.visuals = Default::default();
+        self.work.clear();
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.rendering = None;
@@ -770,8 +865,11 @@ impl AgentLink {
                         Err(message) => self.refuse(&id, &message, None),
                         Ok(_) if self.queue.len() >= QUEUE_LIMIT => self.refuse(&id, tr!("agent_link.error.queue_full"), None),
                         Ok((name, arguments)) => {
-                            if !client.is_empty() {
+                            if !client.is_empty() && !(name == "agent_activity" && arguments.get("phase").and_then(Value::as_str) == Some("finished")) {
                                 self.status = Status::Connected { client: Some(client.clone()) };
+                            }
+                            if name != "agent_activity" {
+                                self.observe_work(&client, Activity::for_call(&name, &arguments), now);
                             }
                             let changes = needs_grant(&name, &arguments);
                             let epoch = self.epoch;
@@ -804,6 +902,7 @@ impl AgentLink {
     /// Drops calls past their deadline and answers those that waited longer
     /// than the bridge will. The only place deadlines are checked.
     fn expire(&mut self, now: f64) {
+        self.work.retain(|_, work| work.explicit || now - work.updated < ACTIVITY_LINGER);
         // The bridge has already answered calls that are about to pass their
         // deadline; running them would only change the model unseen.
         let limit = now_ms() + DEADLINE_MARGIN_MS;
@@ -859,6 +958,8 @@ impl BenchUpApp {
         let prefs = self.general_settings.agent.clone();
         if self.agent_link.epoch != self.doc_epoch {
             self.agent_link.last_activity = None;
+            self.agent_link.visuals = Default::default();
+            self.agent_link.work.clear();
             self.agent_link.epoch = self.doc_epoch;
         }
         self.agent_link.document_name = self.doc.name.clone();
@@ -960,8 +1061,17 @@ impl BenchUpApp {
                 }
             }
             let selection_before = self.selected.clone();
-            let (ok, result) = self.run_agent_request(&queued.name, &queued.arguments, ctx);
-            self.agent_link.last_activity = ok.then(|| (Activity::for_call(&queued.name, &queued.arguments), clock()));
+            let activity_report = queued.name == "agent_activity";
+            let (ok, result) = if activity_report {
+                self.agent_link.report_activity(&queued.client, &queued.arguments, clock())
+            } else {
+                self.run_agent_request(&queued.name, &queued.arguments, ctx)
+            };
+            if !activity_report {
+                let activity = Activity::for_call(&queued.name, &queued.arguments);
+                if ok { self.agent_link.observe_work(&queued.client, activity, clock()); }
+                self.agent_link.last_activity = ok.then(|| (activity, clock()));
+            }
             // `select` or `undo` may change the selection; in a shared
             // project the server must lease it before edits can follow.
             self.selection_changed_outside_frame(&selection_before);
@@ -1005,6 +1115,7 @@ impl BenchUpApp {
             let _ = tx.send(render_answer(&model, &arguments));
             ctx.request_repaint();
         });
+        self.agent_link.last_activity = Some((Activity::Rendering, clock()));
         self.agent_link.rendering = Some((id, rx, self.doc_epoch));
     }
 
@@ -1219,9 +1330,13 @@ impl BenchUpApp {
         agent_restore_scope(&mut self.doc.model, scope);
         // One full comparison: the model is compared once here, not again
         // while recording.
-        if before != self.doc.model && !self.commit_changed_edit(label, before, ctx) {
-            // Shared edit access lapsed: rolled back whole.
-            return (json!({"ok": false, "error": self.shared_edit_block_reason(ctx)}), false);
+        if before != self.doc.model {
+            let transition = renderer::agent_effects::Change::between(&before, &self.doc.model, &self.doc.display);
+            if !self.commit_changed_edit(label, before, ctx) {
+                // Shared edit access lapsed: rolled back whole.
+                return (json!({"ok": false, "error": self.shared_edit_block_reason(ctx)}), false);
+            }
+            self.agent_link.visuals.record(transition, clock());
         }
         self.focus_touched(created.into_iter().chain(modified));
         if let Some(selection) = selection {
@@ -1261,10 +1376,13 @@ impl BenchUpApp {
             return (false, json!({"ok": false, "error": self.shared_edit_block_reason(ctx)}));
         }
         let position = self.doc.history.position();
+        let before = self.doc.model.clone();
         self.undo(ctx, redo);
         if self.doc.history.position() == position {
             return (false, json!({"ok": false, "error": self.shared_edit_block_reason(ctx)}));
         }
+        let transition = renderer::agent_effects::Change::between(&before, &self.doc.model, &self.doc.display);
+        self.agent_link.visuals.record(transition, clock());
         let key = if redo { "redone" } else { "undone" };
         let mut result = json!({"ok": true});
         result[key] = json!(label);

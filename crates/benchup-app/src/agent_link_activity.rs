@@ -61,6 +61,15 @@ impl Activity {
         }
     }
 
+    pub(super) fn viewport_mode(self) -> crate::renderer::agent_effects::Mode {
+        use crate::renderer::agent_effects::Mode;
+        match self {
+            Self::Reading | Self::Finding | Self::Selecting | Self::Checking
+            | Self::Estimating | Self::Rendering => Mode::Looking,
+            _ => Mode::Preparing,
+        }
+    }
+
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Reading => tr!("agent_link.activity.reading"),

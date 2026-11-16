@@ -1,6 +1,126 @@
 use super::*;
 use std::sync::{Arc, Mutex};
 
+#[test]
+fn legacy_call_activity_expires_and_never_claims_a_completed_render_is_running() {
+    let mut setup = Setup::paired();
+    setup.app.agent_link.observe_work("legacy", Activity::Rendering, 100.);
+    setup.app.agent_link.last_activity = Some((Activity::Rendering, 100.));
+    assert!(setup.app.agent_link.viewport_activity(100.).is_some());
+    assert_eq!(setup.app.agent_link.activity_text(100.), Some("AI: Working on the project…".into()));
+    assert!(setup.app.agent_link.viewport_activity(100. + ACTIVITY_LINGER).is_none());
+    assert!(setup.app.agent_link.activity_text(100. + ACTIVITY_LINGER).is_none());
+    setup.app.agent_link.expire(100. + ACTIVITY_LINGER);
+    assert!(setup.app.agent_link.work.is_empty());
+}
+
+#[test]
+fn completion_notification_clears_a_declared_task_after_its_last_render() {
+    let mut setup = Setup::paired();
+    setup.app.agent_link.report_activity("codex-mcp-client", &json!({"phase": "analyzing"}), 100.);
+    setup.app.agent_link.observe_work("codex-mcp-client", Activity::Rendering, 101.);
+    setup.app.agent_link.last_activity = Some((Activity::Rendering, 101.));
+    setup.app.agent_link.last_change = Some(101.);
+    setup.app.agent_link.control = Control::Agent;
+    assert!(setup.app.agent_link.viewport_activity(10_000.).is_some());
+    assert_ne!(setup.app.agent_link.activity_text(10_000.), Some("AI: Rendering a view…".into()));
+    let (ok, _) = setup.app.agent_link.report_activity("codex-mcp-client", &json!({"phase": "finished"}), 10_001.);
+    assert!(ok);
+    assert!(setup.app.agent_link.viewport_activity(10_001.).is_none());
+    assert!(setup.app.agent_link.activity_text(10_001.).is_none());
+    assert_eq!(setup.app.agent_link.control, Control::Shared);
+    assert!(!setup.app.agent_link.editing(10_001.));
+}
+
+#[test]
+fn work_reports_keep_the_robot_visible_through_long_pauses_and_finish_without_an_edit() {
+    use renderer::agent_effects::Mode;
+    let mut setup = Setup::paired();
+    let history = setup.app.doc.history.position();
+    let selection = setup.app.selected.clone();
+    assert_eq!(setup.call("agent_activity", json!({"phase": "analyzing"}))["ok"], true);
+    let looking = setup.app.agent_link.viewport_activity(clock()).unwrap();
+    assert_eq!(looking.0, Mode::Looking);
+    assert_eq!(setup.app.agent_link.viewport_activity(clock() + 7200.), Some(looking));
+    assert_eq!(setup.call("agent_activity", json!({"phase": "preparing"}))["ok"], true);
+    let preparing = setup.app.agent_link.viewport_activity(clock()).unwrap();
+    assert_eq!(preparing.0, Mode::Preparing);
+    assert_eq!(setup.app.agent_link.viewport_activity(clock() + 7200.), Some(preparing));
+    assert_eq!(setup.call("agent_activity", json!({"phase": "finished"}))["ok"], true);
+    assert!(setup.app.agent_link.viewport_activity(clock()).is_none());
+    assert!(!setup.app.agent_link.viewport_frame(clock(), None).animated());
+    assert_eq!(setup.app.doc.history.position(), history);
+    assert_eq!(setup.app.selected, selection);
+    assert!(setup.app.doc.model.objects.is_empty());
+}
+
+#[test]
+fn work_reports_are_validated_and_one_agent_cannot_finish_another_agents_work() {
+    let mut setup = Setup::paired();
+    assert!(setup.app.agent_link.report_activity("first", &json!({"phase": "analyzing"}), 100.).0);
+    assert!(setup.app.agent_link.report_activity("second", &json!({"phase": "preparing"}), 101.).0);
+    for arguments in [json!({}), json!({"phase": "idle"}), json!({"phase": 1}), json!({"phase": "finished", "extra": true})] {
+        assert!(!setup.app.agent_link.report_activity("first", &arguments, 102.).0);
+        assert_eq!(setup.app.agent_link.work.len(), 2);
+    }
+    assert!(setup.app.agent_link.report_activity("second", &json!({"phase": "finished"}), 103.).0);
+    assert_eq!(setup.app.agent_link.work.len(), 1);
+    assert!(setup.app.agent_link.viewport_activity(10_000.).is_some());
+    setup.app.agent_link.stop();
+    assert!(setup.app.agent_link.work.is_empty());
+    assert!(setup.app.agent_link.viewport_activity(10_000.).is_none());
+}
+
+#[test]
+fn viewport_feedback_tracks_observed_work_and_document_lifetime() {
+    use renderer::agent_effects::Mode;
+    let mut setup = Setup::paired();
+    assert!(setup.app.agent_link.viewport_activity(clock()).is_none());
+    setup.call("agent_activity", json!({"phase": "analyzing"}));
+    setup.call("get_scene", json!({}));
+    let (_, at) = setup.app.agent_link.last_activity.unwrap();
+    let looking = setup.app.agent_link.viewport_activity(at).unwrap();
+    assert_eq!(looking.0, Mode::Looking);
+    assert_eq!(setup.app.agent_link.viewport_activity(at + 3600.), Some(looking));
+
+    setup.call("create_board", board("Animated", 0.));
+    let (_, at) = setup.app.agent_link.last_activity.unwrap();
+    assert_eq!(setup.app.agent_link.viewport_activity(at).unwrap().0, Mode::Preparing);
+    let frame = setup.app.agent_link.viewport_frame(at, None);
+    assert!(!frame.starts.is_empty());
+    setup.app.agent_link.take_control();
+    assert!(!setup.app.agent_link.viewport_frame(at, None).animated());
+
+    setup.app.agent_link.release_control();
+    setup.call("create_board", board("Another", 700.));
+    setup.app.doc_epoch += 1;
+    setup.poll();
+    assert!(!setup.app.agent_link.viewport_frame(clock(), None).animated());
+}
+
+#[test]
+fn failed_and_previewed_edits_never_start_geometry_transitions() {
+    let mut setup = Setup::paired();
+    let calls = json!([{"tool": "create_board", "arguments": board("Preview", 0.)}]);
+    assert_eq!(setup.call("run_batch", json!({"calls": calls, "dry_run": true}))["ok"], true);
+    assert!(setup.app.agent_link.viewport_frame(clock(), None).starts.is_empty());
+    let calls = json!([
+        {"tool": "create_board", "arguments": board("Rolled back", 0.)},
+        {"tool": "move", "arguments": {"ids": [999_999], "delta_mm": [1, 0, 0]}}
+    ]);
+    assert_eq!(setup.call("run_batch", json!({"calls": calls}))["ok"], false);
+    assert!(setup.app.agent_link.viewport_frame(clock(), None).starts.is_empty());
+    assert!(setup.app.doc.model.objects.is_empty());
+
+    setup.app.line_start = Some(DVec3::ZERO);
+    let id = setup.send("create_board", board("Waiting", 0.));
+    setup.poll();
+    assert!(setup.app.agent_link.viewport_frame(clock(), None).starts.is_empty());
+    setup.wire.push(json!({"type": "cancel", "id": id}));
+    setup.poll();
+    assert!(setup.app.agent_link.viewport_frame(clock(), None).starts.is_empty());
+}
+
 const TOKEN: &str = "6f1b0c8e-0d1a-4a52-9b0e-agent-test";
 const BRIDGE_NONCE: &str = "abababababababababababababababababababababababababababababababab";
 
@@ -177,25 +297,28 @@ fn each_changing_call_is_one_undo_step_and_reads_add_none() {
 }
 
 #[test]
-fn activity_includes_reads_and_returns_to_idle_without_another_call() {
+fn activity_includes_reads_and_returns_to_idle_when_work_finishes() {
     let mut setup = Setup::paired();
     assert!(setup.app.agent_link.activity_text(clock()).is_none());
 
+    assert_eq!(setup.call("agent_activity", json!({"phase": "analyzing"}))["ok"], true);
     assert_eq!(setup.call("get_scene", json!({}))["ok"], true);
     let (_, at) = setup.app.agent_link.last_activity.unwrap();
     assert_eq!(setup.app.agent_link.activity_text(at), Some("AI: Reading the project…".into()));
-    assert!(setup.app.agent_link.activity_text(at + ACTIVITY_LINGER).is_none());
+    assert!(setup.app.agent_link.activity_text(at + 3600.).is_some());
     assert!(!setup.app.agent_link.editing(at), "reading does not take editing control");
 
     assert_eq!(setup.call("create_board", board("Side", 0.))["ok"], true);
     assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Creating geometry…".into()));
-    // A failed request must not leave a misleading description of work.
+    // A failed call does not finish the task: the AI may recover or explain it.
     assert_eq!(setup.call("get_object", json!({"id": u64::MAX}))["ok"], false);
+    assert!(setup.app.agent_link.activity_text(clock()).is_some());
+    assert_eq!(setup.call("agent_activity", json!({"phase": "finished"}))["ok"], true);
     assert!(setup.app.agent_link.activity_text(clock()).is_none());
 }
 
 #[test]
-fn waiting_activity_clears_on_cancellation_denial_and_disconnect() {
+fn waiting_task_survives_call_cancellation_and_clears_on_denial_or_disconnect() {
     let mut setup = Setup::paired();
     setup.app.line_start = Some(DVec3::ZERO);
     let id = setup.send("create_board", board("Side", 0.));
@@ -203,7 +326,7 @@ fn waiting_activity_clears_on_cancellation_denial_and_disconnect() {
     assert_eq!(setup.app.agent_link.activity_text(clock()), Some("AI: Waiting for access — Creating geometry".into()));
     setup.wire.push(json!({"type": "cancel", "id": id}));
     setup.poll();
-    assert!(setup.app.agent_link.activity_text(clock()).is_none());
+    assert!(setup.app.agent_link.activity_text(clock()).is_some());
 
     setup.send("create_board", board("Side", 0.));
     setup.poll();
@@ -237,6 +360,7 @@ fn single_call_batches_describe_the_action_and_previews_are_identified() {
 #[test]
 fn rendering_activity_stays_visible_until_the_render_finishes() {
     let mut setup = Setup::paired();
+    setup.call("agent_activity", json!({"phase": "analyzing"}));
     // Hold a render open deterministically without running a GPU render.
     let (tx, rx) = std::sync::mpsc::channel();
     setup.app.agent_link.rendering = Some(("render".into(), rx, setup.app.doc_epoch));
@@ -249,8 +373,10 @@ fn rendering_activity_stays_visible_until_the_render_finishes() {
     setup.poll();
     let (_, at) = setup.app.agent_link.last_activity.unwrap();
     assert!(setup.app.agent_link.rendering.is_none());
-    assert_eq!(setup.app.agent_link.activity_text(at), Some("AI: Rendering a view…".into()));
-    assert!(setup.app.agent_link.activity_text(at + ACTIVITY_LINGER).is_none());
+    assert_eq!(setup.app.agent_link.activity_text(at), Some("AI: Working on the project…".into()));
+    assert!(setup.app.agent_link.activity_text(at + 3600.).is_some());
+    assert_eq!(setup.call("agent_activity", json!({"phase": "finished"}))["ok"], true);
+    assert!(setup.app.agent_link.activity_text(clock()).is_none());
 
     let (tx, rx) = std::sync::mpsc::channel();
     setup.app.agent_link.rendering = Some(("old-project-render".into(), rx, setup.app.doc_epoch));

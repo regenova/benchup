@@ -44,6 +44,7 @@ Each other call is saved on its own, so prefer `run_batch` for any change of mor
 
 `benchup bridge` (MCP) and the CLI's `--live` commands (`benchup call --live …`, `benchup scene --live`) work on the project open in BenchUp, while the designer watches. The tools and batches are the same, with these differences:
 
+- Begin each task with `agent_activity {"phase":"analyzing"}` before reading or planning, and use `{"phase":"preparing"}` while preparing changes. Ordinary calls update the robot's looking/gear mode automatically. The robot stays visible across pauses between calls. After final verification, **always** call `agent_activity {"phase":"finished"}` before replying to the user, including when stopping after an error. From the CLI, use `benchup call --live agent_activity '{"phase":"analyzing"}'` (and likewise for the other phases). Activity reports change no model data, selection, or undo history; they are live-only.
 - Each changing call, and each batch, is one undo step labelled `Agent: …` in BenchUp's history. Prefer one batch per change, so the designer can undo it in one step.
 - Every call starts in the scope the designer is in. Put `enter_object` and the calls that need it in one batch, ending with `exit_to_root`.
 - `get_selection` is what the designer has selected: when they say "this" or "these", read it first. What you create or change is selected afterwards.

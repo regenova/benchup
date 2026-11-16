@@ -99,6 +99,29 @@ agent ──MCP (stdio) or benchup … --live──▶ benchup bridge (127.0.0.1
 
    `scene`, `get`, `call` (with `--batch` and `--dry-run`), `undo`, `redo` and `render` take `--live` instead of a file. When no bridge is running, the first `--live` command starts one in the background, which exits after 30 minutes without calls. A `benchup bridge` that finds another bridge on its port forwards MCP calls through it, and listens on the port itself once that bridge exits. `BENCHUP_BRIDGE_PORT`, or `benchup bridge --port`, changes the port; set the same port in BenchUp.
 
+For **Codex CLI**, also connect its turn-completion notification to BenchUp.
+This clears the robot and activity text when Codex replies, even if the model
+omits `agent_activity {"phase":"finished"}`. With Node 22+ and Python 3.11+:
+
+```sh
+mkdir -p ~/.codex/hooks
+cp scripts/codex_benchup_notify.mjs ~/.codex/hooks/benchup-notify.mjs
+```
+
+Add this top-level setting to `~/.codex/config.toml` (use the actual absolute
+path, or the equivalent path under `CODEX_HOME`), then restart Codex CLI:
+
+```toml
+notify = ["node", "/absolute/path/to/.codex/hooks/benchup-notify.mjs"]
+```
+
+Preserve or chain an existing `notify` handler instead of replacing it. The
+hook reads the token and port from the existing BenchUp MCP configuration;
+no token belongs in the notification command. It only sends activity-completion
+reports to an already running bridge, and does not open an app or edit a model.
+Calls from clients that do not declare a task show a short activity indicator;
+declared tasks stay visible between calls until completion.
+
 How it behaves:
 
 - **Undo:** each changing call is one step in BenchUp's history, labelled `Agent: <tool>`; a batch (`--batch` or MCP `run_batch`) is one step. The designer can undo it as usual, and `benchup undo --live` steps through the same history.

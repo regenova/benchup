@@ -889,6 +889,9 @@ impl Live {
 }
 
 const LIVE_INSTRUCTIONS: &str = "Edits the BenchUp 3D woodworking project open in the app, live, while the designer watches. \
+Begin each task with agent_activity {phase: \"analyzing\"}; use phase: \"preparing\" while planning changes. \
+Always send agent_activity {phase: \"finished\"} after the final check and before your reply, including when stopping after an error. \
+The robot remains visible throughout the task, including pauses between tool calls. \
 Lengths are millimetres, Z is up. Call get_scene first to see the model. Each changing call (and each run_batch) is one undo \
 step labelled \"Agent: …\" in BenchUp's history. Every call starts in the scope the designer is in, so put enter_object and \
 the calls that need it in one run_batch. The current selection is what the designer has selected, so \"this\" usually means \
@@ -917,6 +920,8 @@ impl Live {
 }
 
 impl Backend for Live {
+    fn supports_activity(&self) -> bool { true }
+
     fn call(&mut self, _client: &str, name: &str, arguments: Value) -> (Value, bool) {
         self.forward(name, arguments)
     }

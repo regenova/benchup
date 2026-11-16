@@ -11,6 +11,7 @@ pub(super) const OUTLINER: u32 = 8;
 pub(super) const LOCKED: u32 = 16;
 pub(super) const ERASING: u32 = 32;
 pub(super) const REMOVED: u32 = 64;
+const ASSEMBLING: u32 = 128;
 #[derive(Default)]
 pub(super) struct Cache {
     key: Option<Key>,
@@ -24,6 +25,7 @@ struct Key {
     context: Option<u64>,
     erasing: BTreeSet<u64>,
     removed: BTreeSet<u64>,
+    assembling: Arc<BTreeMap<u64, f64>>,
 }
 #[derive(Clone)]
 pub(super) struct Hierarchy {
@@ -154,11 +156,16 @@ impl Hierarchy {
             self.slot(id),
         ]
     }
-    pub fn update(
+    #[cfg(test)]
+    pub fn update(&self, cache: &mut Cache, key: &SceneKey, removed: &BTreeSet<u64>) -> Arc<Vec<u32>> {
+        self.update_with_effects(cache, key, removed, &Default::default())
+    }
+    pub fn update_with_effects(
         &self,
         cache: &mut Cache,
         key: &SceneKey,
         removed: &BTreeSet<u64>,
+        assembling: &Arc<BTreeMap<u64, f64>>,
     ) -> Arc<Vec<u32>> {
         // Primitive hover is already a uniform lookup in the vertex shader.
         // Only assembly hover needs inherited state in the interaction texture.
@@ -166,14 +173,15 @@ impl Hierarchy {
         if cache.key.as_ref().is_some_and(|previous|
             previous.hover == hover && previous.context == key.edit_context
                 && previous.selected == key.selected && previous.outliner == key.outliner_hover
-                && previous.erasing == key.erasing && previous.removed == *removed)
+                && previous.erasing == key.erasing && previous.removed == *removed
+                && previous.assembling == *assembling)
         {
             return Arc::clone(&cache.values);
         }
         let next = Key {
             selected: key.selected.clone(), hover,
             outliner: key.outliner_hover.clone(), context: key.edit_context,
-            erasing: key.erasing.clone(), removed: removed.clone(),
+            erasing: key.erasing.clone(), removed: removed.clone(), assembling: assembling.clone(),
         };
         if cache.values.len() != self.base.len() {
             cache.values = Arc::new(self.base.clone());
@@ -186,6 +194,7 @@ impl Hierarchy {
                 .chain(&previous.outliner)
                 .chain(&previous.erasing)
                 .chain(&previous.removed)
+                .chain(previous.assembling.keys())
             {
                 let slot = self.slot(*id) as usize;
                 if slot != 0 {
@@ -233,6 +242,13 @@ impl Hierarchy {
                 if slot != 0 {
                     flags[slot] |= bit;
                 }
+            }
+        }
+        for (&id, &at) in assembling.iter() {
+            let slot = self.slot(id) as usize;
+            if slot != 0 {
+                let millis = (agent_effects::timestamp(at) * 1000.).round() as u32;
+                flags[slot] |= ASSEMBLING | (millis << 8);
             }
         }
         cache.key = Some(next);

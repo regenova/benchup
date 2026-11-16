@@ -5979,6 +5979,9 @@ impl BenchUpApp {
         if model.faces.len() >= 1024 {
             self.face_cache.update_for_revision(model, cache_revision);
         }
+        self.scene_cache.agent_effects = if self.history_preview.is_none() {
+            self.agent_link.viewport_frame(agent_link::clock(), self.render_model.bounds())
+        } else { Default::default() };
         let resident = key
             .as_ref()
             .filter(|key| renderer::resident_supported(key, model, &self.face_cache));
@@ -6049,6 +6052,7 @@ impl BenchUpApp {
                 && self.tool == Tool::Move
                 && !selected_entities.is_empty();
             let mut mesh = renderer::Mesh::cached(camera, size, &mut self.scene_cache);
+            mesh.remap_agent_effects(model);
             mesh.set_scene_clip_planes(camera, self.render_model.bounds());
             mesh.reference_image_depth_bounds(model);
             mesh.set_pixels_per_point(ui.ctx().pixels_per_point());
@@ -6436,6 +6440,8 @@ impl BenchUpApp {
         crate::reference_image_gpu::paint(&p, rect, model, entities,
             self.scene_cache.image_projection(), display, &self.images.gpu,
             self.image_appearance_preview());
+        renderer::agent_effects::paint(&p, rect, camera, &self.scene_cache.agent_effects, colors.paper,
+            &self.scene_cache.agent_effects_cache);
         self.paint_fasteners(&p,rect,model);
         self.paint_joinery(&p, rect);
         let screen = |point: DVec3| view.project(point).map(|v| rect.min + pv(v));

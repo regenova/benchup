@@ -113,10 +113,9 @@ impl BenchUpApp {
         }
     }
 
-    /// The status-bar indicator: who is in control, and the button to take
-    /// or give it back. Nothing while no agent is connected.
+    /// The connected agent's activity and controls for taking or releasing control.
     pub(crate) fn agent_status_chip(&mut self, ui: &mut egui::Ui) {
-        if !self.agent_link.connected() {
+        if !self.general_settings.agent.enabled || !self.agent_link.connected() {
             return;
         }
         let colors = Palette::for_ui(ui);
