@@ -91,7 +91,7 @@ impl BenchUpApp {
                 .map(|(action, keys)| (*action, (*keys).to_owned()))
                 .collect(),
         };
-        let sections = [
+        let mut sections = [
             section(
                 "drawing_measuring",
                 tr!("shortcuts.drawing_measuring"),
@@ -291,6 +291,17 @@ impl BenchUpApp {
                 ],
             ),
         ];
+        if self.general_settings.hold_v_to_orbit
+            && let Some(navigation) = sections.iter_mut().find(|section| section.id == "navigation")
+        {
+            navigation.rows.splice(
+                2..2,
+                [
+                    (tr!("shortcuts.orbit_from_any_tool"), tr!("shortcuts.hold_v_move_pointer").to_owned()),
+                    (tr!("shortcuts.pan_from_any_tool"), tr!("shortcuts.hold_shift_v_move_pointer").to_owned()),
+                ],
+            );
+        }
         let width = (ctx.content_rect().width() - 72.).clamp(80., 900.);
         let response = Modal::new("keyboard_shortcuts", 940.).show(ctx, |modal| {
             let mut filter_changed = false;

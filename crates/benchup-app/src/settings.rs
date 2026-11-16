@@ -192,6 +192,8 @@ pub(super) struct GeneralSettings {
     pub language: String,
     pub navigation_type: NavigationType,
     pub middle_mouse_pan: bool,
+    /// Holding V orbits (Shift + V pans) from any tool without clicking.
+    pub hold_v_to_orbit: bool,
     pub orbit_speed: f64,
     pub pan_speed: f64,
     pub zoom_speed: f64,
@@ -216,6 +218,7 @@ impl Default for GeneralSettings {
             language: DEFAULT_LANGUAGE.into(),
             navigation_type: NavigationType::default(),
             middle_mouse_pan: false,
+            hold_v_to_orbit: true,
             orbit_speed: 1.,
             pan_speed: 1.,
             zoom_speed: 1.,
@@ -418,6 +421,8 @@ impl BenchUpApp {
                         .response
                 },
             );
+            ui.checkbox(&mut self.general_settings.hold_v_to_orbit, tr!("settings.hold_v_to_orbit"));
+            ui.text_weak(tr!("settings.hold_v_to_orbit_hint"));
         }
         if navigation_type == NavigationType::SpaceMouse {
             let space_mouse = &mut self.general_settings.space_mouse;

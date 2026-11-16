@@ -298,6 +298,27 @@ mod guide_preference_tests {
     }
 
     #[test]
+    fn hold_v_to_orbit_defaults_on_and_saves_without_a_model_edit() {
+        let old: InspectorPreferences =
+            serde_json::from_str(r#"{"general":{"middle_mouse_pan":true}}"#).unwrap();
+        assert!(old.general.hold_v_to_orbit);
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        assert!(app.general_settings.hold_v_to_orbit);
+        let mut storage = Storage::default();
+        for enabled in [false, true] {
+            app.general_settings.hold_v_to_orbit = enabled;
+            storage.flushed = false;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.general_settings.hold_v_to_orbit, enabled);
+        }
+    }
+
+    #[test]
     fn walk_speed_defaults_and_saves_immediately_without_a_model_edit() {
         let old: InspectorPreferences = serde_json::from_str(
             r#"{"general":{"walk":{"eye_height":1.8,"width":0.6,"depth":0.4}}}"#,

@@ -248,7 +248,7 @@ impl BenchUpApp {
             && response.enabled()
             && response.contains_pointer()
             && self.viewport.contains(*pos)
-            && !self.drawing_orbit_modifier(*modifiers)
+            && !self.hover_orbit_active(*modifiers)
             && !self.compass_contains(*pos)
             && let Some(handle) = self
                 .section_handles()
