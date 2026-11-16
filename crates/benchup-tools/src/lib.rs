@@ -10,10 +10,15 @@
 //!   detail) for an agent to read.
 //! * [`files`] reads and writes `.bup` project files (gzip-compressed JSON).
 //! * [`render`] draws a PNG preview of a standard view without a GPU.
+//! * [`batch`] runs several calls as one step, with `$N` references to
+//!   earlier results, and reports them the same way everywhere.
+//! * [`pairing`] is the challenge-response handshake of `benchup bridge`.
 //!
 //! The crate has no network or UI dependencies and builds for `wasm32`.
+pub mod batch;
 pub mod files;
 pub mod ops;
+pub mod pairing;
 pub mod render;
 pub mod review;
 pub mod scene;

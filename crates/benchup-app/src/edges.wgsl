@@ -8,9 +8,10 @@ struct EdgeVertex {
     @location(5) grain: vec4<f32>,
     @location(6) @interpolate(flat) finish: vec4<f32>,
     @location(7) @interpolate(flat) srgb: u32,
+    @location(8) @interpolate(flat) effect: f32,
 }
 
-fn edge_vertex(position: vec3<f32>, color: vec4<f32>, lateral: f32, shadow_color: vec4<f32>, dash_phase: f32, grain: vec4<f32>, finish: vec4<f32>, srgb: u32) -> EdgeVertex {
+fn edge_vertex(position: vec3<f32>, color: vec4<f32>, lateral: f32, shadow_color: vec4<f32>, dash_phase: f32, grain: vec4<f32>, finish: vec4<f32>, srgb: u32, effect: f32) -> EdgeVertex {
     var output: EdgeVertex;
     output.position = vec4<f32>(position, 1.0);
     output.color = color;
@@ -20,46 +21,47 @@ fn edge_vertex(position: vec3<f32>, color: vec4<f32>, lateral: f32, shadow_color
     output.grain = grain;
     output.finish = finish;
     output.srgb = srgb;
+    output.effect = effect;
     output.uv = position.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5);
     return output;
 }
 
 fn edge_vertex_srgb(position: vec3<f32>, color: vec4<f32>, lateral: f32,
-    shadow_color: vec4<f32>, dash_phase: f32) -> EdgeVertex {
+    shadow_color: vec4<f32>, dash_phase: f32, effect: f32) -> EdgeVertex {
     let linear = finish_srgb_to_linear(color.rgb);
     let shadow_linear = finish_srgb_to_linear(shadow_color.rgb);
     return edge_vertex(position, vec4<f32>(linear, color.a), lateral,
-        vec4<f32>(shadow_linear, shadow_color.a), dash_phase, vec4<f32>(0.0), vec4<f32>(0.0), 0u);
+        vec4<f32>(shadow_linear, shadow_color.a), dash_phase, vec4<f32>(0.0), vec4<f32>(0.0), 0u, effect);
 }
 
 @vertex
 fn vertex_main(@location(0) position: vec3<f32>, @location(1) color: vec4<f32>, @location(2) lateral: f32,
-    @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32) -> EdgeVertex {
-    return edge_vertex(position, color, lateral, shadow_color, dash_phase, vec4<f32>(0.0), vec4<f32>(0.0), 0u);
+    @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32, @location(7) effect: f32) -> EdgeVertex {
+    return edge_vertex(position, color, lateral, shadow_color, dash_phase, vec4<f32>(0.0), vec4<f32>(0.0), 0u, effect);
 }
 
 @vertex
 fn vertex_main_srgb(@location(0) position: vec3<f32>, @location(1) color: vec4<f32>, @location(2) lateral: f32,
-    @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32) -> EdgeVertex {
-    return edge_vertex_srgb(position, color, lateral, shadow_color, dash_phase);
+    @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32, @location(7) effect: f32) -> EdgeVertex {
+    return edge_vertex_srgb(position, color, lateral, shadow_color, dash_phase, effect);
 }
 
 @vertex
 fn vertex_material(@location(0) position: vec3<f32>, @location(1) color: vec4<f32>, @location(2) lateral: f32,
     @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32,
-    @location(5) grain: vec4<f32>, @location(6) finish: vec4<f32>) -> EdgeVertex {
-    return edge_vertex(position, color, lateral, shadow_color, dash_phase, grain, finish, 0u);
+    @location(5) grain: vec4<f32>, @location(6) finish: vec4<f32>, @location(7) effect: f32) -> EdgeVertex {
+    return edge_vertex(position, color, lateral, shadow_color, dash_phase, grain, finish, 0u, effect);
 }
 
 @vertex
 fn vertex_material_srgb(@location(0) position: vec3<f32>, @location(1) color: vec4<f32>, @location(2) lateral: f32,
     @location(3) shadow_color: vec4<f32>, @location(4) dash_phase: f32,
-    @location(5) grain: vec4<f32>, @location(6) finish: vec4<f32>) -> EdgeVertex {
+    @location(5) grain: vec4<f32>, @location(6) finish: vec4<f32>, @location(7) effect: f32) -> EdgeVertex {
     // Finish shading uses the same color space as in the retained shader.
     if grain.w > 0.0 {
-        return edge_vertex(position, color, lateral, shadow_color, dash_phase, grain, finish, 1u);
+        return edge_vertex(position, color, lateral, shadow_color, dash_phase, grain, finish, 1u, effect);
     }
-    return edge_vertex_srgb(position, color, lateral, shadow_color, dash_phase);
+    return edge_vertex_srgb(position, color, lateral, shadow_color, dash_phase, effect);
 }
 
 fn stroke_coverage(input: EdgeVertex) -> f32 {
@@ -233,4 +235,45 @@ fn grain_direction_coverage(packed: vec4<f32>, dx: vec4<f32>, dy: vec4<f32>, wid
         }
     }
     return coverage;
+}
+
+// Precision display modes retain their projected buffers too. Only these
+// fragment variants consume the live animation parameters; ordinary rendering
+// and offscreen shadow masks keep their existing binding layouts.
+struct AgentEffect { parameters: vec4<f32>, size: vec4<f32> }
+@group(0) @binding(2) var<uniform> agent_effect: AgentEffect;
+fn active_stamp(stamp: f32) -> f32 {
+    // Old retained vertices must not reassemble when the timer wraps later.
+    return select(min(stamp, -1.0), stamp, agent_effect.size.z > 0.0);
+}
+fn animated_color(input: EdgeVertex, color: vec4<f32>) -> vec4<f32> {
+    return agent_surface(color, active_stamp(input.effect), input.uv, agent_effect.size.xy, agent_effect.parameters);
+}
+@fragment fn fragment_main_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = stroke_coverage(input);
+    if coverage < 0.001 { discard; }
+    return animated_color(input, input.color) * coverage;
+}
+@fragment fn fragment_edge_depth_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = stroke_coverage(input);
+    if input.position.z <= 0.0 || input.position.z >= 1.0 || input.color.a < 1.0 || coverage < 0.001 { discard; }
+    if agent_reveal(active_stamp(input.effect), agent_effect.parameters.x, input.uv, agent_effect.size.xy) < 0.0 { discard; }
+    return vec4<f32>(0.0);
+}
+@fragment fn fragment_material_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = stroke_coverage(input);
+    let color = shade_finish(input, input.color, 0.0);
+    if coverage < 0.001 { discard; }
+    return animated_color(input, color) * coverage;
+}
+@fragment fn fragment_shadow_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = textureSample(shadow_mask, shadow_sampler, input.uv).r;
+    let color = mix(input.color, input.shadow_color, coverage * select(0.0, 1.0, input.shadow_color.a > 0.0));
+    return animated_color(input, color);
+}
+@fragment fn fragment_material_shadow_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = textureSample(shadow_mask, shadow_sampler, input.uv).r;
+    let amount = coverage * select(0.0, 1.0, input.shadow_color.a > 0.0);
+    let color = shade_finish(input, mix(input.color, input.shadow_color, amount), amount);
+    return animated_color(input, color);
 }
