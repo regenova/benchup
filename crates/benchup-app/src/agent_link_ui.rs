@@ -11,9 +11,38 @@ pub(crate) fn masked(token: &str) -> String {
 
 /// Which copy button was pressed last, to confirm it next to that row.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum CopiedText {
+pub(super) enum CopiedText {
     Token,
-    Setup,
+    Setup(SetupTab),
+}
+
+impl SetupTab {
+    fn label(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => tr!("agent_link.tab.claude_code"),
+            Self::Codex => tr!("agent_link.tab.codex"),
+            Self::Mcp => tr!("agent_link.tab.mcp"),
+            Self::Shell => tr!("agent_link.tab.shell"),
+        }
+    }
+
+    fn help(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => tr!("agent_link.command_help"),
+            Self::Codex => tr!("agent_link.codex_command_help"),
+            Self::Mcp => tr!("agent_link.json_help"),
+            Self::Shell => tr!("agent_link.shell_help"),
+        }
+    }
+
+    pub(super) fn command(self, token: &str, port: u16) -> String {
+        match self {
+            Self::ClaudeCode => claude_command(token, port),
+            Self::Codex => codex_command(token, port),
+            Self::Mcp => mcp_json(token, port),
+            Self::Shell => shell_setup(token, port),
+        }
+    }
 }
 
 /// How long "Copied" stays next to the button.
@@ -21,7 +50,7 @@ const COPIED_SECONDS: f64 = 2.;
 
 impl AgentLink {
     /// Puts `text` on the system clipboard and confirms it briefly.
-    pub(crate) fn copy(&mut self, ctx: &egui::Context, text: String, what: CopiedText) {
+    pub(super) fn copy(&mut self, ctx: &egui::Context, text: String, what: CopiedText) {
         ctx.copy_text(text);
         self.copied = Some((what, ctx.input(|i| i.time) + COPIED_SECONDS));
         ctx.request_repaint_after(Duration::from_secs_f64(COPIED_SECONDS));
@@ -86,7 +115,7 @@ impl BenchUpApp {
             }
             let label = if has_token { tr!("agent_link.regenerate") } else { tr!("agent_link.generate") };
             if ui.button(label).on_hover_text(tr!("agent_link.regenerate_help")).clicked() {
-                self.agent_link.regenerate();
+                self.agent_link.request_token_refresh();
             }
             self.agent_link.copied_label(ui, CopiedText::Token);
         });
@@ -94,22 +123,68 @@ impl BenchUpApp {
         ui.separator();
         ui.text_strong(tr!("agent_link.setup"));
         ui.text_weak(tr!("agent_link.setup_help"));
+        ui.horizontal_wrapped(|ui| {
+            for tab in SetupTab::ALL {
+                ui.selectable_value(&mut self.agent_link.setup_tab, tab, tab.label());
+            }
+        });
+        let tab = self.agent_link.setup_tab;
+        ui.text_weak(tab.help());
         if let Some(token) = self.agent_link.token.clone() {
-            ui.horizontal_wrapped(|ui| {
-                if ui.button(tr!("agent_link.copy_command")).on_hover_text(tr!("agent_link.command_help")).clicked() {
-                    self.agent_link.copy(ui.ctx(), claude_command(&token, port), CopiedText::Setup);
-                }
-                if ui.button(tr!("agent_link.copy_codex_command")).on_hover_text(tr!("agent_link.codex_command_help")).clicked() {
-                    self.agent_link.copy(ui.ctx(), codex_command(&token, port), CopiedText::Setup);
-                }
-                if ui.button(tr!("agent_link.copy_json")).on_hover_text(tr!("agent_link.json_help")).clicked() {
-                    self.agent_link.copy(ui.ctx(), mcp_json(&token, port), CopiedText::Setup);
-                }
-                if ui.button(tr!("agent_link.copy_shell")).on_hover_text(tr!("agent_link.shell_help")).clicked() {
-                    self.agent_link.copy(ui.ctx(), shell_setup(&token, port), CopiedText::Setup);
-                }
-                self.agent_link.copied_label(ui, CopiedText::Setup);
+            let command = tab.command(&token, port);
+            egui::Frame::new()
+                .fill(colors.canvas)
+                .stroke(Stroke::new(1., colors.border))
+                .corner_radius(8)
+                .inner_margin(12)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    // Share one top-aligned row so Copy never reserves a header
+                    // above the command or vertically centers it beside the code.
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if ui.small_button(tr!("context_menu.copy")).on_hover_text(tr!("system_info.copy_to_clipboard")).clicked() {
+                            self.agent_link.copy(ui.ctx(), command.clone(), CopiedText::Setup(tab));
+                        }
+                        self.agent_link.copied_label(ui, CopiedText::Setup(tab));
+                        // An immutable buffer keeps selection and keyboard copying
+                        // enabled without letting edits diverge from the copied setup.
+                        let mut text = command.as_str();
+                        ui.add(
+                            egui::TextEdit::multiline(&mut text)
+                                .id_salt(("agent_setup_command", tab))
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(ui.available_width())
+                                .desired_rows(if tab == SetupTab::Mcp { 12 } else { 4 })
+                                .frame(egui::Frame::NONE),
+                        ).on_hover_text(tab.help());
+                    });
+                });
+        }
+    }
+
+    pub(crate) fn agent_refresh_window(&mut self, ctx: &egui::Context) {
+        if !self.agent_link.refresh_confirmation {
+            return;
+        }
+        let (mut refresh, mut cancel) = (false, false);
+        let response = Modal::new("agent_refresh_token", 440.).show(ctx, |modal| {
+            modal.header(|ui| {
+                ui.text_heading(tr!("agent_link.refresh_confirmation.title"));
             });
+            modal.body(|ui| {
+                ui.text_label(tr!("agent_link.refresh_confirmation.body"));
+            });
+            modal.footer(|ui| {
+                // Footer actions render right to left: Cancel stays on the right.
+                cancel = ui.button(tr!("common.cancel")).clicked();
+                refresh = primary_button(ui, tr!("agent_link.regenerate"), true).clicked();
+            });
+        });
+        if refresh {
+            self.agent_link.regenerate();
+        }
+        if refresh || cancel || response.should_close() {
+            self.agent_link.refresh_confirmation = false;
         }
     }
 

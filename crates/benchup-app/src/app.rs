@@ -7492,6 +7492,7 @@ impl eframe::App for BenchUpApp {
         self.account.show(&ctx);
         self.share_dialog(&ctx);
         self.agent_access_window(&ctx);
+        self.agent_refresh_window(&ctx);
         self.material_removal_window(&ctx);
         if self.about {
             self.about_window(&ctx);

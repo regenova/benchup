@@ -1,5 +1,6 @@
 use super::*;
 use std::sync::{Arc, Mutex};
+use crate::test_ui::ContextExt as _;
 
 #[test]
 fn legacy_call_activity_expires_and_never_claims_a_completed_render_is_running() {
@@ -731,6 +732,93 @@ fn setup_snippets_keep_the_token_out_of_program_arguments() {
     assert_eq!(config["mcpServers"]["benchup"]["env"]["BENCHUP_AGENT_TOKEN"], "T");
     assert!(shell_setup("T", 5000).contains("BENCHUP_BRIDGE_PORT=5000"));
     assert_eq!(ui::masked("abcd-1234").chars().rev().take(4).collect::<String>(), "4321");
+}
+
+fn setup_ui_frame(setup: &mut Setup, events: Vec<egui::Event>, settings: bool) -> egui::FullOutput {
+    let ctx = setup.ctx.clone();
+    ctx.run_test_ui(egui::RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1000., 1100.))),
+        events,
+        ..Default::default()
+    }, |ui| {
+        if settings {
+            setup.app.agent_link_settings(ui);
+        }
+        setup.app.agent_refresh_window(&ctx);
+    })
+}
+
+fn setup_text_rect(output: &egui::FullOutput, label: &str) -> Rect {
+    fn find(shape: &egui::Shape, label: &str) -> Option<Rect> {
+        match shape {
+            egui::Shape::Text(text) if text.galley.text() == label => Some(Rect::from_min_size(text.pos, text.galley.size())),
+            egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| find(shape, label)),
+            _ => None,
+        }
+    }
+    output.shapes.iter().find_map(|shape| find(&shape.shape, label)).unwrap_or_else(|| panic!("missing text: {label}"))
+}
+
+fn setup_ui_click(setup: &mut Setup, pos: Pos2, settings: bool) -> egui::FullOutput {
+    let button = |pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    setup_ui_frame(setup, vec![egui::Event::PointerMoved(pos), button(true)], settings);
+    setup_ui_frame(setup, vec![egui::Event::PointerMoved(pos), button(false)], settings)
+}
+
+#[test]
+fn setup_tabs_display_and_copy_the_selected_command() {
+    let mut setup = Setup::new();
+    setup.app.general_settings.agent.port = 5000;
+    for tab in SetupTab::ALL {
+        setup.app.agent_link.setup_tab = tab;
+        setup_ui_frame(&mut setup, vec![], true);
+        let output = setup_ui_frame(&mut setup, vec![], true);
+        let expected = tab.command(TOKEN, 5000);
+        let code = setup_text_rect(&output, &expected);
+        let copy = setup_text_rect(&output, "Copy");
+        assert!(copy.left() > code.right(), "Copy stays to the right of the selectable command");
+        assert!((copy.top() - code.top()).abs() < 4., "Copy shares the command's first line instead of stacking above it");
+        let output = setup_ui_click(&mut setup, copy.center(), true);
+        assert!(output.platform_output.commands.iter().any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == &expected)));
+    }
+}
+
+#[test]
+fn refreshing_a_token_requires_confirmation_and_cancel_keeps_the_token() {
+    let mut setup = Setup::new();
+    setup_ui_frame(&mut setup, vec![], true);
+    let output = setup_ui_frame(&mut setup, vec![], true);
+    setup_ui_click(&mut setup, setup_text_rect(&output, "Refresh token").center(), true);
+    assert!(setup.app.agent_link.refresh_confirmation);
+    assert_eq!(setup.app.agent_link.token.as_deref(), Some(TOKEN), "requesting refresh does not replace the token");
+
+    setup_ui_frame(&mut setup, vec![], false);
+    let output = setup_ui_frame(&mut setup, vec![], false);
+    let cancel = setup_text_rect(&output, "Cancel");
+    let refresh = setup_text_rect(&output, "Refresh token");
+    assert!(cancel.center().x > refresh.center().x, "Cancel is the rightmost action");
+    setup_ui_click(&mut setup, cancel.center(), false);
+    assert!(!setup.app.agent_link.refresh_confirmation);
+    assert_eq!(setup.app.agent_link.token.as_deref(), Some(TOKEN));
+
+    setup.app.agent_link.request_token_refresh();
+    setup_ui_frame(&mut setup, vec![], false);
+    setup_ui_frame(&mut setup, vec![egui::Event::Key {
+        key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE,
+    }], false);
+    assert!(!setup.app.agent_link.refresh_confirmation);
+    assert_eq!(setup.app.agent_link.token.as_deref(), Some(TOKEN));
+
+    setup.app.agent_link.request_token_refresh();
+    setup_ui_frame(&mut setup, vec![], false);
+    let output = setup_ui_frame(&mut setup, vec![], false);
+    setup_ui_click(&mut setup, setup_text_rect(&output, "Refresh token").center(), false);
+    assert!(!setup.app.agent_link.refresh_confirmation);
+    assert_ne!(setup.app.agent_link.token.as_deref(), Some(TOKEN));
+    let mut restored = AgentLink::with_connector(Box::new(Fake::default()));
+    restored.token_slot = Some(setup._dir.path().to_owned());
+    restored.load_token();
+    assert_eq!(restored.token, setup.app.agent_link.token, "the confirmed token is saved immediately");
 }
 
 #[test]

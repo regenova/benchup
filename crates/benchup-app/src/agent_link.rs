@@ -89,6 +89,21 @@ impl Preferences {
     }
 }
 
+/// Stable identifiers for the remembered agent setup tab.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SetupTab {
+    #[default]
+    ClaudeCode,
+    Codex,
+    Mcp,
+    Shell,
+}
+
+impl SetupTab {
+    pub(super) const ALL: [Self; 4] = [Self::ClaudeCode, Self::Codex, Self::Mcp, Self::Shell];
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Status {
     Off,
@@ -382,6 +397,9 @@ pub(super) struct AgentLink {
     generator: fn() -> Result<String, String>,
     /// Session-only: revealing a secret is never remembered.
     pub show_token: bool,
+    pub(super) setup_tab: SetupTab,
+    /// Confirmation is an in-progress action, never a saved preference.
+    refresh_confirmation: bool,
     active: Option<Active>,
     connector: Box<dyn Connector>,
     queue: VecDeque<Queued>,
@@ -467,6 +485,8 @@ impl AgentLink {
             token_retry_at: 0.,
             generator: new_token,
             show_token: false,
+            setup_tab: SetupTab::default(),
+            refresh_confirmation: false,
             active: None,
             connector,
             queue: VecDeque::new(),
@@ -526,6 +546,15 @@ impl AgentLink {
         }
         self.token.clone()
     }
+    /// User-requested replacement requires confirmation when a token exists.
+    pub(super) fn request_token_refresh(&mut self) {
+        if self.token.is_some() {
+            self.refresh_confirmation = true;
+        } else {
+            self.regenerate();
+        }
+    }
+
     /// Replaces the token. Connections made with the old one are dropped. If
     /// a new token cannot be made or saved, the old one stays (an unsaved
     /// token would stop pairing after a restart) and `token_error` says why.
@@ -536,6 +565,7 @@ impl AgentLink {
                 self.token_error = None;
                 self.token_checked = true;
                 self.token = Some(token);
+                self.copied = None;
             }
             Err(error) => self.token_error = Some(error),
         }
