@@ -1259,3 +1259,72 @@ fn gpu_scale_requires_complete_isolated_geometry_and_safe_numeric_limits() {
     model.add_text(DVec3::X, DVec3::Z, "Attached label").unwrap();
     assert!(ScalePreview::new(&model, &selected).unwrap().gpu_factors(DVec3::ZERO, 2., None).is_none());
 }
+
+/// A 450 × 350 × 18 mm board inside a group, edited in that group's context.
+fn board_in_group() -> (Model, u64) {
+    let mut model = Model::default();
+    let base = rectangle(&mut model, DVec3::ZERO, DVec3::new(0.45, 0.35, 0.));
+    let normal = crate::faces::plane(&model, &model.faces[&base].vertices).unwrap().normal;
+    model.push_pull(base, 0.018 / normal.z).unwrap();
+    let board = model.make_object(&model.root_entities(), false, "Board").unwrap();
+    assert!(model.enter_object(board));
+    (model, board)
+}
+
+fn board_face_at(model: &Model, board: u64, point: DVec3) -> u64 {
+    model.faces.values().find(|face| {
+        model.parent(face.id) == Some(board) && model.face_contains(face, point, false)
+    }).unwrap().id
+}
+
+fn push_through(model: &mut Model, face: u64, depth: f64) -> u64 {
+    let normal = crate::faces::plane(model, &model.faces[&face].vertices).unwrap().normal;
+    model.push_pull(face, -depth / normal.z).unwrap()
+}
+
+#[test]
+fn full_thickness_push_pull_removes_faces_coincident_with_the_far_side() {
+    // Cutting off a corner through the whole board (issue #39).
+    let (mut model, board) = board_in_group();
+    model.add_edge(DVec3::new(0., 0.01, 0.018), DVec3::new(0.01, 0., 0.018)).unwrap();
+    let triangle = board_face_at(&model, board, DVec3::new(0.002, 0.002, 0.018));
+    push_through(&mut model, triangle, 0.018);
+    for point in [
+        DVec3::new(0.002, 0.002, 0.),
+        DVec3::new(0., 0.004, 0.009),
+        DVec3::new(0.004, 0., 0.009),
+    ] {
+        assert!(model.faces.values().all(|face| !model.face_contains(face, point, true)),
+            "No face may remain where the corner was removed at {point:?}");
+    }
+    assert!(model.vertices.values().all(|v| v.position.truncate().length() > 1e-6),
+        "The removed corner must not leave stray vertices or edges");
+    model.edit_context = None;
+    let volume = model.solid_volume(board).unwrap();
+    assert!((volume - (0.45 * 0.35 - 0.00005) * 0.018).abs() < 1e-12, "{volume}");
+    model.validate().unwrap();
+
+    // An inset pushed through the board opens a hole through the bottom.
+    let (mut model, board) = board_in_group();
+    let top = board_face_at(&model, board, DVec3::new(0.2, 0.2, 0.018));
+    model.offset_face(top, 0.1).unwrap();
+    let inner = board_face_at(&model, board, DVec3::new(0.2, 0.2, 0.018));
+    push_through(&mut model, inner, 0.018);
+    assert!(model.nearest_face(crate::Ray {
+        origin: DVec3::new(0.2, 0.2, 1.), direction: -DVec3::Z,
+    }).is_none(), "The through hole must stay open at the bottom");
+    model.edit_context = None;
+    let volume = model.solid_volume(board).unwrap();
+    assert!((volume - (0.45 * 0.35 - 0.25 * 0.15) * 0.018).abs() < 1e-12, "{volume}");
+    model.validate().unwrap();
+
+    // A partial cut keeps its floor and does not touch the far side.
+    let (mut model, board) = board_in_group();
+    model.add_edge(DVec3::new(0., 0.01, 0.018), DVec3::new(0.01, 0., 0.018)).unwrap();
+    let triangle = board_face_at(&model, board, DVec3::new(0.002, 0.002, 0.018));
+    let floor = push_through(&mut model, triangle, 0.009);
+    assert!(model.face_contains(&model.faces[&floor], DVec3::new(0.002, 0.002, 0.009), false));
+    model.edit_context = None;
+    let volume = model.solid_volume(board).unwrap();
+    assert!((volume - (0.45 * 0.35 * 0.018 - 0.00005 * 0.009)).abs() < 1e-12, "{volume}");
+}
