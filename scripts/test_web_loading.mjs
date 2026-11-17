@@ -101,7 +101,7 @@ test('late callbacks leave renderer errors and the running app untouched', async
 
 test('all supported catalogs translate startup progress and preserve placeholders', () => {
     const keys = ['web.downloading', 'web.download_progress', 'web.starting', 'web.download_failed'];
-    for (const language of ['es_419', 'it_IT', 'pt_BR', 'vi_VN', 'zh_CN']) {
+    for (const language of ['es_419', 'fr_FR', 'it_IT', 'pt_BR', 'vi_VN', 'zh_CN']) {
         const translated = JSON.parse(readFileSync(new URL(`../assets/i18n/${language}.json`, import.meta.url)));
         for (const key of keys) {
             assert.ok(translated[key], `${language}: ${key}`);

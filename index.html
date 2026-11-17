@@ -263,7 +263,7 @@
       // The WASM initializer shares this catalog lookup: Rust's tr! is not
       // available until the download has finished. The inspector preferences
       // remain authoritative; this plain language code is their startup mirror.
-      const supportedLanguages = ["en_US", "es_419", "it_IT", "pt_BR", "vi_VN", "zh_CN"];
+      const supportedLanguages = ["en_US", "es_419", "fr_FR", "it_IT", "pt_BR", "vi_VN", "zh_CN"];
       const matchLanguage = locale => {
         const parts = locale.toLowerCase().replaceAll("_", "-").split("-");
         if (parts[0] === "zh") {
