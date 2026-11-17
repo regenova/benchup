@@ -54,6 +54,9 @@ use tungstenite::{
 pub const DEFAULT_PORT: u16 = pairing::DEFAULT_PORT;
 /// The published web app. Local development servers are always allowed too.
 pub const DEFAULT_ORIGIN: &str = "https://benchup3d.github.io";
+/// Origins that serve the published web app: the GitHub Pages address
+/// redirects to the custom domain, so pages actually load from the latter.
+pub const PUBLISHED_ORIGINS: [&str; 2] = [DEFAULT_ORIGIN, "https://benchup.io"];
 pub const TOKEN_ENV: &str = "BENCHUP_AGENT_TOKEN";
 pub const PORT_ENV: &str = "BENCHUP_BRIDGE_PORT";
 pub const MIN_TOKEN_LEN: usize = 16;
@@ -152,7 +155,7 @@ fn now_ms() -> u64 {
 /// `--allow-origin`.
 pub fn origin_allowed(origin: Option<&str>, extra: &[String]) -> bool {
     let Some(origin) = origin else { return true };
-    if origin == DEFAULT_ORIGIN || extra.iter().any(|o| o == origin) {
+    if PUBLISHED_ORIGINS.contains(&origin) || extra.iter().any(|o| o == origin) {
         return true;
     }
     ["http://localhost", "http://127.0.0.1"].iter().any(|base| {
