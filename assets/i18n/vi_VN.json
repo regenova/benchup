@@ -1,4 +1,7 @@
 {
+  "sidebar.length_format": "Định dạng chiều dài",
+  "core.units.fractional": "Phân số",
+  "core.units.decimal": "Thập phân",
   "tools.add_separator": "Thêm đường phân cách",
   "tools.remove_separator": "Xóa đường phân cách",
   "follow_me.advanced_tools": "Nâng cao",
@@ -1763,7 +1766,7 @@
   "sidebar.oldest_retained_state": "Trạng thái cũ nhất còn lưu",
   "sidebar.outliner": "Danh sách đối tượng",
   "sidebar.place_instance": "Đặt bản thể",
-  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "Độ chính xác quy định số chữ số thập phân được hiển thị. Chiều dài nhập không kèm đơn vị sẽ dùng đơn vị chiều dài đã chọn.",
+  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "Độ chính xác chỉ điều khiển cách làm tròn khi hiển thị. Chiều dài không có đơn vị dùng đơn vị đã chọn. Nhập phân số như 5 1/2 in hoặc 2 ft 3 1/4 in.",
   "sidebar.profile_width": "Chiều rộng biên dạng",
   "sidebar.profiles": "Biên dạng",
   "sidebar.properties": "Thuộc tính",

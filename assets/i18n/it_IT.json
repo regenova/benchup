@@ -1,4 +1,7 @@
 {
+  "sidebar.length_format": "Formato lunghezza",
+  "core.units.fractional": "Frazionario",
+  "core.units.decimal": "Decimale",
   "tools.add_separator": "Aggiungi separatore",
   "tools.remove_separator": "Rimuovi separatore",
   "follow_me.advanced_tools": "Avanzate",
@@ -1768,7 +1771,7 @@
   "sidebar.oldest_retained_state": "Stato meno recente conservato",
   "sidebar.outliner": "Struttura",
   "sidebar.place_instance": "Posiziona istanza",
-  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "La precisione controlla le cifre decimali visualizzate. Le lunghezze inserite senza unità usano l'unità di lunghezza selezionata.",
+  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "La precisione controlla solo l’arrotondamento visualizzato. Le lunghezze senza unità usano quella selezionata. Inserisci frazioni come 5 1/2 in o 2 ft 3 1/4 in.",
   "sidebar.profile_width": "Larghezza del profilo",
   "sidebar.profiles": "Profili",
   "sidebar.properties": "Proprietà",

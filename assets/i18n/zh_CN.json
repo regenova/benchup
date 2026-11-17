@@ -1,4 +1,7 @@
 {
+  "sidebar.length_format": "长度格式",
+  "core.units.fractional": "分数",
+  "core.units.decimal": "小数",
   "tools.add_separator": "添加分隔线",
   "tools.remove_separator": "移除分隔线",
   "follow_me.advanced_tools": "高级",
@@ -1768,7 +1771,7 @@
   "sidebar.oldest_retained_state": "保留的最早状态",
   "sidebar.outliner": "大纲",
   "sidebar.place_instance": "放置实例",
-  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "精度控制显示的小数位数。未指定单位的长度将使用所选的长度单位。",
+  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "精度仅控制显示时的舍入。未指定单位的长度使用所选单位。可输入分数，例如 5 1/2 in 或 2 ft 3 1/4 in。",
   "sidebar.profile_width": "轮廓宽度",
   "sidebar.profiles": "轮廓",
   "sidebar.properties": "属性",

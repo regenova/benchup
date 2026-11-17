@@ -111,7 +111,31 @@ pub struct UnitPrecision {
     pub angle: Option<u8>,
 }
 
+/// Fractional lengths use inches, or feet and inches, without changing geometry.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LengthFormat {
+    #[default]
+    Decimal,
+    Fractional,
+}
+
+impl LengthFormat {
+    pub const ALL: &[Self] = &[Self::Decimal, Self::Fractional];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Decimal => tr!("core.units.decimal"),
+            Self::Fractional => tr!("core.units.fractional"),
+        }
+    }
+}
+
+const fn default_fraction_denominator() -> u8 {
+    16
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UnitSettings {
     pub length: LengthUnit,
@@ -119,10 +143,65 @@ pub struct UnitSettings {
     pub volume: VolumeUnit,
     pub angle: AngleUnit,
     pub precision: UnitPrecision,
+    pub length_format: LengthFormat,
+    /// Nearest fraction of an inch; normalized to a power of two from 1 to 64.
+    pub fraction_denominator: u8,
+}
+
+impl Default for UnitSettings {
+    fn default() -> Self {
+        Self {
+            length: LengthUnit::default(),
+            area: AreaUnit::default(),
+            volume: VolumeUnit::default(),
+            angle: AngleUnit::default(),
+            precision: UnitPrecision::default(),
+            length_format: LengthFormat::default(),
+            fraction_denominator: default_fraction_denominator(),
+        }
+    }
 }
 
 impl UnitSettings {
+    pub fn fraction_denominator(self) -> u8 {
+        self.fraction_denominator.clamp(1, 64).next_power_of_two()
+    }
+
     pub fn format_length(self, meters: f64) -> String {
+        if self.length_format == LengthFormat::Fractional
+            && matches!(self.length, LengthUnit::Inches | LengthUnit::Feet)
+            && meters.is_finite()
+        {
+            let denominator = u64::from(self.fraction_denominator());
+            let ticks = (meters.abs() / LengthUnit::Inches.factor() * denominator as f64).round();
+            // Avoid overflowing integer arithmetic for unbounded report values.
+            if ticks < u64::MAX as f64 {
+                let ticks = ticks as u64;
+                let whole_inches = ticks / denominator;
+                let mut numerator = ticks % denominator;
+                let mut divisor = denominator;
+                while numerator != 0 && numerator % 2 == 0 && divisor > 1 {
+                    numerator /= 2;
+                    divisor /= 2;
+                }
+                let inches = if self.length == LengthUnit::Feet {
+                    whole_inches % 12
+                } else {
+                    whole_inches
+                };
+                let value = match (inches, numerator) {
+                    (_, 0) => inches.to_string(),
+                    (0, _) => format!("{numerator}/{divisor}"),
+                    _ => format!("{inches} {numerator}/{divisor}"),
+                };
+                let sign = if meters < 0. && ticks != 0 { "-" } else { "" };
+                return if self.length == LengthUnit::Feet {
+                    format!("{sign}{} ft {value} in", whole_inches / 12)
+                } else {
+                    format!("{sign}{value} in")
+                };
+            }
+        }
         self.length
             .format_with_precision(meters, self.precision.length.unwrap_or(3))
     }
@@ -153,6 +232,65 @@ mod tests {
     use crate::{DisplaySettings, Document};
 
     #[test]
+    fn fractional_lengths_reduce_round_carry_and_preserve_metric_display() {
+        let mut units = UnitSettings {
+            length: LengthUnit::Inches,
+            length_format: LengthFormat::Fractional,
+            ..Default::default()
+        };
+        for (inches, expected) in [
+            (5.5, "5 1/2 in"),
+            (0.125, "1/8 in"),
+            (0., "0 in"),
+            (-5.5, "-5 1/2 in"),
+            (-0.001, "0 in"),
+            (5.99, "6 in"),
+            (0.08, "1/16 in"),
+        ] {
+            assert_eq!(units.format_length(inches * 0.0254), expected);
+        }
+        units.length = LengthUnit::Feet;
+        for (inches, expected) in [
+            (65.5, "5 ft 5 1/2 in"),
+            (-65.5, "-5 ft 5 1/2 in"),
+            (11.99, "1 ft 0 in"),
+            (0.5, "0 ft 1/2 in"),
+            (0., "0 ft 0 in"),
+        ] {
+            assert_eq!(units.format_length(inches * 0.0254), expected);
+        }
+        units.length = LengthUnit::Meters;
+        assert_eq!(units.format_length(1.23456), "1.235 m");
+        units.length = LengthUnit::Inches;
+        for denominator in [1, 2, 4, 8, 16, 32, 64] {
+            units.fraction_denominator = denominator;
+            assert_eq!(units.fraction_denominator(), denominator);
+            let expected = if denominator == 1 {
+                "1 in".to_owned()
+            } else {
+                format!("1/{denominator} in")
+            };
+            assert_eq!(
+                units.format_length(0.0254 / f64::from(denominator)),
+                expected
+            );
+        }
+        for (saved, expected) in [(0, 1), (3, 4), (255, 64)] {
+            units.fraction_denominator = saved;
+            assert_eq!(units.fraction_denominator(), expected);
+        }
+        assert!(!units.format_length(f64::MAX).is_empty());
+    }
+
+    #[test]
+    fn older_units_keep_decimal_display_and_default_fraction_precision() {
+        let units: UnitSettings = serde_json::from_str(r#"{"length":"inches"}"#).unwrap();
+        assert_eq!(units.length_format, LengthFormat::Decimal);
+        assert_eq!(units.fraction_denominator(), 16);
+        assert_eq!(units.format_length(5.5 * 0.0254), "5.500 in");
+    }
+
+    #[test]
     fn precision_rounds_each_converted_measurement_independently() {
         let mut units = UnitSettings {
             length: LengthUnit::Feet,
@@ -165,6 +303,7 @@ mod tests {
                 volume: Some(0),
                 angle: Some(5),
             },
+            ..Default::default()
         };
         assert_eq!(units.format_length(0.3048 * 1.23456), "1.23 ft");
         assert_eq!(units.format_area(0.3048_f64.powi(2) * 12.3456), "12.3 ft²");
@@ -259,6 +398,8 @@ mod tests {
                 volume: Some(4),
                 angle: Some(6),
             },
+            length_format: LengthFormat::Fractional,
+            fraction_denominator: 32,
         };
         let restored = Document::from_json(&serde_json::to_string(&doc).unwrap()).unwrap();
         assert_eq!(restored.display.units, doc.display.units);

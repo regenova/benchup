@@ -1,4 +1,7 @@
 {
+  "sidebar.length_format": "Length format",
+  "core.units.fractional": "Fractional",
+  "core.units.decimal": "Decimal",
   "tools.add_separator": "Add separator",
   "tools.remove_separator": "Remove separator",
   "follow_me.advanced_tools": "Advanced",
@@ -1768,7 +1771,7 @@
   "sidebar.oldest_retained_state": "Oldest retained state",
   "sidebar.outliner": "Outliner",
   "sidebar.place_instance": "Place instance",
-  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "Precision controls displayed decimal places. Lengths entered without a unit use the selected length unit.",
+  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "Precision controls displayed rounding only. Bare lengths use the selected unit. Enter fractions such as 5 1/2 in or 2 ft 3 1/4 in.",
   "sidebar.profile_width": "Profile width",
   "sidebar.profiles": "Profiles",
   "sidebar.properties": "Properties",

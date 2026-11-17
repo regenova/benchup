@@ -3328,6 +3328,8 @@ mod preference_tests {
         app.general_settings.zoom_speed = 3.;
         app.general_settings.reverse_zoom = true;
         app.general_settings.default_units.length = LengthUnit::Inches;
+        app.general_settings.default_units.length_format = benchup_core::LengthFormat::Fractional;
+        app.general_settings.default_units.fraction_denominator = 64;
         app.general_settings.tool_keys.swap(1, 2);
         app.general_settings.stock.currency = "CAD".into();
         app.general_settings.stock.units = LengthUnit::Inches;
@@ -3363,7 +3365,10 @@ mod preference_tests {
             expected
         );
         restored.new_model(&restored_ctx);
-        assert_eq!(restored.doc.display.units.length, LengthUnit::Inches);
+        assert_eq!(
+            restored.doc.display.units,
+            restored.general_settings.default_units
+        );
         let mut opened = Document::default();
         opened.display.units.length = LengthUnit::Millimeters;
         restored.replace_project(opened, None, &restored_ctx);
@@ -4648,6 +4653,8 @@ mod preference_tests {
             area: AreaUnit::SquareFeet,
             volume: VolumeUnit::Liters,
             angle: AngleUnit::Radians,
+            length_format: benchup_core::LengthFormat::Fractional,
+            fraction_denominator: 32,
             ..Default::default()
         };
         app.doc.display.units = units;
@@ -5764,13 +5771,55 @@ impl BenchUpApp {
             LengthUnit::ALL,
             LengthUnit::label,
         );
-        precision_picker(
-            ui,
-            "units_length_precision",
-            tr!("sidebar.length_precision"),
-            &mut units.precision.length,
-            3,
-        );
+        if matches!(units.length, LengthUnit::Inches | LengthUnit::Feet) {
+            picker(
+                ui,
+                "units_length_format",
+                tr!("sidebar.length_format"),
+                &mut units.length_format,
+                benchup_core::LengthFormat::ALL,
+                benchup_core::LengthFormat::label,
+            );
+        }
+        if units.length_format == benchup_core::LengthFormat::Fractional
+            && matches!(units.length, LengthUnit::Inches | LengthUnit::Feet)
+        {
+            let current = units.fraction_denominator();
+            crate::inspector_table::inspector_field(
+                ui,
+                "units_fraction_precision",
+                tr!("sidebar.length_precision"),
+                |ui| {
+                    let name = |denominator| {
+                        if denominator == 1 { "1 in".to_owned() }
+                        else { format!("1/{denominator} in") }
+                    };
+                    egui::ComboBox::from_id_salt("units_fraction_precision")
+                        .selected_text(name(current))
+                        .width(ui.available_width())
+                        .truncate()
+                        .show_ui(ui, |ui| {
+                            for denominator in [1, 2, 4, 8, 16, 32, 64] {
+                                if ui
+                                    .selectable_label(current == denominator, name(denominator))
+                                    .clicked()
+                                {
+                                    units.fraction_denominator = denominator;
+                                }
+                            }
+                        })
+                        .response
+                },
+            );
+        } else {
+            precision_picker(
+                ui,
+                "units_length_precision",
+                tr!("sidebar.length_precision"),
+                &mut units.precision.length,
+                3,
+            );
+        }
         picker(
             ui,
             "units_area",

@@ -1,4 +1,7 @@
 {
+  "sidebar.length_format": "Formato de longitud",
+  "core.units.fractional": "Fraccionario",
+  "core.units.decimal": "Decimal",
   "tools.add_separator": "Agregar separador",
   "tools.remove_separator": "Eliminar separador",
   "follow_me.advanced_tools": "Avanzado",
@@ -1763,7 +1766,7 @@
   "sidebar.oldest_retained_state": "Estado conservado más antiguo",
   "sidebar.outliner": "Esquema",
   "sidebar.place_instance": "Colocar instancia",
-  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "La precisión controla los decimales mostrados. Las longitudes introducidas sin unidad usan la unidad de longitud seleccionada.",
+  "sidebar.precision_controls_displayed_decimal_places_lengths_entered_without": "La precisión solo controla el redondeo mostrado. Las longitudes sin unidad usan la unidad seleccionada. Ingresa fracciones como 5 1/2 in o 2 ft 3 1/4 in.",
   "sidebar.profile_width": "Ancho del perfil",
   "sidebar.profiles": "Perfiles",
   "sidebar.properties": "Propiedades",

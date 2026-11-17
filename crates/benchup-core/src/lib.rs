@@ -45,7 +45,7 @@ pub use measurements::{Dimension, DimensionAnchor, angle_arc, angle_degrees};
 pub use objects::{Object, ObjectKind, StockMaterial};
 pub use solids::SolidOperation;
 pub use tags::Tag;
-pub use units::{AngleUnit, AreaUnit, LengthUnit, UnitPrecision, UnitSettings, VolumeUnit};
+pub use units::{AngleUnit, AreaUnit, LengthFormat, LengthUnit, UnitPrecision, UnitSettings, VolumeUnit};
 
 #[cfg(test)]
 mod annotation_tests;

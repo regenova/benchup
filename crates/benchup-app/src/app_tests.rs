@@ -5810,6 +5810,39 @@ fn dimensions_axis_lock_switches_and_clears_during_placement() {
 }
 
 #[test]
+fn fractional_unit_controls_update_tape_measurements_without_model_edits() {
+    use benchup_core::{LengthFormat, LengthUnit};
+
+    let mut h = Harness::new();
+    h.ctx.style_mut_of(h.ctx.theme(), |s| s.animation_time = 0.);
+    h.size.y = 2000.;
+    let model = h.app.doc.model.clone();
+    for (current, choice) in [
+        ("Meters (m)", "Inches (in)"),
+        ("Decimal", "Fractional"),
+        ("1/16 in", "1/32 in"),
+    ] {
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        h.click(text_position(&output, current));
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        h.click(text_position(&output, choice));
+    }
+    assert_eq!(h.app.doc.display.units.length_format, LengthFormat::Fractional);
+    assert_eq!(h.app.doc.display.units.fraction_denominator, 32);
+    h.app.set_tool(Tool::TapeMeasure);
+    h.app.measurement = Some(measurement_tools::Measurement {
+        points: vec![DVec3::ZERO, DVec3::X * (5.5 * 0.0254)],
+        complete: true,
+        ..Default::default()
+    });
+    assert_eq!(h.app.measurement_value().as_deref(), Some("5 1/2 in"));
+    h.app.doc.display.units.length = LengthUnit::Feet;
+    assert_eq!(h.app.measurement_value().as_deref(), Some("0 ft 5 1/2 in"));
+    assert_eq!(h.app.doc.model, model);
+    assert!(!h.app.project.modified);
+}
+
+#[test]
 fn units_section_controls_change_measurements_without_editing_geometry() {
     use benchup_core::{AngleUnit, AreaUnit, LengthUnit, UnitSettings, VolumeUnit};
 

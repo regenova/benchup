@@ -1,7 +1,7 @@
 //! Typed dimensions are converted to meters before reaching geometry operations.
-use benchup_core::tr;
 use super::*;
 use benchup_core::LengthUnit;
+use benchup_core::tr;
 
 pub(super) const MAX_INPUT_LEN: usize = 512;
 fn formula_example() -> &'static str {
@@ -106,7 +106,9 @@ impl<'a> Formula<'a> {
                     value.dimension = 1;
                     rhs.dimension = 1;
                 } else {
-                    return Err(tr!("precision.add_or_subtract_quantities_with_matching_units"));
+                    return Err(tr!(
+                        "precision.add_or_subtract_quantities_with_matching_units"
+                    ));
                 }
             }
             value.number = if operator == b'+' {
@@ -152,6 +154,93 @@ impl<'a> Formula<'a> {
         Ok(value)
     }
 
+    fn unit_suffix(&mut self) -> &'a str {
+        self.peek();
+        let start = self.cursor;
+        if matches!(self.input.as_bytes().get(self.cursor), Some(b'\'' | b'"')) {
+            self.cursor += 1;
+        } else {
+            while self
+                .input
+                .as_bytes()
+                .get(self.cursor)
+                .is_some_and(u8::is_ascii_alphabetic)
+            {
+                self.cursor += 1;
+            }
+        }
+        &self.input[start..self.cursor]
+    }
+
+    fn decimal_number(&mut self) -> Result<f64, &'static str> {
+        self.peek();
+        let start = self.cursor;
+        let bytes = self.input.as_bytes();
+        while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
+            self.cursor += 1;
+        }
+        if bytes.get(self.cursor) == Some(&b'.') {
+            self.cursor += 1;
+            while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
+                self.cursor += 1;
+            }
+        }
+        if matches!(bytes.get(self.cursor), Some(b'e' | b'E')) {
+            self.cursor += 1;
+            if matches!(bytes.get(self.cursor), Some(b'+' | b'-')) {
+                self.cursor += 1;
+            }
+            while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
+                self.cursor += 1;
+            }
+        }
+        self.input[start..self.cursor]
+            .parse::<f64>()
+            .map_err(|_| formula_example())
+    }
+
+    /// Read a fraction as part of a literal before applying its unit suffix.
+    /// Other division (units, parentheses, signed operands) stays in product().
+    fn fraction(&mut self, numerator: f64) -> Result<Option<f64>, &'static str> {
+        let saved = self.cursor;
+        if self.peek() == Some(b'/') {
+            self.cursor += 1;
+            if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                let denominator = self.decimal_number()?;
+                if denominator == 0. {
+                    return Err(tr!("precision.cannot_divide_by_zero"));
+                }
+                return Ok(Some(numerator / denominator));
+            }
+        }
+        self.cursor = saved;
+        Ok(None)
+    }
+
+    fn number(&mut self) -> Result<f64, &'static str> {
+        let whole = self.decimal_number()?;
+        let saved = self.cursor;
+        // Whitespace separates the whole and fractional parts in 5 1/2.
+        if self.peek().is_some_and(|c| c.is_ascii_digit()) && self.cursor > saved {
+            let numerator = self.decimal_number()?;
+            if let Some(fraction) = self.fraction(numerator)? {
+                return Ok(whole + fraction);
+            }
+        }
+        self.cursor = saved;
+        if let Some(fraction) = self.fraction(whole)? {
+            // Bare division retains its usual left associativity in product().
+            if self
+                .peek()
+                .is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, b'\'' | b'"'))
+            {
+                return Ok(fraction);
+            }
+        }
+        self.cursor = saved;
+        Ok(whole)
+    }
+
     fn primary(&mut self) -> Result<Quantity, &'static str> {
         let mut value = if self.peek() == Some(b'(') {
             if self.depth >= 32 {
@@ -167,54 +256,34 @@ impl<'a> Formula<'a> {
             self.depth -= 1;
             value
         } else {
-            let start = self.cursor;
-            let bytes = self.input.as_bytes();
-            while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
-                self.cursor += 1;
-            }
-            if bytes.get(self.cursor) == Some(&b'.') {
-                self.cursor += 1;
-                while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
-                    self.cursor += 1;
-                }
-            }
-            if matches!(bytes.get(self.cursor), Some(b'e' | b'E')) {
-                self.cursor += 1;
-                if matches!(bytes.get(self.cursor), Some(b'+' | b'-')) {
-                    self.cursor += 1;
-                }
-                while bytes.get(self.cursor).is_some_and(u8::is_ascii_digit) {
-                    self.cursor += 1;
-                }
-            }
             Quantity {
-                number: self.input[start..self.cursor]
-                    .parse::<f64>()
-                    .map_err(|_| formula_example())?,
+                number: self.number()?,
                 dimension: 0,
             }
-            .finite()?
         };
-        self.peek();
-        let start = self.cursor;
-        if matches!(self.input.as_bytes().get(self.cursor), Some(b'\'' | b'"')) {
-            self.cursor += 1;
-        } else {
-            while self
-                .input
-                .as_bytes()
-                .get(self.cursor)
-                .is_some_and(u8::is_ascii_alphabetic)
-            {
-                self.cursor += 1;
-            }
-        }
-        if self.cursor > start {
+        let suffix = self.unit_suffix();
+        if !suffix.is_empty() {
             if !self.allow_units {
-                return Err(tr!("precision.scale_factors_must_use_numbers_without_units"));
+                return Err(tr!(
+                    "precision.scale_factors_must_use_numbers_without_units"
+                ));
             }
-            value.number *= unit_factor(&self.input[start..self.cursor])?;
+            let factor = unit_factor(suffix)?;
+            value.number *= factor;
             value.dimension += 1;
+            // A feet/inches pair is one signed literal: -5' 6 1/2".
+            if factor == LengthUnit::Feet.factor() {
+                let saved = self.cursor;
+                if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                    let inches = self.number()?;
+                    let suffix = self.unit_suffix();
+                    if !suffix.is_empty() && unit_factor(suffix)? == LengthUnit::Inches.factor() {
+                        value.number += inches * LengthUnit::Inches.factor();
+                    } else {
+                        self.cursor = saved;
+                    }
+                }
+            }
         }
         value.finite()
     }
@@ -234,16 +303,32 @@ pub(super) fn angle(input: &str, unit: benchup_core::AngleUnit) -> Result<f64, &
     let input = input.trim();
     let lower = input.to_ascii_lowercase();
     let (formula, factor) = [
-        ("degrees", 1.), ("degree", 1.), ("deg", 1.), ("°", 1.),
+        ("degrees", 1.),
+        ("degree", 1.),
+        ("deg", 1.),
+        ("°", 1.),
         ("radians", 180. / std::f64::consts::PI),
         ("radian", 180. / std::f64::consts::PI),
-        ("grad", 0.9), ("gon", 0.9),
+        ("grad", 0.9),
+        ("gon", 0.9),
         ("rad", 180. / std::f64::consts::PI),
-    ].into_iter().find_map(|(suffix, factor)| {
-        lower.ends_with(suffix).then(|| (&input[..input.len() - suffix.len()], factor))
-    }).unwrap_or((input, unit.factor()));
-    Formula::parse(formula, false, 1.).map(|value| value.number * factor)
-        .and_then(|degrees| if degrees.is_finite() { Ok(degrees) } else { Err(tr!("precision.enter_a_finite_angle")) })
+    ]
+    .into_iter()
+    .find_map(|(suffix, factor)| {
+        lower
+            .ends_with(suffix)
+            .then(|| (&input[..input.len() - suffix.len()], factor))
+    })
+    .unwrap_or((input, unit.factor()));
+    Formula::parse(formula, false, 1.)
+        .map(|value| value.number * factor)
+        .and_then(|degrees| {
+            if degrees.is_finite() {
+                Ok(degrees)
+            } else {
+                Err(tr!("precision.enter_a_finite_angle"))
+            }
+        })
 }
 
 pub(super) fn modeling_value_with_units(
@@ -251,8 +336,11 @@ pub(super) fn modeling_value_with_units(
     input: &str,
     units: benchup_core::UnitSettings,
 ) -> Result<f64, &'static str> {
-    if tool == Tool::Rotate { angle(input, units.angle) }
-    else { modeling_value(tool, input, units.length) }
+    if tool == Tool::Rotate {
+        angle(input, units.angle)
+    } else {
+        modeling_value(tool, input, units.length)
+    }
 }
 
 pub(super) fn modeling_value(
@@ -301,16 +389,19 @@ impl BenchUpApp {
             || self.drawing.is_some()
             || self.modeling.as_ref().is_some_and(|edit| {
                 self.tool != Tool::Rotate
-                    || edit.rotation.as_ref().is_some_and(|rotation| rotation.reference.is_some())
+                    || edit
+                        .rotation
+                        .as_ref()
+                        .is_some_and(|rotation| rotation.reference.is_some())
             })
             || self.last_move_copy.is_some()
     }
 
     pub(super) fn dimension_has_typed_value(&self) -> bool {
         // Tab can insert the rectangle separator before either side is typed.
-        self.length_input.chars().any(|c| {
-            !c.is_whitespace() && !(self.rect_fields_active() && c == ',')
-        })
+        self.length_input
+            .chars()
+            .any(|c| !c.is_whitespace() && !(self.rect_fields_active() && c == ','))
     }
 
     pub(super) fn precise_drawing_points(&self) -> Result<Vec<DVec3>, &'static str> {
@@ -370,7 +461,9 @@ impl BenchUpApp {
                 let target = positive_length(&self.length_input, self.doc.display.units.length)?;
                 let current: f64 = points.windows(2).map(|p| p[0].distance(p[1])).sum();
                 if current <= 1e-7 {
-                    return Err(tr!("precision.draw_a_stroke_before_setting_its_total_length"));
+                    return Err(tr!(
+                        "precision.draw_a_stroke_before_setting_its_total_length"
+                    ));
                 }
                 Ok(points
                     .into_iter()
@@ -414,6 +507,53 @@ mod tests {
         for invalid in ["NaN", "inf", "1e999", "45m", "1 / 0", ""] {
             assert!(angle(invalid, AngleUnit::Degrees).is_err());
         }
+    }
+
+    #[test]
+    fn fractional_inches_and_feet_work_in_signed_lengths_and_formulas() {
+        for (input, inches) in [
+            ("5 1/2 in", 5.5),
+            ("1/2in", 0.5),
+            ("-5 1/2 inches", -5.5),
+            ("2 ft 3 1/4 in", 27.25),
+            ("2'3 1/4\"", 27.25),
+            ("-2' 3 1/4\"", -27.25),
+            ("0 ft 1/2 in", 0.5),
+            ("5 1/2 in + 1/4 in", 5.75),
+            ("(5 1/2 in - 1/2 in) / 2", 2.5),
+            ("2 * 5 1/2 in", 11.),
+            ("2ft - 3 1/4in", 20.75),
+        ] {
+            assert!(
+                (length(input).unwrap() - inches * 0.0254).abs() < 1e-10,
+                "{input}"
+            );
+        }
+        for (input, inches) in [("5 1/2", 5.5), ("1/2", 0.5), ("-5 1/2", -5.5)] {
+            assert!(
+                (super::length(input, LengthUnit::Inches).unwrap() - inches * 0.0254).abs() < 1e-10
+            );
+        }
+        // Displayed fractions can be pasted back regardless of the current unit.
+        for unit in [LengthUnit::Inches, LengthUnit::Feet] {
+            let units = benchup_core::UnitSettings {
+                length: unit,
+                length_format: benchup_core::LengthFormat::Fractional,
+                ..Default::default()
+            };
+            for inches in [-65.5, -0.5, 0., 0.125, 65.5] {
+                let text = units.format_length(inches * 0.0254);
+                assert!(
+                    (length(&text).unwrap() - inches * 0.0254).abs() < 1e-10,
+                    "{text}"
+                );
+            }
+        }
+        for invalid in ["5 1/0 in", "1/0in", "5 1/ in", "5 1/2/ in", "2ft 3cm"] {
+            assert!(length(invalid).is_err(), "{invalid}");
+        }
+        assert!((length("12m / 3 / 2").unwrap() - 2.).abs() < 1e-10);
+        assert!((length("12 / 3 / 2").unwrap() - 2.).abs() < 1e-10);
     }
 
     #[test]
