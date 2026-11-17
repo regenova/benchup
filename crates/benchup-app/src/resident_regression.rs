@@ -20,6 +20,7 @@ impl SceneCache {
             hover: None,
             outliner_hover: Default::default(),
             erasing: Default::default(),
+            reference_bounds: None,
         };
         shadows::validate(&key, doc.model.bounds().ok_or("Empty scene")?)
     }
@@ -136,6 +137,7 @@ impl SceneCache {
                 hover: None,
                 outliner_hover: Default::default(),
                 erasing: Default::default(),
+                reference_bounds: None,
             };
             let mut failure = None;
             let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {

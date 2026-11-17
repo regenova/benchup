@@ -1,7 +1,7 @@
 //! Read-only reviews an agent cannot do by looking at the model: a cut list and
 //! a check for problems such as overlapping boards without a joint.
 use crate::scene::{self, mm, point_mm};
-use benchup_core::{DVec3, Model, StockMaterial, connections::ConnectionOperation, joinery::JointSettings};
+use benchup_core::{DVec3, Model, StockMaterial, connections::ConnectionOperation, joinery::{JointKind, JointSettings}};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -288,6 +288,16 @@ fn collect(model: &Model) -> Found {
         .values()
         .map(|c| [c.members[0].min(c.members[1]), c.members[0].max(c.members[1])])
         .collect();
+    // Pairs joined by a housing (tongue and groove, rabbet, groove): one
+    // board may enter the other, but never cross it completely. Through
+    // tenons and cross halvings do cross, so they are not listed.
+    let housed: BTreeSet<[u64; 2]> = model
+        .connections
+        .values()
+        .filter(|c| matches!(&c.operation, ConnectionOperation::Joinery(s)
+            if matches!(s.kind, JointKind::TongueGroove | JointKind::Rabbet | JointKind::Groove)))
+        .map(|c| [c.members[0].min(c.members[1]), c.members[0].max(c.members[1])])
+        .collect();
     let all = boards(model);
     let checked = &all[..all.len().min(MAX_CHECKED_BOARDS)];
     let bounds: Vec<(u64, (DVec3, DVec3), bool)> = checked
@@ -301,7 +311,8 @@ fn collect(model: &Model) -> Found {
     for (i, (a, box_a, aligned_a)) in bounds.iter().enumerate() {
         for (b, box_b, aligned_b) in &bounds[i + 1..] {
             let Some(size) = overlap(*box_a, *box_b) else { continue };
-            if joined.contains(&[(*a).min(*b), (*a).max(*b)]) {
+            let pair = [(*a).min(*b), (*a).max(*b)];
+            if joined.contains(&pair) && !housed.contains(&pair) {
                 continue;
             }
             // Bounding boxes overlap; a notch around the other board means the solids do not.
@@ -338,6 +349,10 @@ fn collect(model: &Model) -> Found {
                     format!("{through} passes right through {pierced}, cutting it in two; a joint cannot fix this. Shorten or move it."),
                     vec![*a, *b],
                 );
+                continue;
+            }
+            // A housing whose boards do not cross is checked by the joint itself.
+            if joined.contains(&pair) {
                 continue;
             }
             let approximate = if *aligned_a && *aligned_b { "" } else { " (measured on bounding boxes; a board is rotated)" };

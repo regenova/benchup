@@ -85,6 +85,8 @@ struct Uniform {
     scale_pivot: [f32; 4],
     scale_factors: [f32; 4],
     agent_effect: [f32; 4],
+    volume_low: [f32; 4],
+    volume_high: [f32; 4],
 }
 #[derive(Default)]
 pub(super) struct Cache {
@@ -171,7 +173,7 @@ fn geometry_key(key: &SceneKey) -> SceneKey {
         edit_context: None, camera: Camera::default(), size: DVec2::ZERO,
         pixels_per_point: 1., display: key.display.clone(), surface_catalog: key.surface_catalog.clone(), dark: key.dark,
         tool: benchup_core::Tool::Orbit, selected: Default::default(), hover: None,
-        outliner_hover: Default::default(), erasing: Default::default(),
+        outliner_hover: Default::default(), erasing: Default::default(), reference_bounds: None,
     };
     key.display.group_emphasis = false;
     // Reference overlays are submitted separately from the retained geometry.
@@ -631,12 +633,9 @@ impl SceneCache {
     ) {
         let geometry = Arc::clone(self.resident.geometry.as_ref().unwrap());
         let source_bounds = self.resident.bounds.unwrap_or(geometry.bounds);
-        let bounds = self.scale_transform.map_or(source_bounds, |scale| {
-            let a = scale.pivot + (source_bounds.0 - scale.pivot) * scale.factors;
-            let b = scale.pivot + (source_bounds.1 - scale.pivot) * scale.factors;
-            (source_bounds.0.min(a), source_bounds.1.max(b))
-        });
-        let (near, far) = clip_planes(&key.camera, bounds);
+        let bounds = scaled_scene_bounds(source_bounds, self.scale_transform);
+        let clip_bounds = include_reference_bounds(Some(bounds), key.reference_bounds).unwrap();
+        let (near, far) = clip_planes(&key.camera, clip_bounds);
         let matrix = key.camera.matrix_with_clip_planes(key.size, near, far)
             * glam::DMat4::from_translation(geometry.origin);
         self.image_matrix = Some(key.camera.matrix_with_clip_planes(key.size, near, far));
@@ -723,6 +722,10 @@ impl SceneCache {
                 scale_factors: self.scale_transform.map_or([1.; 4], |scale|
                     scale.factors.extend(0.).as_vec4().to_array()),
                 agent_effect: self.agent_effects.parameters(&key.camera, rect),
+                volume_low: key.reference_bounds.map_or([0.; 4], |(low, _)|
+                    (low - geometry.origin).extend(1.).as_vec4().to_array()),
+                volume_high: key.reference_bounds.map_or([0.; 4], |(_, high)|
+                    (high - geometry.origin).extend(0.).as_vec4().to_array()),
                 flags: [
                     0.,
                     if key.camera.projection == benchup_core::Projection::Parallel {
@@ -760,6 +763,14 @@ pub(super) fn clip_planes(camera: &Camera, bounds: (DVec3, DVec3)) -> (f64, f64)
         1e8_f64.max((depth + radius) * 2.).max(near * 2.)
     };
     (near, far)
+}
+
+fn scaled_scene_bounds(bounds: (DVec3, DVec3), scale: Option<ScaleTransform>) -> (DVec3, DVec3) {
+    scale.map_or(bounds, |scale| {
+        let a = scale.pivot + (bounds.0 - scale.pivot) * scale.factors;
+        let b = scale.pivot + (bounds.1 - scale.pivot) * scale.factors;
+        (bounds.0.min(a).min(b), bounds.1.max(a).max(b))
+    })
 }
 
 impl Geometry {
@@ -1469,7 +1480,9 @@ impl SceneCache {
                     |(lo, hi), p| (lo.min(p), hi.max(p)),
                 )
             });
-        let (near, far) = clip_planes(&key.camera, bounds);
+        let bounds = scaled_scene_bounds(bounds, self.scale_transform);
+        let clip_bounds = include_reference_bounds(Some(bounds), key.reference_bounds).unwrap();
+        let (near, far) = clip_planes(&key.camera, clip_bounds);
         let mut mesh = Mesh::new(&key.camera, key.size);
         mesh.view = key.camera.view_with_clip_planes(key.size, near, far);
         mesh.set_pixels_per_point(key.pixels_per_point);
@@ -1603,6 +1616,7 @@ mod tests {
             hover: None,
             outliner_hover: Default::default(),
             erasing: Default::default(),
+            reference_bounds: None,
         }
     }
 
@@ -2312,5 +2326,31 @@ mod tests {
         }
         let inside = (camera.eye() - DVec3::ONE, camera.eye() + DVec3::ONE);
         assert_eq!(clip_planes(&camera, inside).0, 0.005);
+    }
+
+    #[test]
+    fn resident_reference_mesh_keeps_the_volume_when_geometry_moves_away() {
+        let volume = (DVec3::new(-0.128, -0.128, 0.), DVec3::new(0.128, 0.128, 0.256));
+        let cache = SceneCache::default();
+        for projection in [benchup_core::Projection::Perspective, benchup_core::Projection::Parallel] {
+            let mut key = key();
+            key.reference_bounds = Some(volume);
+            key.camera.projection = projection;
+            key.camera.fit(Some(volume), key.size);
+            let mut model = model(1024);
+            let offset = (key.camera.target - key.camera.eye()).normalize() * 10000.;
+            for vertex in model.vertices.values_mut() {
+                vertex.position += offset;
+            }
+            let references = cache.resident_reference_mesh(&key, &model);
+            for x in [volume.0.x, volume.1.x] {
+                for y in [volume.0.y, volume.1.y] {
+                    for z in [volume.0.z, volume.1.z] {
+                        let p = references.view.project_depth(DVec3::new(x, y, z)).unwrap();
+                        assert!((0. ..=1.).contains(&p.z), "reference corner clipped in {projection:?}");
+                    }
+                }
+            }
+        }
     }
 }

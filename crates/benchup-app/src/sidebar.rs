@@ -202,6 +202,51 @@ mod guide_preference_tests {
     }
 
     #[test]
+    fn reference_volume_menu_options_save_without_model_edits() {
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        for visible in [true, false] {
+            app.general_settings.volume.visible = visible;
+            app.general_settings.volume.entries[0].size_m = [0.3, 0.2, 0.4];
+            app.general_settings.volume.hotkey = Some("V".into());
+            storage.flushed = false;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.general_settings.volume, app.general_settings.volume);
+        }
+    }
+
+    #[test]
+    fn reference_volume_catalog_saves_selection_edits_and_removals_without_model_edits() {
+        let ctx = egui::Context::default();
+        let mut storage = Storage::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.general_settings.volume.add_entry();
+        let id = app.general_settings.volume.entries[1].id;
+        app.general_settings.volume.entries[1].name = "Room".into();
+        app.general_settings.volume.entries[1].size_m = [3., 4., 2.5];
+        app.general_settings.volume.toggle_entry(id);
+        for stage in 0..4 {
+            if stage == 1 { app.general_settings.volume.toggle(); }
+            if stage == 2 { app.general_settings.volume.remove_entry(1); }
+            if stage == 3 { app.general_settings.volume.remove_entry(id); }
+            storage.flushed = false;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.general_settings.volume, app.general_settings.volume);
+        }
+    }
+
+    #[test]
     fn tool_rail_separators_default_and_restore_without_model_edits() {
         let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
         assert!(legacy.tool_rail_separators.is_empty());
@@ -474,6 +519,27 @@ mod guide_preference_tests {
         restored.replace_project(Document::default(), None, &ctx);
         assert!(restored.walk.person.is_none());
         assert_eq!(restored.general_settings.walk, app.general_settings.walk);
+    }
+
+    #[test]
+    fn hold_v_to_orbit_defaults_on_and_saves_without_a_model_edit() {
+        let old: InspectorPreferences =
+            serde_json::from_str(r#"{"general":{"middle_mouse_pan":true}}"#).unwrap();
+        assert!(old.general.hold_v_to_orbit);
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        assert!(app.general_settings.hold_v_to_orbit);
+        let mut storage = Storage::default();
+        for enabled in [false, true] {
+            app.general_settings.hold_v_to_orbit = enabled;
+            storage.flushed = false;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!(restored.general_settings.hold_v_to_orbit, enabled);
+        }
     }
 
     #[test]
@@ -5934,6 +6000,7 @@ impl BenchUpApp {
         }
         ui.separator();
         self.sections_menu(ui);
+        self.reference_volume_menu(ui);
     }
 
     fn display_contents(&mut self, ui: &mut egui::Ui) {

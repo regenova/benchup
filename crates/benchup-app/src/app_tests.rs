@@ -540,8 +540,12 @@ impl Harness {
         mut events: Vec<egui::Event>,
         modifiers: egui::Modifiers,
     ) -> egui::FullOutput {
-        self.time += 0.01;
         events.insert(0, egui::Event::ModifiersChanged(modifiers));
+        self.frame_events(events)
+    }
+    // Replay backend events verbatim, without an artificial modifier event.
+    fn frame_events(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
+        self.time += 0.01;
         let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
             time: Some(self.time),
@@ -7712,6 +7716,203 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
     assert_eq!(h.app.hover, None);
 }
 
+fn orbit_key_event(pressed: bool, modifiers: egui::Modifiers) -> Vec<egui::Event> {
+    let mut events = vec![egui::Event::Key {
+        key: Key::V,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers,
+    }];
+    if pressed {
+        events.push(egui::Event::Text(if modifiers.shift { "V" } else { "v" }.into()));
+    }
+    events
+}
+
+#[test]
+fn holding_v_orbits_and_pans_from_any_tool_without_clicking() {
+    for tool in [Tool::Select, Tool::Move, Tool::PushPull, Tool::Line, Tool::TapeMeasure, Tool::Erase] {
+        for shift in [false, true] {
+            let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+            let mut h = Harness::new();
+            h.app.set_tool(tool);
+            let start = h.app.viewport.center();
+            h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+            let before = h.app.doc.camera.clone();
+            h.frame(orbit_key_event(true, modifiers), modifiers);
+            assert!(h.app.navigating(), "{tool:?}");
+            assert_eq!(h.app.doc.camera, before);
+            // The key stays held across frames without further key events.
+            h.frame(vec![], modifiers);
+            let end = start + egui::vec2(12., 8.);
+            h.frame(vec![egui::Event::PointerMoved(end)], modifiers);
+            let mut expected = before.clone();
+            if shift {
+                expected.pan(DVec2::new(12., 8.), h.app.viewport.height() as f64);
+            } else {
+                expected.orbit_around(DVec2::new(12., 8.), DVec3::ZERO);
+            }
+            assert_eq!(h.app.doc.camera, expected, "{tool:?} shift={shift}");
+            assert_eq!(h.app.tool, tool);
+            assert!(h.app.length_input.is_empty());
+            assert!(h.app.gesture.is_none());
+
+            h.frame(orbit_key_event(false, modifiers), modifiers);
+            assert!(!h.app.navigating());
+            assert_eq!(h.app.tool, tool, "Releasing V must resume the previous tool");
+            h.frame(vec![egui::Event::PointerMoved(end + egui::vec2(6., 4.))], egui::Modifiers::NONE);
+            assert_eq!(h.app.doc.camera, expected);
+        }
+    }
+}
+
+#[test]
+fn holding_v_preserves_a_pending_line_and_its_dimension_input() {
+    let mut h = Harness::new();
+    h.key(Key::L);
+    let start = h.at(DVec3::ZERO);
+    h.click(start);
+    let line_start = h.app.line_start;
+    assert!(line_start.is_some());
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(h.app.navigating());
+    assert!(h.app.length_input.is_empty(), "V must not type into the dimension");
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(10., 0.))], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.line_start, line_start);
+    assert!(h.app.doc.model.edges.is_empty());
+
+    // Letters typed after a value belong to the dimension instead.
+    h.frame(vec![egui::Event::Text("3".into())], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(!h.app.navigating());
+    assert_eq!(h.app.length_input, "3v");
+}
+
+#[test]
+fn hold_v_orbit_respects_the_setting_and_command_paste() {
+    let mut h = Harness::new();
+    h.app.general_settings.hold_v_to_orbit = false;
+    let start = h.app.viewport.center();
+    h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+    let before = h.app.doc.camera.clone();
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 8.))], egui::Modifiers::NONE);
+    assert!(!h.app.navigating());
+    assert_eq!(h.app.doc.camera, before);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+
+    h.app.general_settings.hold_v_to_orbit = true;
+    h.frame(orbit_key_event(true, egui::Modifiers::COMMAND), egui::Modifiers::COMMAND);
+    assert!(!h.app.navigating(), "Cmd/Ctrl + V stays Paste");
+}
+
+#[test]
+fn tapping_v_keeps_a_custom_v_tool_shortcut_but_holding_orbits() {
+    let mut h = Harness::new();
+    let index = settings::TOOLS.iter().position(|(tool, _)| *tool == Tool::Rotate).unwrap();
+    h.app.general_settings.tool_keys[index] = "V".into();
+    let start = h.app.viewport.center();
+    h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Select);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Rotate, "A tap selects the tool assigned to V");
+
+    h.app.set_tool(Tool::Select);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 8.))], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Select, "Orbiting with V is not a tap");
+}
+
+#[test]
+fn holding_v_cancels_an_interrupted_selection_click() {
+    let mut h = Harness::new();
+    let start = h.app.viewport.center();
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::Select { .. }));
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::DrawingNavigate));
+}
+
+#[test]
+fn hold_v_replays_key_transitions_in_pointer_event_order() {
+    for shift in [false, true] {
+        let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+        let mut h = Harness::new();
+        let start = h.app.viewport.center();
+        h.frame(vec![egui::Event::PointerMoved(start)], modifiers);
+        let before = h.app.doc.camera.clone();
+        let mut events = orbit_key_event(true, modifiers);
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, modifiers));
+        // Motion after release belongs to the tool, even within the same frame.
+        events.push(egui::Event::PointerMoved(start + egui::vec2(24., 16.)));
+        h.frame_events(events);
+        let mut expected = before;
+        if shift {
+            expected.pan(DVec2::new(12., 8.), h.app.viewport.height() as f64);
+        } else {
+            expected.orbit_around(DVec2::new(12., 8.), DVec3::ZERO);
+        }
+        assert_eq!(h.app.doc.camera, expected);
+        assert!(!h.app.navigating());
+        assert!(!h.app.orbit_key_down);
+    }
+}
+
+#[test]
+fn v_release_waits_for_same_frame_motion_before_deciding_custom_shortcut() {
+    for press_in_same_frame in [false, true] {
+        let mut h = Harness::new();
+        let index = settings::TOOLS.iter().position(|(tool, _)| *tool == Tool::Rotate).unwrap();
+        h.app.general_settings.tool_keys[index] = "V".into();
+        h.app.set_tool(Tool::Line);
+        let start = h.at(DVec3::ZERO);
+        h.click(start);
+        let line_start = h.app.line_start;
+        assert!(line_start.is_some());
+        let before = h.app.doc.camera.clone();
+        let mut events = Vec::new();
+        if press_in_same_frame {
+            events.extend(orbit_key_event(true, egui::Modifiers::NONE));
+        } else {
+            h.frame_events(orbit_key_event(true, egui::Modifiers::NONE));
+        }
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+        h.frame_events(events);
+        assert_ne!(h.app.doc.camera, before);
+        assert_eq!(h.app.tool, Tool::Line);
+        assert_eq!(h.app.line_start, line_start);
+        assert!(h.app.length_input.is_empty());
+        assert!(h.app.doc.model.edges.is_empty());
+        assert!(!h.app.navigating());
+    }
+}
+
+#[test]
+fn v_press_and_release_in_one_frame_cancel_an_interrupted_click() {
+    let mut h = Harness::new();
+    h.app.set_tool(Tool::Line);
+    let start = h.at(DVec3::ZERO);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    let mut events = orbit_key_event(true, egui::Modifiers::NONE);
+    events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+    events.push(egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.frame_events(events);
+    assert!(h.app.line_start.is_none());
+    assert!(h.app.doc.model.edges.is_empty());
+    assert!(h.app.gesture.is_none());
+}
+
 #[path = "follow_me_ui_tests.rs"]
 mod follow_me_ui_tests;
 
@@ -7805,4 +8006,253 @@ fn zoom_ignores_hidden_and_out_of_scope_foreground_surfaces() {
         assert!((h.app.doc.camera.distance - expected.distance).abs() < 1e-7, "{state}");
         assert!(h.app.doc.camera.target.distance(expected.target) < 1e-7, "{state}");
     }
+}
+
+#[test]
+fn toggling_the_printer_volume_frames_it_and_leaves_the_camera_alone_when_hidden() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: false,
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
+        ..Default::default()
+    };
+    let before = h.app.doc.camera.clone();
+
+    h.app.toggle_printer_volume(&h.ctx);
+    assert!(h.app.general_settings.volume.visible);
+
+    // The framed target is the volume's centre: X/Y on the origin, half the
+    // height up, because the base sits on Z = 0.
+    let target = h.app.doc.camera.target;
+    assert!(target.x.abs() < 1e-9, "x {}", target.x);
+    assert!(target.y.abs() < 1e-9, "y {}", target.y);
+    assert!((target.z - 0.128).abs() < 1e-9, "z {}", target.z);
+    assert!(
+        h.app.doc.camera.distance < before.distance,
+        "fitting should move the camera closer: {} -> {}",
+        before.distance,
+        h.app.doc.camera.distance
+    );
+
+    // Hiding the box must not disturb the view.
+    let framed = h.app.doc.camera.clone();
+    h.app.toggle_printer_volume(&h.ctx);
+    assert!(!h.app.general_settings.volume.visible);
+    assert_eq!(h.app.doc.camera.target, framed.target);
+    assert_eq!(h.app.doc.camera.distance, framed.distance);
+}
+
+#[test]
+fn reference_volume_is_below_sections_and_toggles_from_the_view_menu() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume.add_entry();
+    h.app.general_settings.volume.entries[1].name = "Room".into();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, tr!("app.view")));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let sections = text_position(&output, tr!("view_controls.sections"));
+    let reference = text_position(&output, tr!("settings.printer_and_tool_volume"));
+    assert!(reference.y > sections.y);
+    h.click(reference);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let label = tr!("reference_volume.entry", number = 1);
+    h.click(text_position(&output, &label));
+    assert!(h.app.general_settings.volume.visible);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Room"));
+    assert!(h.app.general_settings.volume.visible);
+    assert_eq!(h.app.general_settings.volume.selected, Some(h.app.general_settings.volume.entries[1].id));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Room"));
+    assert!(!h.app.general_settings.volume.visible);
+}
+
+#[test]
+fn volume_warning_is_gated_on_visibility_and_geometry() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
+        ..Default::default()
+    };
+    assert!(!h.app.volume_exceeded(&h.ctx, 1), "an empty model fits the volume");
+
+    // A board well past the 256 mm cube.
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::new(-2., -2., 0.), DVec3::new(2., 2., 2.))
+        .unwrap();
+    // A new scene revision is what invalidates the memoized answer.
+    assert!(
+        h.app.volume_exceeded(&h.ctx, 2),
+        "geometry outside the volume must raise the warning"
+    );
+    // Same revision reuses the cached answer.
+    assert!(h.app.volume_exceeded(&h.ctx, 2));
+
+    h.app.general_settings.volume.visible = false;
+    assert!(
+        !h.app.volume_exceeded(&h.ctx, 3),
+        "hiding the box must also hide the warning"
+    );
+}
+
+#[test]
+fn shortcut_toggles_the_printer_volume_through_the_keyboard() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: false,
+        hotkey: Some("V".into()),
+        ..Default::default()
+    };
+    let event = |pressed| egui::Event::Key {
+        key: Key::V,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let press = |h: &mut Harness| {
+        h.frame(vec![event(true)], egui::Modifiers::NONE);
+        h.frame(vec![event(false)], egui::Modifiers::NONE);
+    };
+
+    press(&mut h);
+    assert!(h.app.general_settings.volume.visible, "V shows the volume");
+    press(&mut h);
+    assert!(!h.app.general_settings.volume.visible, "V hides it again");
+}
+
+/// The volume is a viewport reference, never document content. These tests pin the
+/// boundary so saving, exporting, selecting and copying can never pick it up.
+#[test]
+fn volume_settings_never_enter_the_saved_document() {
+    let mut h = Harness::new();
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    let before = serde_json::to_string(&h.app.doc).unwrap();
+
+    h.app.general_settings.volume.visible = true;
+    h.app.general_settings.volume.entries[0].size_m = [7., 7., 7.];
+    h.app.general_settings.volume.hotkey = Some("V".into());
+
+    let after = serde_json::to_string(&h.app.doc).unwrap();
+    assert_eq!(
+        before, after,
+        "volume settings must not reach the document that is saved"
+    );
+    for key in ["size_m", "hotkey"] {
+        assert!(
+            !after.contains(key),
+            "saved document must not contain {key}"
+        );
+    }
+}
+
+#[test]
+fn the_volume_is_never_selectable() {
+    fn select_all(h: &mut Harness) {
+        // egui needs the matching release, like Harness::key does.
+        let modifiers = egui::Modifiers::CTRL;
+        for pressed in [true, false] {
+            h.frame(
+                vec![egui::Event::Key {
+                    key: Key::A,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers,
+                }],
+                modifiers,
+            );
+        }
+    }
+
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        ..Default::default()
+    };
+    // Only the volume is on screen; select all must still find nothing.
+    select_all(&mut h);
+    assert!(
+        h.app.selected.is_empty(),
+        "the volume must not be selectable: {:?}",
+        h.app.selected
+    );
+
+    // With real geometry, select all still selects only model entities.
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    select_all(&mut h);
+    assert_eq!(h.app.selected, h.app.doc.model.selectable_entities());
+    assert!(
+        h.app
+            .selected
+            .iter()
+            .all(|id| h.app.doc.model.contains_entity(id)),
+        "every selected id must be a model entity"
+    );
+}
+
+#[test]
+fn copying_with_only_the_volume_visible_captures_nothing() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        ..Default::default()
+    };
+    h.frame(vec![egui::Event::Copy], egui::Modifiers::NONE);
+    assert!(
+        h.app.clipboard.is_none(),
+        "copy must ignore the volume and stay empty with no selection"
+    );
+
+    let id = h
+        .app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    h.app.selected.insert(id);
+    h.frame(vec![egui::Event::Copy], egui::Modifiers::NONE);
+    let clipboard = h.app.clipboard.as_ref().expect("the selected edge is copied");
+    assert_eq!(clipboard.model.edges.len(), 1);
+    assert_eq!(
+        clipboard.model.vertices.len(),
+        2,
+        "only the selected edge's vertices travel, no volume geometry"
+    );
+}
+
+#[test]
+fn exports_contain_only_model_geometry() {
+    let mut h = Harness::new();
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    let hidden = crate::interchange::export_obj(&h.app.doc.model).unwrap();
+
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        entries: vec![printer_volume::Entry { size_m: [3., 3., 3.], ..Default::default() }],
+        ..Default::default()
+    };
+    let shown = crate::interchange::export_obj(&h.app.doc.model).unwrap();
+
+    assert_eq!(
+        hidden, shown,
+        "showing the volume must not change exported geometry"
+    );
+    let vertices = shown.lines().filter(|line| line.starts_with("v ")).count();
+    assert_eq!(vertices, 2, "only the model's own two vertices are exported");
 }

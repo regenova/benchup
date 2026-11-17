@@ -69,6 +69,8 @@ pub(crate) mod surface_appearance;
 mod grid;
 #[path = "grain_direction.rs"]
 mod grain_direction;
+#[path = "printer_volume.rs"]
+mod printer_volume;
 #[path = "measurement_tools.rs"]
 mod measurement_tools;
 #[path = "move_tool.rs"]
@@ -449,6 +451,12 @@ pub struct BenchUpApp {
     setting_orbit_focus: bool,
     drawing_orbit_down: bool,
     drawing_orbit_pivot: Option<DVec3>,
+    /// V is held for hover navigation from any tool.
+    orbit_key_down: bool,
+    /// The held V key has moved the camera, so its release is not a tap.
+    orbit_key_moved: bool,
+    /// Accepted V transitions, replayed in order with this frame's pointer events.
+    orbit_key_transitions: Vec<egui::Event>,
     viewport_pointer: Option<Pos2>,
     viewport: Rect,
     viewports: viewports::Workspace,
@@ -650,6 +658,9 @@ impl BenchUpApp {
             setting_orbit_focus: false,
             drawing_orbit_down: false,
             drawing_orbit_pivot: None,
+            orbit_key_down: false,
+            orbit_key_moved: false,
+            orbit_key_transitions: Vec::new(),
             viewport_pointer: None,
             viewport: Rect::NOTHING,
             viewports: viewports::Workspace::default(),
@@ -2447,6 +2458,10 @@ impl BenchUpApp {
     }
 
     fn keyboard(&mut self, ctx: &egui::Context) {
+        // Hold-to-orbit ends whenever text entry, a dialog, or Walk owns the
+        // keyboard; it is restored below only when viewport shortcuts apply.
+        let orbit_key_was_down = std::mem::take(&mut self.orbit_key_down);
+        self.orbit_key_transitions.clear();
         // Track Ctrl through dialogs and shortcut early returns. When modeling
         // input is allowed, replay modifier events from the previous state.
         let pull_modifier_was_down = self.push_pull_modifier_down;
@@ -2630,6 +2645,10 @@ impl BenchUpApp {
             };
             return;
         }
+        self.orbit_key_down = orbit_key_was_down && self.general_settings.hold_v_to_orbit;
+        // Track text ownership here, but defer navigation and tap actions until
+        // the viewport replays the corresponding pointer/key event sequence.
+        let mut orbit_key_down = self.orbit_key_down;
         self.sidebar_shortcut(ctx);
         let events = ctx.input(|i| i.events.clone());
         let copy_event = events.iter().any(|e| matches!(e, egui::Event::Copy));
@@ -2685,6 +2704,26 @@ impl BenchUpApp {
                     );
                 }
                 egui::Event::Key {
+                    key: Key::V,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                    ..
+                } if self.orbit_key_available(modifiers) => {
+                    orbit_key_down = true;
+                    self.orbit_key_transitions.push(event);
+                }
+                egui::Event::Key {
+                    key: Key::V,
+                    pressed: false,
+                    ..
+                } if orbit_key_down => {
+                    orbit_key_down = false;
+                    self.orbit_key_transitions.push(event);
+                }
+                // The held orbit key must not type into a pending dimension.
+                egui::Event::Text(text) if orbit_key_down && text.eq_ignore_ascii_case("v") => {}
+                egui::Event::Key {
                     key,
                     pressed: true,
                     repeat: false,
@@ -2736,6 +2775,12 @@ impl BenchUpApp {
                     }
                     if let Some(tool) = self.general_settings.tool_for_key(key) {
                         self.set_tool(tool);
+                        continue;
+                    }
+                    // Tool shortcuts win over the volume toggle, so a conflicting
+                    // assignment can never shadow a tool.
+                    if self.general_settings.volume.hotkey() == Some(key) {
+                        self.toggle_printer_volume(ctx);
                         continue;
                     }
                     match key {
@@ -2810,6 +2855,14 @@ impl BenchUpApp {
             }
         }
         self.push_pull_modifier_down = ctx.input(|i| i.modifiers.ctrl);
+    }
+
+    /// Plain V, or Shift + V for panning, starts hold-to-orbit. Command
+    /// modifiers keep Paste, and letters belong to a dimension being typed.
+    fn orbit_key_available(&self, modifiers: egui::Modifiers) -> bool {
+        self.general_settings.hold_v_to_orbit
+            && !(modifiers.ctrl || modifiers.command || modifiers.mac_cmd || modifiers.alt)
+            && !(self.precision_available() && !self.length_input.is_empty())
     }
 
     fn icon_button(
@@ -3329,7 +3382,9 @@ impl BenchUpApp {
             )
             .show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let drawing_orbit = self.drawing_orbit_modifier(ctx.input(|i| i.modifiers));
+                    let modifiers = ctx.input(|i| i.modifiers);
+                    let orbit_key = self.orbit_key_down && !self.drawing_orbit_modifier(modifiers);
+                    let drawing_orbit = self.drawing_orbit_modifier(modifiers);
                     let navigating = self
                         .gesture
                         .as_ref()
@@ -3337,6 +3392,8 @@ impl BenchUpApp {
                     let shared_status = self.shared_status(ctx.input(|i|i.time));
                     let message = if let Some(status) = shared_status.as_deref() {
                         status
+                    } else if orbit_key {
+                        tr!("app.hold_v_orbit_status")
                     } else if drawing_orbit {
                         tr!("app.move_the_cursor_to_orbit_hold_shift_to")
                     } else if navigating {
@@ -5026,14 +5083,28 @@ impl BenchUpApp {
             && (modifiers.ctrl || modifiers.command || modifiers.mac_cmd)
     }
 
+    /// Hover navigation: Ctrl/Cmd while drawing, or a held V from any tool.
+    fn hover_orbit_active(&self, modifiers: egui::Modifiers) -> bool {
+        self.orbit_key_down || self.drawing_orbit_modifier(modifiers)
+    }
+
     fn update_drawing_orbit(&mut self, modifiers: egui::Modifiers) {
-        let down = self.drawing_orbit_modifier(modifiers);
+        let down = self.hover_orbit_active(modifiers);
         if down != self.drawing_orbit_down {
             self.drawing_orbit_down = down;
             self.drawing_orbit_pivot = None;
             if let Some(gesture) = &mut self.gesture {
-                // An interrupted point click must not place geometry on release.
-                if down && matches!(gesture.kind, GestureKind::Line | GestureKind::Shape | GestureKind::GrainDirection) {
+                // An interrupted click or drag must not place geometry,
+                // change the selection, or apply an edit on release.
+                if down
+                    && !matches!(
+                        gesture.kind,
+                        GestureKind::Navigate { .. }
+                            | GestureKind::Compass { .. }
+                            | GestureKind::Freehand { .. }
+                            | GestureKind::DrawingNavigate
+                    )
+                {
                     gesture.kind = GestureKind::DrawingNavigate;
                 }
                 if down && let GestureKind::Freehand { paused } = &mut gesture.kind {
@@ -5187,6 +5258,7 @@ impl BenchUpApp {
         let events = ctx.input(|i| i.events.clone());
         let focused = ctx.input(|i| i.focused);
         if !focused {
+            self.orbit_key_down = false;
             self.drawing_orbit_down = false;
             self.drawing_orbit_pivot = None;
             self.viewport_pointer = None;
@@ -5211,11 +5283,33 @@ impl BenchUpApp {
         // Native mouse input interleaves absolute positions and raw deltas.
         // We do not use raw deltas; discard them before looking ahead so they
         // cannot turn one pending pointer position into hundreds of snap queries.
+        // Match the accepted key events themselves: UI controls may consume
+        // other events between keyboard handling and viewport replay.
+        let mut orbit_key_transitions = std::mem::take(&mut self.orbit_key_transitions);
         let mut events = events
             .into_iter()
             .filter(|event| !matches!(event, egui::Event::MouseMoved(_)))
             .peekable();
         while let Some(event) = events.next() {
+            if let egui::Event::Key { key: Key::V, pressed, modifiers, .. } = &event
+                && let Some(index) = orbit_key_transitions.iter().position(|key_event| key_event == &event)
+            {
+                orbit_key_transitions.drain(..=index);
+                let was_down = self.orbit_key_down;
+                self.orbit_key_down = *pressed;
+                if *pressed {
+                    self.orbit_key_moved = false;
+                } else if was_down && !self.orbit_key_moved
+                    && let Some(tool) = self.general_settings.tool_for_key(Key::V)
+                {
+                    self.set_tool(tool);
+                }
+                refresh_pointer = true;
+                self.update_drawing_orbit(*modifiers);
+                // The status bar was laid out before viewport input this frame.
+                ctx.request_repaint();
+                continue;
+            }
             // Keep every stroke sample, but coalesce consecutive hover/navigation
             // positions. Button and keyboard events remain ordered barriers.
             let stroking = self.gesture.as_ref().is_some_and(|gesture| {
@@ -5237,7 +5331,7 @@ impl BenchUpApp {
             match event {
                 egui::Event::ModifiersChanged(modifiers) => {
                     refresh_pointer |=
-                        self.drawing_orbit_down && !self.drawing_orbit_modifier(modifiers);
+                        self.drawing_orbit_down && !self.hover_orbit_active(modifiers);
                     self.update_drawing_orbit(modifiers);
                 }
                 egui::Event::PointerButton {
@@ -5403,6 +5497,7 @@ impl BenchUpApp {
                             let mut pivot = self.drawing_orbit_pivot;
                             self.navigate(ctx, dv(pos - previous), &mut pivot, None);
                             self.drawing_orbit_pivot = pivot;
+                            self.orbit_key_moved |= self.orbit_key_down && pos != previous;
                         }
                     }
                     self.viewport_pointer = in_viewport.then_some(pos);
@@ -5630,6 +5725,11 @@ impl BenchUpApp {
                 }
                 _ => {}
             }
+        }
+        // Reconcile missing releases only after replaying the frame: a complete
+        // press/move/release sequence can legitimately end with V already up.
+        if self.orbit_key_down && !ctx.input(|i| i.key_down(Key::V)) {
+            self.orbit_key_down = false;
         }
         self.update_drawing_orbit(ctx.input(|i| i.modifiers));
         // Menus and other overlays can cover the viewport without pointer motion.
@@ -5955,6 +6055,8 @@ impl BenchUpApp {
             && self.measurement.as_ref().is_none_or(|m| {
                 m.complete && m.dimension_id.is_some() && self.length_input.trim().is_empty()
             });
+        let reference_bounds = self.general_settings.volume.visible
+            .then(|| self.general_settings.volume.bounds());
         let key = ((self.modeling.is_none() || self.tool == Tool::Scale)
             && self.grain_anchor.is_none()
             && self.paste_preview.is_none()
@@ -5972,6 +6074,7 @@ impl BenchUpApp {
             display: display.clone(),
             surface_catalog: surface_catalog.clone(),
             dark: ui.visuals().dark_mode,
+            reference_bounds,
             tool: self.tool,
             selected: selected.clone(),
             hover,
@@ -6010,6 +6113,9 @@ impl BenchUpApp {
                 let v = axis.vector() * renderer::ReferenceFade::new(camera).axis_length();
                 references.axis_line(camera, -v, DVec3::ZERO, 0.85, self.axis_color(axis).gamma_multiply(0.35));
                 references.axis_line(camera, DVec3::ZERO, v, 1.1, self.axis_color(axis).gamma_multiply(0.8));
+            }
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut references);
             }
             self.add_drawing_preview(&mut references, camera, ui);
             self.scene_cache.paint_resident(key, model, &self.face_cache, entities, ui, rect, references);
@@ -6061,7 +6167,10 @@ impl BenchUpApp {
                 && !selected_entities.is_empty();
             let mut mesh = renderer::Mesh::cached(camera, size, &mut self.scene_cache);
             mesh.remap_agent_effects(model);
-            mesh.set_scene_clip_planes(camera, self.render_model.bounds());
+            mesh.set_scene_clip_planes(camera, renderer::include_reference_bounds(
+                self.render_model.bounds(), reference_bounds,
+            ));
+            mesh.set_reference_bounds(reference_bounds);
             mesh.reference_image_depth_bounds(model);
             mesh.set_pixels_per_point(ui.ctx().pixels_per_point());
             mesh.set_display(display);
@@ -6283,6 +6392,9 @@ impl BenchUpApp {
                 display,
                 &faces,
             );
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut mesh);
+            }
             let grain_preview = self.history_preview.is_none()
                 .then(|| self.grain_preview_axes())
                 .unwrap_or_default();
@@ -6984,6 +7096,7 @@ impl BenchUpApp {
                 p.galley(r.min + egui::vec2(12., 10.), galley, colors.ink);
             }
         }
+        self.paint_volume_warning(ui.ctx(), &p, rect, colors.paper, colors.ink, cache_revision);
     }
     fn edit_context_bar(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);

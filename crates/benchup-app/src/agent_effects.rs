@@ -611,13 +611,14 @@ impl Drop for Draw {
 }
 struct TargetSrgb(bool);
 
-// Precision renderer packets share their retained geometry across animation
-// frames. Each pane owns its uniform, so split views cannot overwrite cameras.
+// Precision renderer packets share retained geometry across animation and
+// volume-bound changes. Each pane owns its uniform and projection.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ProjectedUniform {
     parameters: [f32; 4],
     size: [f32; 4],
+    volume: reference_volume::Parameters,
 }
 pub(super) struct Projected {
     uniform: ProjectedUniform,
@@ -632,6 +633,7 @@ struct ProjectedPipelines {
     edges: wgpu::RenderPipeline,
     empty: wgpu::TextureView,
     sampler: wgpu::Sampler,
+    srgb: bool,
 }
 pub(super) fn projected_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -712,11 +714,13 @@ pub(super) fn install_projected(
         edges: pipeline(PipelinePass::Edges),
         empty,
         sampler: device.create_sampler(&Default::default()),
+        srgb: format.is_srgb(),
     });
 }
 impl Projected {
-    pub(super) fn new(frame: &Frame, camera: &Camera, rect: Rect) -> Option<Self> {
-        frame.animated().then(|| Self {
+    pub(super) fn new(frame: &Frame, camera: &Camera, rect: Rect,
+        volume: Option<(DVec3, DVec3)>, projection: (glam::DMat4, [f32; 4])) -> Option<Self> {
+        (frame.animated() || volume.is_some()).then(|| Self {
             uniform: ProjectedUniform {
                 parameters: frame.parameters(camera, rect),
                 size: [
@@ -725,6 +729,7 @@ impl Projected {
                     if frame.starts.is_empty() { 0. } else { 1. },
                     0.,
                 ],
+                volume: reference_volume::Parameters::new(volume, projection),
             },
             gpu: OnceLock::new(),
         })
@@ -737,9 +742,11 @@ impl Projected {
     ) {
         if let Some(pipelines) = resources.get::<ProjectedPipelines>() {
             self.gpu.get_or_init(|| {
+                let mut uniform = self.uniform;
+                uniform.size[3] = if pipelines.srgb { 1. } else { 0. };
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Agent precision scene animation"),
-                    contents: bytemuck::bytes_of(&self.uniform),
+                    label: Some("Precision scene effects"),
+                    contents: bytemuck::bytes_of(&uniform),
                     usage: wgpu::BufferUsages::UNIFORM,
                 });
                 let view = scene

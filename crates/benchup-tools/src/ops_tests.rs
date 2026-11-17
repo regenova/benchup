@@ -75,6 +75,7 @@ fn argument_and_id_errors_are_structured_and_harmless() {
     let (mut model, mut env) = (Model::default(), ToolEnv::default());
     let leg = board(&mut model, &mut env, "Leg", [0., 0., 0.], [40., 40., 700.]);
     assert!(err(&mut model, &mut env, "nope", json!({})).contains("unknown tool"));
+    assert!(err(&mut model, &mut env, "agent_activity", json!({"phase": "analyzing"})).contains("only available in live mode"));
     assert!(err(&mut model, &mut env, "move", json!({"ids": [leg]})).contains("invalid arguments"));
     assert!(err(&mut model, &mut env, "move", json!({"ids": [leg], "delta_mm": [1, 2, 3], "extra": 1})).contains("invalid arguments"));
     assert!(err(&mut model, &mut env, "move", json!({"ids": "a", "delta_mm": [1, 2, 3]})).contains("invalid arguments"));
@@ -995,6 +996,27 @@ fn check_model_reports_boards_passing_through_and_thickness() {
     assert!(kinds.contains(&"passes_through"), "{check}");
     assert!(kinds.contains(&"thickness_mismatch"), "{check}");
     assert_eq!(check["errors"], 1);
+}
+
+#[test]
+fn check_model_reports_a_housed_board_that_crosses_the_other() {
+    // A housing joint does not make a board that runs right through another
+    // buildable: the groove would cut the divider, and the shelf goes on.
+    let (mut model, mut env) = (Model::default(), ToolEnv::default());
+    let divider = board(&mut model, &mut env, "Divider", [491., 0., 0.], [18., 300., 1800.]);
+    let shelf = board(&mut model, &mut env, "Long shelf", [9., 0., 1000.], [1200., 300., 18.]);
+    ok(&mut model, &mut env, "add_joint", json!({"a": shelf, "b": divider, "kind": "tongue_groove"}));
+    let check = ok(&mut model, &mut env, "check_model", json!({})).result;
+    let through: Vec<&Value> = check["issues"].as_array().unwrap().iter().filter(|i| i["kind"] == "passes_through").collect();
+    assert_eq!(through.len(), 1, "{check}");
+    assert!(through[0]["message"].as_str().unwrap().starts_with("Divider passes right through Long shelf"), "{check}");
+    // A shelf that only enters the divider is fine.
+    let (mut model, mut env) = (Model::default(), ToolEnv::default());
+    let divider = board(&mut model, &mut env, "Divider", [491., 0., 0.], [18., 300., 1800.]);
+    let shelf = board(&mut model, &mut env, "Shelf", [9., 0., 1000.], [491., 300., 18.]);
+    ok(&mut model, &mut env, "add_joint", json!({"a": shelf, "b": divider, "kind": "tongue_groove"}));
+    let check = ok(&mut model, &mut env, "check_model", json!({})).result;
+    assert_eq!(check["errors"], 0, "{check}");
 }
 
 #[test]

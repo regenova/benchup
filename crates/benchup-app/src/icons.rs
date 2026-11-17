@@ -1605,6 +1605,36 @@ fn paint_line_icon(p: &egui::Painter, c: Pos2, kind: &str, color: Color32) {
                 s,
             ));
         }
+        "warning" => {
+            p.add(egui::Shape::convex_polygon(
+                vec![at(0., -9.), at(9., 7.), at(-9., 7.)],
+                color,
+                Stroke::NONE,
+            ));
+            let ink = Color32::from_rgb(65, 36, 0);
+            p.line_segment([at(0., -3.5), at(0., 1.)], Stroke::new(1.8, ink));
+            p.circle_filled(at(0., 4.), 1., ink);
+        }
+        "reference_volume" => {
+            // Isometric box for the fixed reference volume.
+            let front = [
+                at(-8., 2.),
+                at(-2., 2.),
+                at(-2., 8.),
+                at(-8., 8.),
+            ];
+            let back = [
+                at(-3., -3.),
+                at(3., -3.),
+                at(3., 3.),
+                at(-3., 3.),
+            ];
+            p.add(egui::Shape::closed_line(front.to_vec(), s));
+            p.add(egui::Shape::closed_line(back.to_vec(), s));
+            for corner in 0..4 {
+                p.line_segment([front[corner], back[corner]], s);
+            }
+        }
         _ => {}
     }
 }

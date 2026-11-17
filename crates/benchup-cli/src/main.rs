@@ -178,16 +178,33 @@ fn pretty(value: &Value) -> String {
 }
 
 fn tools(args: Args) -> Result<Output, String> {
+    // `agent_activity` is answered by BenchUp itself, not by the tool layer,
+    // so it only exists with --live; list it anyway, marked as such, since
+    // the guide asks agents to call it.
+    let mut activity = mcp::agent_activity_tool();
+    activity["live_only"] = json!(true);
+    let activity_name = activity["name"].as_str().unwrap_or_default().to_owned();
     match args.positional.as_slice() {
-        [] if args.flag("--json") => Ok(ok(Value::Array(mcp_tools()))),
-        [] if args.flag("--names") => Ok(ok(json!(definitions().into_iter().map(|d| d.name).collect::<Vec<_>>()))),
+        [] if args.flag("--json") => {
+            let mut list = mcp_tools();
+            list.push(activity);
+            Ok(ok(Value::Array(list)))
+        }
+        [] if args.flag("--names") => {
+            let mut names: Vec<String> = definitions().into_iter().map(|d| d.name).collect();
+            names.push(activity_name);
+            Ok(ok(json!(names)))
+        }
         [] => {
-            let list: Vec<Value> = definitions()
+            let mut list: Vec<Value> = definitions()
                 .into_iter()
                 .map(|d| json!({"name": d.name, "changes_model": is_mutating(&d.name), "description": d.description}))
                 .collect();
+            list.push(json!({"name": activity_name, "changes_model": false, "live_only": true, "description": activity["description"]}));
             Ok(ok(Value::Array(list)))
         }
+        [name] if *name == activity_name => Ok(ok(json!({"name": activity_name, "live_only": true,
+            "description": activity["description"], "inputSchema": activity["inputSchema"]}))),
         [name] => definitions()
             .into_iter()
             .find(|d| &d.name == name)

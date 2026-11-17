@@ -85,7 +85,7 @@ agent ──MCP (stdio) or benchup … --live──▶ benchup bridge (127.0.0.1
 ```
 
 1. In BenchUp, open **Settings → Agent connection** and turn on **Allow agent connection**. It is off by default; the setting is remembered.
-2. Copy the pairing token shown there (or one of the setup snippets) and give it to the agent as `BENCHUP_AGENT_TOKEN`. The token stays on that device; **New token** replaces it and disconnects agents that use the old one.
+2. Copy the pairing token shown there (or one of the setup snippets) and give it to the agent as `BENCHUP_AGENT_TOKEN`. The token stays on that device; **Refresh token** asks for confirmation before replacing it and disconnecting agents that use the old one.
 3. Connect the agent:
 
    ```sh
@@ -131,7 +131,7 @@ How it behaves:
 - **Scope and selection:** every call starts in the scope the designer is in, so put `enter_object` and the calls that need it in one batch. The agent sees the designer's selection (`get_selection`), so the designer can say "change this".
 - **Project switches:** every result names the open project. A call that was waiting when another project was opened is refused, so the agent can look again with `get_scene`. A collaborator's new revision of the same shared project does not refuse waiting calls.
 - **Timeouts and size:** a call waits up to 15 seconds for BenchUp to connect and up to 120 seconds for its answer, then fails with a hint. A call larger than 16 MB is refused by the bridge; split it into smaller batches. An answer larger than 32 MB comes back as an error (with `applied: true` when the call still changed the model); filter `get_scene` or render a smaller view.
-- **Security:** only programs that know the token can use the bridge, and the token is never sent: both sides prove they know it with a challenge-response (HMAC-SHA256 over fresh nonces). Browsers must come from `https://benchup3d.github.io` or a local development server (`--allow-origin` adds another), so other web pages cannot reach it. Pass the token in the environment, never as a command-line argument, which other users on the computer can see.
+- **Security:** only programs that know the token can use the bridge, and the token is never sent: both sides prove they know it with a challenge-response (HMAC-SHA256 over fresh nonces). Browsers must come from the published web app (`https://benchup3d.github.io`, which redirects to `https://benchup.io`) or a local development server (`--allow-origin` adds another), so other web pages cannot reach it. Pass the token in the environment, never as a command-line argument, which other users on the computer can see.
 - **Web browsers:** Chrome and Safari may ask whether the site may connect to devices on your local network the first time BenchUp connects to the bridge; allow it.
 
 ## Using it from an agent

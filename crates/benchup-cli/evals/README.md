@@ -13,6 +13,8 @@ There are two layers:
    # give each agent the prompt in /tmp/benchup-eval5/prompts/<case>.md, verbatim
    ```
 
+   To run the cases against the project open in BenchUp (desktop or web) instead of a file, add `--live --token <pairing token>` (and `--port` if BenchUp uses another one). Open each case's `file` in BenchUp before starting its agent, and run the cases one at a time, since one BenchUp serves one bridge. [Round 7](results/round-7-live.md) was run this way.
+
 ## Files
 
 - `cases.json` — the cases: request, seed project, mode (`cli`, or `mcp` through `mcp_call.py`), the tools it is expected to exercise, and the reference solution with what `check_model` must say about it.

@@ -81,6 +81,10 @@ fn echo_app(hub: &Hub) -> std::thread::JoinHandle<()> {
 fn origins_are_limited_to_the_web_app_and_local_servers() {
     assert!(origin_allowed(None, &[]));
     assert!(origin_allowed(Some(DEFAULT_ORIGIN), &[]));
+    // The GitHub Pages address redirects there, so the app loads from it.
+    assert!(origin_allowed(Some("https://benchup.io"), &[]));
+    assert!(!origin_allowed(Some("https://benchup.io.evil.example"), &[]));
+    assert!(!origin_allowed(Some("http://benchup.io"), &[]));
     assert!(origin_allowed(Some("http://localhost:8080"), &[]));
     assert!(origin_allowed(Some("http://127.0.0.1"), &[]));
     assert!(!origin_allowed(Some("https://evil.example"), &[]));
