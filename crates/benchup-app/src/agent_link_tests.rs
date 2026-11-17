@@ -100,6 +100,20 @@ fn viewport_feedback_tracks_observed_work_and_document_lifetime() {
 }
 
 #[test]
+fn activity_reports_inside_a_batch_are_skipped_without_breaking_references() {
+    let mut setup = Setup::paired();
+    let calls = json!([
+        {"tool": "agent_activity", "arguments": {"phase": "preparing"}},
+        {"tool": "create_board", "arguments": board("After report", 0.)},
+        {"tool": "rename", "arguments": {"id": "$2.created[0]", "name": "Renamed"}}
+    ]);
+    let answer = setup.call("run_batch", json!({"calls": calls}));
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(answer["result"]["results"][0]["ignored"], true, "{answer}");
+    assert_eq!(answer["result"]["results"][2]["objects"][0]["name"], "Renamed", "{answer}");
+}
+
+#[test]
 fn failed_and_previewed_edits_never_start_geometry_transitions() {
     let mut setup = Setup::paired();
     let calls = json!([{"tool": "create_board", "arguments": board("Preview", 0.)}]);

@@ -443,6 +443,7 @@ pub fn render(model: &Model, view: &str, width: u32, height: u32) -> Result<Rend
         labels.push((*id, rect, [pa[0], pa[1], pb[0], pb[1]]));
     }
     let mut notes = Vec::new();
+    let mut cut_off = Vec::new();
     for (id, anchor, offset, text) in &texts {
         let (p, q) = (project(*anchor), project(*anchor + *offset));
         canvas.line(p, q, TEXT_MARK, 1., None);
@@ -453,7 +454,18 @@ pub fn render(model: &Model, view: &str, width: u32, height: u32) -> Result<Rend
         for (n, line) in lines.iter().enumerate() {
             canvas.text(line, [q[0], first + step * n as f64], scale, TEXT_MARK);
         }
-        notes.push(json!({"id": id, "text": text, "at_px": [(q[0] / SAMPLES as f64).round(), (q[1] / SAMPLES as f64).round()]}));
+        let mut note = json!({"id": id, "text": text, "at_px": [(q[0] / SAMPLES as f64).round(), (q[1] / SAMPLES as f64).round()]});
+        // The fit only covers the label point, so a long line can run off
+        // the image; say so instead of letting the agent find out by eye.
+        let widest = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+        let half_w = ((GLYPH_W + 1) * widest) as f64 * scale / 2.;
+        let half_h = GLYPH_H as f64 * scale / 2.;
+        let last = first + step * (lines.len().max(1) - 1) as f64;
+        if q[0] - half_w < 0. || q[0] + half_w > w as f64 || first - half_h < 0. || last + half_h > h as f64 {
+            note["cut_off"] = json!(true);
+            cut_off.push(*id);
+        }
+        notes.push(note);
     }
     let overlaps_rect = |r: &[f64; 4], s: &[f64; 4]| r[0] < s[2] && s[0] < r[2] && r[1] < s[3] && s[1] < r[3];
     let line_hits_rect = |l: &[f64; 4], r: &[f64; 4]| {
@@ -482,6 +494,10 @@ pub fn render(model: &Model, view: &str, width: u32, height: u32) -> Result<Rend
         "dimension_overlaps": overlaps,
         "texts": notes,
     });
+    if !cut_off.is_empty() {
+        info["texts_cut_off"] = json!(cut_off);
+        info["texts_hint"] = json!("Part of these notes falls outside the image: shorten them, break them into lines, or render a larger image.");
+    }
     if !end_on.is_empty() {
         info["dimensions_end_on"] = json!(end_on);
         info["note"] = json!("These dimensions point along the view direction and cannot be read in this view.");
@@ -543,6 +559,21 @@ mod tests {
     }
 
     #[test]
+    fn long_notes_that_run_off_the_image_are_reported() {
+        let mut model = shelf_with_dimensions();
+        let mut env = ToolEnv::default();
+        for (name, text) in [("short", "Shelf"), ("long", "A NOTE FAR TOO LONG TO FIT ACROSS THIS SMALL IMAGE, WHICHEVER WAY IT IS DRAWN")] {
+            let args = json!({"text": text, "point_mm": [9, 0, 900], "offset_mm": [0, 0, 100]});
+            assert!(execute(&mut model, &Call::new(name, "add_text", args), &mut env).ok);
+        }
+        let rendered = render(&model, "front", 300, 300).unwrap();
+        let cut: Vec<&Value> = rendered.info["texts"].as_array().unwrap().iter().filter(|n| n["cut_off"] == true).collect();
+        assert_eq!(cut.len(), 1, "{}", rendered.info);
+        assert!(cut[0]["text"].as_str().unwrap().starts_with("A NOTE"));
+        assert_eq!(rendered.info["texts_cut_off"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
     fn the_model_is_drawn_and_overlapping_dimensions_are_reported() {
         let model = shelf_with_dimensions();
         let rendered = render(&model, "front", 400, 400).unwrap();
@@ -556,6 +587,7 @@ mod tests {
         // Seen from the side, the vertical dimensions read; from the top they are end-on.
         let top = render(&model, "top", 200, 200).unwrap();
         assert_eq!(top.info["dimensions_end_on"].as_array().unwrap().len(), 2);
+        assert!(rendered.info.get("texts_cut_off").is_none());
         assert_eq!(base64(b"Man"), "TWFu");
         assert_eq!(base64(b"Ma"), "TWE=");
     }

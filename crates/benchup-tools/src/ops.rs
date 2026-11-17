@@ -314,7 +314,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"ids": ids()}), &["ids"]),
         def("flip_joint", "Swap a joint's a and b (the board that carries the tenon or tongue and the one that receives it), keeping its kind and settings and re-picking the orientation. Use it when check_model reports joint_roles_reversed.",
             json!({"ids": ids()}), &["ids"]),
-        def("add_dimension", "Add a dimension between two points. It measures the straight distance between them, or only along axis (x, y or z) when given. A point exactly on a vertex, edge or face attaches to it and follows it when the part moves; there is no snapping to nearby points. offset_mm moves the dimension line away from the measured points, perpendicular to them (e.g. [0, -150, 0] draws it 150 mm in front). Returns length_mm and whether each end attached.",
+        def("add_dimension", "Add a dimension between two points. It measures the straight distance between them, or only along axis (x, y or z) when given. A point exactly on a vertex, edge or face attaches to it and follows it when the part moves; there is no snapping to nearby points. offset_mm moves the dimension line away from the measured points, perpendicular to them (e.g. [0, -150, 0] draws it 150 mm in front). With axis, the line is drawn through the midpoint of the two points, so when they differ off the axis, measure offset_mm from that midpoint. Returns length_mm and whether each end attached.",
             json!({"start_mm": vec3(), "end_mm": vec3(), "offset_mm": vec3(), "axis": axis_enum()}), &["start_mm", "end_mm", "offset_mm"]),
         def("add_text", "Add a text note anchored at point_mm; offset_mm places the label away from the anchor with a leader line ([0, 0, 0] puts it on the point).",
             json!({"point_mm": vec3(), "offset_mm": vec3(), "text": text()}), &["point_mm", "offset_mm", "text"]),
@@ -1681,6 +1681,13 @@ fn out_of_range(model: &Model, done: &Done) -> bool {
 /// exactly as it was; a successful one records the turn's `before` snapshot.
 pub fn execute(model: &mut Model, call: &Call, env: &mut ToolEnv) -> ToolOutcome {
     let name = call.name.as_str();
+    if name == "agent_activity" {
+        // Answered by BenchUp itself (live mode only), never by the tool layer.
+        return error_outcome(
+            "agent_activity is only available in live mode".into(),
+            Some("It reports your progress to the open BenchUp app: call it on its own with `benchup call --live agent_activity '{\"phase\":\"analyzing\"}'`. Editing a file needs no activity reports.".into()),
+        );
+    }
     if !is_known(name) {
         let names: Vec<_> = TOOLS.iter().map(|(n, _)| *n).collect();
         return error_outcome(format!("unknown tool {name}"), Some(format!("Available tools: {}", names.join(", "))));

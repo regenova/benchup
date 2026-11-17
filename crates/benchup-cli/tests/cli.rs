@@ -172,6 +172,20 @@ fn tools_lists_schemas() {
     let one = json_out(&benchup(&["tools", "create_board"], None));
     assert_eq!(one["inputSchema"]["required"], json!(["name", "origin_mm", "size_mm"]));
     assert_eq!(benchup(&["tools", "nope"], None).status.code(), Some(2));
+    // The guide asks live agents to call agent_activity, so it is listed and
+    // documented too, marked live-only.
+    let activity = list.as_array().unwrap().iter().find(|t| t["name"] == "agent_activity").unwrap();
+    assert_eq!(activity["live_only"], json!(true));
+    let schemas_output = benchup(&["tools", "--json"], None);
+    assert!(schemas_output.status.success());
+    let schemas = json_out(&schemas_output);
+    let activity = schemas.as_array().unwrap().iter().find(|t| t["name"] == "agent_activity").unwrap();
+    assert_eq!(activity["live_only"], json!(true));
+    assert_eq!(activity["inputSchema"]["required"], json!(["phase"]));
+    let one = json_out(&benchup(&["tools", "agent_activity"], None));
+    assert_eq!(one["inputSchema"]["properties"]["phase"]["enum"], json!(["analyzing", "preparing", "finished"]));
+    let names = json_out(&benchup(&["tools", "--names"], None));
+    assert!(names.as_array().unwrap().contains(&json!("agent_activity")));
 }
 
 #[test]

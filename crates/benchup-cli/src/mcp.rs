@@ -43,10 +43,10 @@ fn render_view_tool() -> Value {
     })
 }
 
-fn agent_activity_tool() -> Value {
+pub(crate) fn agent_activity_tool() -> Value {
     json!({
         "name": "agent_activity",
-        "description": "Report the lifetime of your work in the open BenchUp app. Call with phase: analyzing BEFORE you start reading/planning, preparing while preparing changes, and finished AFTER your final verification and BEFORE replying to the user, including when stopping after an error. The robot stays visible between tool calls until finished. Ordinary calls update its looking/gear animation automatically. This changes no model data, selection or undo history. Only available in live mode.",
+        "description": "Report the lifetime of your work in the open BenchUp app. Call with phase: analyzing BEFORE you start reading/planning, preparing while preparing changes, and finished AFTER your final verification and BEFORE replying to the user, including when stopping after an error. The robot stays visible between tool calls until finished. Ordinary calls update its looking/gear animation automatically. This changes no model data, selection or undo history. Only available in live mode, and as a call of its own: inside a batch it is ignored.",
         "inputSchema": {"type": "object", "properties": {
             "phase": {"type": "string", "enum": ["analyzing", "preparing", "finished"]}
         }, "required": ["phase"], "additionalProperties": false},
