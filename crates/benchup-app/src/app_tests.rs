@@ -540,8 +540,12 @@ impl Harness {
         mut events: Vec<egui::Event>,
         modifiers: egui::Modifiers,
     ) -> egui::FullOutput {
-        self.time += 0.01;
         events.insert(0, egui::Event::ModifiersChanged(modifiers));
+        self.frame_events(events)
+    }
+    // Replay backend events verbatim, without an artificial modifier event.
+    fn frame_events(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
+        self.time += 0.01;
         let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
             time: Some(self.time),
@@ -7677,6 +7681,203 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
     h.app.setting_orbit_focus = false;
     h.app.update_pointer(pos);
     assert_eq!(h.app.hover, None);
+}
+
+fn orbit_key_event(pressed: bool, modifiers: egui::Modifiers) -> Vec<egui::Event> {
+    let mut events = vec![egui::Event::Key {
+        key: Key::V,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers,
+    }];
+    if pressed {
+        events.push(egui::Event::Text(if modifiers.shift { "V" } else { "v" }.into()));
+    }
+    events
+}
+
+#[test]
+fn holding_v_orbits_and_pans_from_any_tool_without_clicking() {
+    for tool in [Tool::Select, Tool::Move, Tool::PushPull, Tool::Line, Tool::TapeMeasure, Tool::Erase] {
+        for shift in [false, true] {
+            let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+            let mut h = Harness::new();
+            h.app.set_tool(tool);
+            let start = h.app.viewport.center();
+            h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+            let before = h.app.doc.camera.clone();
+            h.frame(orbit_key_event(true, modifiers), modifiers);
+            assert!(h.app.navigating(), "{tool:?}");
+            assert_eq!(h.app.doc.camera, before);
+            // The key stays held across frames without further key events.
+            h.frame(vec![], modifiers);
+            let end = start + egui::vec2(12., 8.);
+            h.frame(vec![egui::Event::PointerMoved(end)], modifiers);
+            let mut expected = before.clone();
+            if shift {
+                expected.pan(DVec2::new(12., 8.), h.app.viewport.height() as f64);
+            } else {
+                expected.orbit_around(DVec2::new(12., 8.), DVec3::ZERO);
+            }
+            assert_eq!(h.app.doc.camera, expected, "{tool:?} shift={shift}");
+            assert_eq!(h.app.tool, tool);
+            assert!(h.app.length_input.is_empty());
+            assert!(h.app.gesture.is_none());
+
+            h.frame(orbit_key_event(false, modifiers), modifiers);
+            assert!(!h.app.navigating());
+            assert_eq!(h.app.tool, tool, "Releasing V must resume the previous tool");
+            h.frame(vec![egui::Event::PointerMoved(end + egui::vec2(6., 4.))], egui::Modifiers::NONE);
+            assert_eq!(h.app.doc.camera, expected);
+        }
+    }
+}
+
+#[test]
+fn holding_v_preserves_a_pending_line_and_its_dimension_input() {
+    let mut h = Harness::new();
+    h.key(Key::L);
+    let start = h.at(DVec3::ZERO);
+    h.click(start);
+    let line_start = h.app.line_start;
+    assert!(line_start.is_some());
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(h.app.navigating());
+    assert!(h.app.length_input.is_empty(), "V must not type into the dimension");
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(10., 0.))], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.line_start, line_start);
+    assert!(h.app.doc.model.edges.is_empty());
+
+    // Letters typed after a value belong to the dimension instead.
+    h.frame(vec![egui::Event::Text("3".into())], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(!h.app.navigating());
+    assert_eq!(h.app.length_input, "3v");
+}
+
+#[test]
+fn hold_v_orbit_respects_the_setting_and_command_paste() {
+    let mut h = Harness::new();
+    h.app.general_settings.hold_v_to_orbit = false;
+    let start = h.app.viewport.center();
+    h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+    let before = h.app.doc.camera.clone();
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 8.))], egui::Modifiers::NONE);
+    assert!(!h.app.navigating());
+    assert_eq!(h.app.doc.camera, before);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+
+    h.app.general_settings.hold_v_to_orbit = true;
+    h.frame(orbit_key_event(true, egui::Modifiers::COMMAND), egui::Modifiers::COMMAND);
+    assert!(!h.app.navigating(), "Cmd/Ctrl + V stays Paste");
+}
+
+#[test]
+fn tapping_v_keeps_a_custom_v_tool_shortcut_but_holding_orbits() {
+    let mut h = Harness::new();
+    let index = settings::TOOLS.iter().position(|(tool, _)| *tool == Tool::Rotate).unwrap();
+    h.app.general_settings.tool_keys[index] = "V".into();
+    let start = h.app.viewport.center();
+    h.frame(vec![egui::Event::PointerMoved(start)], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Select);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Rotate, "A tap selects the tool assigned to V");
+
+    h.app.set_tool(Tool::Select);
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 8.))], egui::Modifiers::NONE);
+    h.frame(orbit_key_event(false, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert_eq!(h.app.tool, Tool::Select, "Orbiting with V is not a tap");
+}
+
+#[test]
+fn holding_v_cancels_an_interrupted_selection_click() {
+    let mut h = Harness::new();
+    let start = h.app.viewport.center();
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::Select { .. }));
+    h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
+    assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::DrawingNavigate));
+}
+
+#[test]
+fn hold_v_replays_key_transitions_in_pointer_event_order() {
+    for shift in [false, true] {
+        let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+        let mut h = Harness::new();
+        let start = h.app.viewport.center();
+        h.frame(vec![egui::Event::PointerMoved(start)], modifiers);
+        let before = h.app.doc.camera.clone();
+        let mut events = orbit_key_event(true, modifiers);
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, modifiers));
+        // Motion after release belongs to the tool, even within the same frame.
+        events.push(egui::Event::PointerMoved(start + egui::vec2(24., 16.)));
+        h.frame_events(events);
+        let mut expected = before;
+        if shift {
+            expected.pan(DVec2::new(12., 8.), h.app.viewport.height() as f64);
+        } else {
+            expected.orbit_around(DVec2::new(12., 8.), DVec3::ZERO);
+        }
+        assert_eq!(h.app.doc.camera, expected);
+        assert!(!h.app.navigating());
+        assert!(!h.app.orbit_key_down);
+    }
+}
+
+#[test]
+fn v_release_waits_for_same_frame_motion_before_deciding_custom_shortcut() {
+    for press_in_same_frame in [false, true] {
+        let mut h = Harness::new();
+        let index = settings::TOOLS.iter().position(|(tool, _)| *tool == Tool::Rotate).unwrap();
+        h.app.general_settings.tool_keys[index] = "V".into();
+        h.app.set_tool(Tool::Line);
+        let start = h.at(DVec3::ZERO);
+        h.click(start);
+        let line_start = h.app.line_start;
+        assert!(line_start.is_some());
+        let before = h.app.doc.camera.clone();
+        let mut events = Vec::new();
+        if press_in_same_frame {
+            events.extend(orbit_key_event(true, egui::Modifiers::NONE));
+        } else {
+            h.frame_events(orbit_key_event(true, egui::Modifiers::NONE));
+        }
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+        h.frame_events(events);
+        assert_ne!(h.app.doc.camera, before);
+        assert_eq!(h.app.tool, Tool::Line);
+        assert_eq!(h.app.line_start, line_start);
+        assert!(h.app.length_input.is_empty());
+        assert!(h.app.doc.model.edges.is_empty());
+        assert!(!h.app.navigating());
+    }
+}
+
+#[test]
+fn v_press_and_release_in_one_frame_cancel_an_interrupted_click() {
+    let mut h = Harness::new();
+    h.app.set_tool(Tool::Line);
+    let start = h.at(DVec3::ZERO);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    let mut events = orbit_key_event(true, egui::Modifiers::NONE);
+    events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+    events.push(egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.frame_events(events);
+    assert!(h.app.line_start.is_none());
+    assert!(h.app.doc.model.edges.is_empty());
+    assert!(h.app.gesture.is_none());
 }
 
 #[path = "follow_me_ui_tests.rs"]
