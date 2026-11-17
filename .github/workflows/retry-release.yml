@@ -1,0 +1,42 @@
+name: Retry release infrastructure failures
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Build releases', 'Deploy GitHub Pages']
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+  checks: read
+
+concurrency:
+  group: retry-release-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # Read only trusted default-branch code, never the triggering run's code
+      # or artifacts: this job holds permission to restart Actions runs.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify retry policy
+        run: node --test scripts/test_retry_release_infrastructure.cjs
+      - name: Retry confirmed runner acquisition failures
+        if: github.event_name == 'workflow_run'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { retryRelease } = require('./scripts/retry_release_infrastructure.cjs');
+            await retryRelease({ github, context, core });
