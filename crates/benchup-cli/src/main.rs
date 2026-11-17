@@ -181,7 +181,8 @@ fn tools(args: Args) -> Result<Output, String> {
     // `agent_activity` is answered by BenchUp itself, not by the tool layer,
     // so it only exists with --live; list it anyway, marked as such, since
     // the guide asks agents to call it.
-    let activity = mcp::agent_activity_tool();
+    let mut activity = mcp::agent_activity_tool();
+    activity["live_only"] = json!(true);
     let activity_name = activity["name"].as_str().unwrap_or_default().to_owned();
     match args.positional.as_slice() {
         [] if args.flag("--json") => {

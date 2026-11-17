@@ -176,6 +176,12 @@ fn tools_lists_schemas() {
     // documented too, marked live-only.
     let activity = list.as_array().unwrap().iter().find(|t| t["name"] == "agent_activity").unwrap();
     assert_eq!(activity["live_only"], json!(true));
+    let schemas_output = benchup(&["tools", "--json"], None);
+    assert!(schemas_output.status.success());
+    let schemas = json_out(&schemas_output);
+    let activity = schemas.as_array().unwrap().iter().find(|t| t["name"] == "agent_activity").unwrap();
+    assert_eq!(activity["live_only"], json!(true));
+    assert_eq!(activity["inputSchema"]["required"], json!(["phase"]));
     let one = json_out(&benchup(&["tools", "agent_activity"], None));
     assert_eq!(one["inputSchema"]["properties"]["phase"]["enum"], json!(["analyzing", "preparing", "finished"]));
     let names = json_out(&benchup(&["tools", "--names"], None));
