@@ -161,7 +161,7 @@ pub(super) fn detected_language() -> &'static str {
     language::detected_language()
 }
 
-fn languages() -> [(&'static str, &'static str); 6] {
+fn languages() -> [(&'static str, &'static str); 7] {
     [
         (DEFAULT_LANGUAGE, tr!("settings.language.english")),
         ("zh_CN", tr!("settings.language.simplified_chinese")),
@@ -169,6 +169,7 @@ fn languages() -> [(&'static str, &'static str); 6] {
         ("vi_VN", tr!("settings.language.vietnamese")),
         ("es_419", tr!("settings.language.spanish")),
         ("it_IT", tr!("settings.language.italian")),
+        ("fr_FR", tr!("settings.language.french")),
     ]
 }
 
@@ -310,6 +311,7 @@ impl GeneralSettings {
             "vi" => self.language = "vi_VN".into(),
             "es" => self.language = "es_419".into(),
             "it" => self.language = "it_IT".into(),
+            "fr" => self.language = "fr_FR".into(),
             _ => {}
         }
         if !languages().iter().any(|&(code, _)| code == self.language.as_str()) {
@@ -1328,6 +1330,7 @@ mod tests {
             ("vi_VN", "Tiếng Việt"),
             ("es_419", "Español"),
             ("it_IT", "Italiano"),
+            ("fr_FR", "Français"),
         ];
         for (language, _) in &native[1..] {
             benchup_core::i18n::set_language(language);
@@ -1416,9 +1419,10 @@ mod tests {
 
     #[test]
     fn every_printer_volume_label_is_translated_in_all_catalogs() {
-        const CATALOGS: [(&str, &str); 6] = [
+        const CATALOGS: [(&str, &str); 7] = [
             ("en_US", include_str!("../../../assets/i18n/en_US.json")),
             ("es_419", include_str!("../../../assets/i18n/es_419.json")),
+            ("fr_FR", include_str!("../../../assets/i18n/fr_FR.json")),
             ("it_IT", include_str!("../../../assets/i18n/it_IT.json")),
             ("pt_BR", include_str!("../../../assets/i18n/pt_BR.json")),
             ("vi_VN", include_str!("../../../assets/i18n/vi_VN.json")),

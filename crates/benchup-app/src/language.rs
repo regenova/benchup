@@ -88,6 +88,9 @@ mod tests {
         for locale in ["vi", "vi-VN", "vi_VN", "vi_VN.UTF-8"] {
             assert_eq!(preferred_language([locale]), "vi_VN", "{locale}");
         }
+        for locale in ["fr", "fr-FR", "fr_FR.UTF-8", "fr-CA", "fr-BE"] {
+            assert_eq!(preferred_language([locale]), "fr_FR", "{locale}");
+        }
         for locale in ["es", "es_ES", "es-ES", "es_MX.UTF-8", "es-419", "es-CO", "ES-ar"] {
             assert_eq!(preferred_language([locale]), "es_419", "{locale}");
         }
