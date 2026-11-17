@@ -109,6 +109,7 @@ fn cached_move_axis_references_follow_the_edge_toggle() {
                 true,
                 true,
                 SnapTargets {
+                measurements: false,
                     edges,
                     faces: true,
                     face_centers: true,

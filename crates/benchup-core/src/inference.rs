@@ -103,6 +103,8 @@ pub struct Snap {
 /// Independent geometry targets; edges include endpoints and midpoints.
 #[derive(Clone, Copy, Debug)]
 pub struct SnapTargets {
+    /// Snap to saved measurements, text leaders, image boundaries and guides.
+    pub measurements: bool,
     pub edges: bool,
     pub faces: bool,
     pub face_centers: bool,
@@ -113,6 +115,7 @@ pub struct SnapTargets {
 impl Default for SnapTargets {
     fn default() -> Self {
         Self {
+            measurements: false,
             edges: true,
             faces: true,
             face_centers: true,
@@ -129,9 +132,47 @@ pub struct SnapGeometry {
     pub faces: Vec<u64>,
 }
 
+/// World-space annotation targets, retained between pointer queries.
+#[derive(Default)]
+pub struct MeasurementGeometry {
+    pub points: Vec<(u64, DVec3)>,
+    pub segments: Vec<(u64, DVec3, DVec3)>,
+    pub lines: Vec<(u64, DVec3, DVec3)>,
+}
+impl MeasurementGeometry {
+    pub fn new(model: &Model) -> Self {
+        let mut result = Self::default();
+        for (&id, dimension) in &model.dimensions {
+            result.points.extend(dimension.annotation_points(model).into_iter().map(|p| (id, p)));
+            result.points.push((id, dimension.label_position(model)));
+            result.segments.extend(dimension.segments(model).into_iter().map(|(a, b)| (id, a, b)));
+        }
+        for (&id, text) in &model.texts {
+            let [a, b] = text.layout(model);
+            result.points.extend([(id, a), (id, b)]);
+            result.segments.push((id, a, b));
+        }
+        for (&id, image) in &model.reference_images {
+            if let Some(points) = image.points(model) {
+                result.points.extend(points.into_iter().map(|p| (id, p)));
+                result.points.push((id, points.into_iter().sum::<DVec3>() / 4.));
+                result.segments.extend((0..4).map(|i| (id, points[i], points[(i + 1) % 4])));
+            }
+        }
+        for (&id, guide) in &model.guides {
+            result.points.push((id, guide.origin));
+            if let Some(direction) = guide.direction { result.lines.push((id, guide.origin, direction)); }
+        }
+        for &(id, a, b) in &result.segments { result.points.push((id, (a + b) * 0.5)); }
+        result
+    }
+}
+
 /// Cached face queries for snapping. Scoped queries include descendants of the
 /// current editing level; unscoped queries include every visible surface.
 pub trait FaceQuery {
+    fn measurement_geometry(&self) -> Option<&MeasurementGeometry> { None }
+
     fn contains_target(
         &self,
         _model: &Model,
@@ -264,6 +305,10 @@ impl MoveSnapCache {
                 .filter(|(id, _)| !excluded.contains(*id) && !model.is_hidden(**id))
                 .map(|(id, face)| (*id, face.clone()))
                 .collect(),
+            dimensions: model.dimensions.iter().filter(|(id, _)| !excluded.contains(*id) && !model.is_hidden(**id)).map(|(id, v)| (*id, v.clone())).collect(),
+            texts: model.texts.iter().filter(|(id, _)| !excluded.contains(*id) && !model.is_hidden(**id)).map(|(id, v)| (*id, v.clone())).collect(),
+            reference_images: model.reference_images.iter().filter(|(id, _)| !excluded.contains(*id) && !model.is_hidden(**id)).map(|(id, v)| (*id, v.clone())).collect(),
+            guides: model.guides.iter().filter(|(id, _)| !excluded.contains(*id) && !model.is_hidden(**id)).map(|(id, v)| (*id, v.clone())).collect(),
             edit_context: model.edit_context,
             ..Model::default()
         };
@@ -286,6 +331,15 @@ impl MoveSnapCache {
             guides: None,
         }
     }
+    pub fn with_measurement_visibility(mut self, dimensions: bool, guides: bool) -> Self {
+        let allowed = |id: &u64| (dimensions || !self.geometry.dimensions.contains_key(id))
+            && (guides || !self.geometry.guides.contains_key(id));
+        self.faces.2.points.retain(|(id, _)| allowed(id));
+        self.faces.2.segments.retain(|(id, _, _)| allowed(id));
+        self.faces.2.lines.retain(|(id, _, _)| allowed(id));
+        self
+    }
+
     /// Match a transient X-ray viewport without including hidden entities.
     pub fn with_x_ray(mut self, enabled: bool) -> Self {
         self.faces.1 = enabled;
@@ -546,7 +600,7 @@ fn combine_axis_guides(
     };
     if matches!(
         base.kind,
-        Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter | Inference::Origin
+        Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter | Inference::Origin | Inference::GuidePoint | Inference::OnGuide
     ) {
         return fallback;
     }
@@ -905,7 +959,7 @@ pub fn infer_with_constraint(
     targets: SnapTargets,
 ) -> Option<Snap> {
     let snap_to_geometry =
-        snap_to_geometry && (targets.edges || targets.faces || targets.face_centers);
+        snap_to_geometry && (targets.edges || targets.faces || targets.face_centers || targets.measurements);
     let is_hidden = |id| match faces {
         Some(query) => query.is_hidden(model, id),
         None => model.is_hidden(id),
@@ -985,6 +1039,16 @@ pub fn infer_with_constraint(
             );
         }
     }
+    let measurement_fallback;
+    let measurements = if snap_to_geometry && targets.measurements {
+        Some(if let Some(cached) = faces.and_then(|q| q.measurement_geometry()) { cached } else {
+            measurement_fallback = MeasurementGeometry::new(model);
+            &measurement_fallback
+        })
+    } else { None };
+    if let Some(measurements) = measurements {
+        candidates.extend(measurements.points.iter().filter(|(id, _)| !is_hidden(*id)).map(|(_, p)| (*p, Inference::GuidePoint)));
+    }
     let nearby = candidates
         .into_iter()
         .filter(|_| snap_to_geometry)
@@ -1021,6 +1085,27 @@ pub fn infer_with_constraint(
         .min_by(|a, b| a.0.total_cmp(&b.0));
     if let Some((_, snap)) = nearby {
         return Some(snap);
+    }
+    if let Some(measurements) = measurements {
+        let segment = measurements.segments.iter().map(|&(id, a, b)| (id, a, b - a, true))
+            .chain(measurements.lines.iter().map(|&(id, a, direction)| (id, a, direction, false)))
+            .filter(|(id, _, _, _)| !is_hidden(*id))
+            .filter_map(|(_, a, direction, bounded)| {
+                let direction_unit = direction.try_normalize()?;
+                let point = match start.zip(lock) {
+                    Some((origin, AxisConstraint::Axis(axis))) => crate::Ray { origin, direction: axis.vector() }.axis(a, direction_unit)?,
+                    Some((origin, AxisConstraint::Plane(axis))) if direction.dot(axis.vector()).abs() > 1e-9 =>
+                        a + direction * (origin - a).dot(axis.vector()) / direction.dot(axis.vector()),
+                    _ => ray.axis(a, direction_unit)?,
+                };
+                let t = (point - a).dot(direction) / direction.length_squared();
+                if (bounded && !(0.0..=1.0).contains(&t))
+                    || start.zip(lock).is_some_and(|(origin, lock)| !lock.contains(point - origin))
+                    || (away_from_start && start.is_some_and(|start| point.distance(start) < 1e-7)) { return None; }
+                let distance = view.project(point)?.distance(cursor);
+                (distance < 8. && visible(point)).then_some((distance, Snap { point, kind: Inference::OnGuide }))
+            }).min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, snap)) = segment { return Some(snap); }
     }
     // Automatic alignment is a soft hint. Prefer a shared axis/geometry target,
     // then allow other nearby geometry unless the user explicitly locked an axis.
@@ -1370,7 +1455,7 @@ struct MoveFace {
     hi: DVec2,
     in_context: bool,
 }
-struct MoveFaces(Vec<MoveFace>, bool);
+struct MoveFaces(Vec<MoveFace>, bool, MeasurementGeometry);
 impl MoveFaces {
     fn new(model: &Model) -> Self {
         Self(
@@ -1405,10 +1490,12 @@ impl MoveFaces {
                 })
                 .collect(),
             false,
+            MeasurementGeometry::new(model),
         )
     }
 }
 impl FaceQuery for MoveFaces {
+    fn measurement_geometry(&self) -> Option<&MeasurementGeometry> { Some(&self.2) }
     fn snap_through_faces(&self) -> bool {
         self.1
     }
@@ -1596,5 +1683,44 @@ mod plane_lock_tests {
                 )
                 .is_none()
         );
+    }
+}
+
+#[cfg(test)]
+mod measurement_snap_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn annotation_targets_are_opt_in_hidden_aware_and_available_to_cached_moves() {
+        let mut model = Model::default();
+        let a = DVec3::new(4., 3., 2.);
+        let b = DVec3::new(8., 3., 2.);
+        let text = model.add_text(a, b - a, "Reference").unwrap();
+        let dimension = model.add_dimension(a + DVec3::Y * 3., b + DVec3::Y * 3., DVec3::Z).unwrap();
+        let angular = model.add_angular_dimension(DVec3::new(4., 8., 0.), DVec3::new(6., 8., 0.), DVec3::new(4., 10., 0.)).unwrap();
+        let guide = model.add_guide(DVec3::new(5., 12., 1.), None).unwrap();
+        let targets = SnapTargets { measurements: true, edges: false, faces: false, face_centers: false, only_visible: false };
+        let camera = Camera::default();
+        let size = DVec2::new(1200., 800.);
+        let checks = [(text, b), (text, a.lerp(b, 0.25)),
+            (dimension, model.dimensions[&dimension].label_position(&model)),
+            (angular, model.dimensions[&angular].label_position(&model)),
+            (guide, model.guides[&guide].origin)];
+        for (id, point) in checks {
+            let cursor = camera.project(point, size).unwrap();
+            let snap = infer_with_constraint(&model, &camera, size, cursor, None, None, true, false, None, targets).unwrap();
+            assert!(snap.point.distance(point) < 1e-6, "{id}: {snap:?}");
+            assert!(matches!(snap.kind, Inference::GuidePoint | Inference::OnGuide));
+            let disabled = infer_with_constraint(&model, &camera, size, cursor, None, None, true, false, None, SnapTargets { measurements: false, ..targets });
+            assert!(!disabled.is_some_and(|s| matches!(s.kind, Inference::GuidePoint | Inference::OnGuide)));
+            let mut cached = MoveSnapCache::excluding(&model, &BTreeSet::new());
+            let snap = cached.infer_with_constraint(&camera, size, cursor, DVec3::ZERO, None, true, false, targets).unwrap().snap;
+            assert!(snap.point.distance(point) < 1e-6);
+            model.hidden.insert(id);
+            let hidden = infer_with_constraint(&model, &camera, size, cursor, None, None, true, false, None, targets);
+            assert!(!hidden.is_some_and(|s| s.point.distance(point) < 1e-6 && matches!(s.kind, Inference::GuidePoint | Inference::OnGuide)));
+            model.hidden.remove(&id);
+        }
     }
 }

@@ -31,7 +31,7 @@ fn perpendicular_face_queries_filter_surfaces_and_centers_but_keep_edges() {
             let snap = infer_with_targets(
                 &model, &camera, size, camera.view(size).project(center).unwrap(),
                 None, None, true, false, Some(&query),
-                SnapTargets { edges: false, faces: true, face_centers, only_visible: false },
+                SnapTargets { measurements: false, edges: false, faces: true, face_centers, only_visible: false },
             );
             assert_eq!(snap.is_some_and(|snap| matches!(snap.kind, Inference::OnFace | Inference::FaceCenter)), allowed);
         }
@@ -547,12 +547,14 @@ fn indexed_drawing_inference_matches_full_queries() {
                     for targets in [
                         SnapTargets::default(),
                         SnapTargets {
+                            measurements: false,
                             edges: true,
                             faces: false,
                             face_centers: false,
                             only_visible: false,
                         },
                         SnapTargets {
+                            measurements: false,
                             edges: false,
                             faces: true,
                             face_centers: true,
@@ -868,7 +870,7 @@ fn translated_cap_also_blocks_background_face_snaps_and_centers() {
         let snap = infer_with_targets(
             &model, &camera, size, camera.project(DVec3::new(2., 2., 1.), size).unwrap(),
             None, None, true, false, Some(&query),
-            SnapTargets { edges: false, faces: true, face_centers, only_visible: true },
+            SnapTargets { measurements: false, edges: false, faces: true, face_centers, only_visible: true },
         ).unwrap();
         assert_eq!(snap.kind, Inference::Plane);
     }

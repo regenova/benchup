@@ -75,7 +75,8 @@ impl BenchUpApp {
             }
             // Leader text starts on geometry, not on the drawing plane.
             if let Some(snap) = self.snap {
-                if !self.picking_cache.contains_geometry_point(&self.doc.model,
+                if !(self.snap_to_measurements && matches!(snap.kind, Inference::GuidePoint | Inference::OnGuide))
+                    && !self.picking_cache.contains_geometry_point(&self.doc.model,
                     &self.face_cache, &self.entity_cache, &self.doc.camera,
                     dv(self.viewport.size()), snap.point)
                 { self.snap = None; }

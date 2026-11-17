@@ -171,6 +171,53 @@ impl BenchUpApp {
             .then(|| (m.points[0], m.normal))
     }
 
+    /// Place adjacent dimensions on the same annotation line, including its
+    /// continuation beyond the measured span. Measurement endpoints stay fixed.
+    fn dimension_placement_snap(
+        &self, pos: Pos2, center: DVec3, direction: DVec3, span: DVec3,
+    ) -> Option<Snap> {
+        if !self.snap_to_measurements || !self.doc.snap_to_geometry { return None; }
+        let offset_allowed = |point: DVec3| {
+            let delta = point - center;
+            let offset = delta - direction * delta.dot(direction);
+            self.plane_lock().is_none_or(|axis| offset.dot(axis.vector()).abs() < 1e-6)
+                && self.single_axis_lock()
+                    .filter(|axis| span.dot(axis.vector()).abs() < 1e-7)
+                    .is_none_or(|axis| offset.cross(axis.vector()).length() < 1e-6)
+        };
+        if let Some(snap) = self.snap.filter(|snap| {
+            matches!(snap.kind, Inference::GuidePoint | Inference::OnGuide)
+                && offset_allowed(snap.point)
+        }) { return Some(snap); }
+        if !self.doc.display.dimensions { return None; }
+        let size = dv(self.viewport.size());
+        let cursor = dv(pos - self.viewport.min);
+        let view = self.doc.camera.view(size);
+        let ray = view.ray(cursor);
+        self.doc.model.dimensions.values()
+            .filter(|dimension| dimension.vertex.is_none()
+                && !self.entity_cache.get(dimension.id).hidden
+                && self.measurement.as_ref().and_then(|m| m.dimension_id) != Some(dimension.id)
+                && dimension.line_direction(&self.doc.model).cross(direction).length() < 1e-6)
+            .filter_map(|dimension| {
+                let [_, _, a, _] = dimension.layout(&self.doc.model);
+                let point = ray.axis(a, direction)?;
+                if !offset_allowed(point) { return None; }
+                let distance = view.project(point)?.distance(cursor);
+                if distance >= 10. { return None; }
+                let visible = if self.snap_only_visible {
+                    self.picking_cache.marker_visible(&self.face_cache, &self.entity_cache,
+                        &self.doc.camera, size, point, &BTreeSet::new())
+                } else {
+                    self.picking_cache.visible(&self.face_cache, &self.entity_cache,
+                        &self.doc.camera, size, point)
+                };
+                visible.then_some((distance, Snap { point, kind: Inference::OnGuide }))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, snap)| snap)
+    }
+
     pub(super) fn update_measurement(&mut self, pos: Pos2) {
         if self.tool == Tool::Text {
             self.update_text_pointer(pos);
@@ -221,13 +268,14 @@ impl BenchUpApp {
             }
         }
         if self.tool == Tool::Dimensions && points.len() == 2 {
-            self.snap = None;
             let (a, b) = (points[0], points[1]);
             let direction = self
                 .dimension_preview()
                 .unwrap()
                 .line_direction(&self.doc.model);
             let center = (a + b) * 0.5;
+            let placement_snap = self.dimension_placement_snap(pos, center, direction, b - a);
+            self.snap = None;
             let normal = self
                 .plane_lock()
                 .map(Axis::vector)
@@ -248,6 +296,11 @@ impl BenchUpApp {
                 let delta = ray.origin + ray.direction * t - center;
                 self.measurement.as_mut().unwrap().offset =
                     delta - direction * delta.dot(direction);
+            }
+            if let Some(snap) = placement_snap {
+                let delta = snap.point - center;
+                self.measurement.as_mut().unwrap().offset = delta - direction * delta.dot(direction);
+                self.snap = Some(snap);
             }
         }
         if let Some((origin, normal)) = self.measurement_plane()

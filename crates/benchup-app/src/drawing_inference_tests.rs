@@ -645,6 +645,40 @@ fn disabled_snapping_hidden_and_deleted_geometry_release_references() {
 }
 
 #[test]
+fn plane_locked_drawing_acquires_edges_outside_the_editing_group() {
+    for tool in [Tool::Line, Tool::Rectangle, Tool::Circle, Tool::Polygon] {
+        let mut h = Harness::new();
+        let a = DVec3::new(4., 3., 2.);
+        let b = DVec3::new(6., 7., 3.);
+        let edge = h.app.doc.model.add_edge(a, b).unwrap();
+        let inner = h.app.doc.model.make_object(&BTreeSet::from([edge]), false, "Reference").unwrap();
+        h.app.doc.model.make_object(&BTreeSet::from([inner]), true, "Outer").unwrap();
+        let start = DVec3::new(-2., -2., 0.);
+        let edge = h.app.doc.model.add_edge(start, start + DVec3::X * 0.5).unwrap();
+        let editing = h.app.doc.model.make_object(&BTreeSet::from([edge]), false, "Editing").unwrap();
+        assert!(h.app.doc.model.enter_object(editing));
+        h.app.set_tool(tool);
+        h.click(h.at(start));
+        h.key(Key::ArrowRight);
+        h.key(Key::ArrowLeft);
+        assert_eq!(h.app.plane_lock(), Some(Axis::Z));
+
+        // Acquire an arbitrary edge point above the locked plane. Selection
+        // hover cannot see it because it belongs to another nested object.
+        let reference = a.lerp(b, 0.25);
+        hover(&mut h, reference);
+        assert!(h.app.hover.is_none(), "{tool:?}");
+        assert!(h.app.drawing_reference.is_some(), "{tool:?}: out-of-context reference");
+
+        let target = DVec3::new(reference.x, reference.y, start.z);
+        hover(&mut h, target);
+        assert!(h.app.snap.unwrap().point.distance(target) < 1e-6, "{tool:?}");
+        assert!(h.app.active_drawing_guide().is_some(), "{tool:?}");
+        assert_eq!(h.app.doc.model.edit_context, Some(editing));
+    }
+}
+
+#[test]
 fn y_locked_lines_snap_immediately_to_hovered_group_and_component_geometry() {
     for component in [false, true] {
         for nested in [false, true] {
@@ -1170,5 +1204,27 @@ fn combined_shape_guides_preserve_explicit_plane_locks() {
                 .abs()
                 < 1e-7
         );
+    }
+}
+
+#[test]
+fn measurement_targets_work_across_drawing_editing_and_measuring_tools() {
+    for tool in [Tool::Line, Tool::Rectangle, Tool::Circle, Tool::Polygon, Tool::Arc,
+        Tool::Freehand, Tool::Image, Tool::Move, Tool::Rotate, Tool::Scale,
+        Tool::Dimensions, Tool::TapeMeasure, Tool::Protractor, Tool::Text] {
+        let mut h = Harness::new();
+        let target = DVec3::new(3., 4., 2.);
+        h.app.doc.model.add_text(target - DVec3::X, DVec3::X, "Reference").unwrap();
+        h.app.snap_to_edge = false;
+        h.app.snap_to_face = false;
+        h.app.snap_to_face_center = false;
+        h.app.snap_to_measurements = true;
+        h.app.sync_geometry_snapping();
+        h.app.doc.snap_to_axes = false;
+        h.app.set_tool(tool);
+        hover(&mut h, target);
+        let snap = h.app.snap.unwrap_or_else(|| panic!("{tool:?}: missing annotation snap"));
+        assert!(snap.point.distance(target) < 1e-6, "{tool:?}: {snap:?}");
+        assert_eq!(snap.kind, Inference::GuidePoint, "{tool:?}");
     }
 }

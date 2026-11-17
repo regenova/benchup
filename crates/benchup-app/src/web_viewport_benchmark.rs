@@ -283,12 +283,14 @@ pub fn benchup_validate_snapping(source: &str) -> Result<String, JsValue> {
                 };
                 let targets = match i % 3 {
                     1 => SnapTargets {
+                        measurements: false,
                         edges: true,
                         faces: false,
                         face_centers: false,
                         only_visible: false,
                     },
                     2 => SnapTargets {
+                        measurements: false,
                         edges: false,
                         faces: true,
                         face_centers: true,

@@ -71,6 +71,7 @@ impl BenchUpApp {
             self.doc.snap_to_geometry,
             self.doc.snap_to_axes,
             benchup_core::inference::SnapTargets {
+                measurements: self.snap_to_measurements,
                 edges: self.snap_to_edge,
                 faces: self.snap_to_face,
                 face_centers: self.snap_to_face_center,
@@ -94,6 +95,7 @@ impl BenchUpApp {
                 true,
                 false,
                 benchup_core::inference::SnapTargets {
+                    measurements: self.snap_to_measurements,
                     edges: self.snap_to_edge,
                     faces: self.snap_to_face,
                     face_centers: self.snap_to_face_center,
@@ -101,7 +103,7 @@ impl BenchUpApp {
                 },
             ).filter(|inference| matches!(inference.snap.kind,
                 Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter
-                    | Inference::Origin | Inference::OnEdge | Inference::OnFace))
+                    | Inference::Origin | Inference::OnEdge | Inference::OnFace | Inference::GuidePoint | Inference::OnGuide))
             .and_then(|mut inference| {
                 let offset = (inference.snap.point - edit.anchor).dot(normal);
                 inference.snap.point -= normal * offset;

@@ -611,6 +611,7 @@ fn edge_and_face_targets_toggle_independently_with_points_controlled_by_edges() 
     for edges in [false, true] {
         for faces in [false, true] {
             let targets = SnapTargets {
+                measurements: false,
                 edges,
                 faces,
                 face_centers: false,

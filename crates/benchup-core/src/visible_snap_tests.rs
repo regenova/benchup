@@ -127,6 +127,7 @@ fn face_centers_require_hovering_their_face_and_hidden_faces_do_not_occlude() {
         0.,
     );
     let targets = SnapTargets {
+        measurements: false,
         edges: false,
         faces: false,
         face_centers: true,

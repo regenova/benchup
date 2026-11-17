@@ -242,6 +242,24 @@ mod tests {
     use super::*;
     use crate::Document;
 
+    #[test]
+    fn measurement_snapping_targets_image_corners_center_and_borders_independently() {
+        use crate::inference::{infer_with_constraint, Inference, SnapTargets};
+        let mut model = Model::default();
+        let (image, asset) = fixture();
+        let a = DVec3::new(3., 4., 0.);
+        let points = [a, a + DVec3::X * 4., a + DVec3::X * 4. + DVec3::Y * 3., a + DVec3::Y * 3.];
+        model.add_reference_image(points, image, asset).unwrap();
+        let camera = crate::Camera::default();
+        let size = crate::DVec2::new(1200., 800.);
+        for point in [a, a + DVec3::new(2., 1.5, 0.), a + DVec3::X] {
+            let snap = infer_with_constraint(&model, &camera, size, camera.project(point, size).unwrap(), None, None, true, false, None,
+                SnapTargets { measurements: true, edges: false, faces: false, face_centers: false, only_visible: true }).unwrap();
+            assert!(snap.point.distance(point) < 1e-6, "{snap:?}");
+            assert!(matches!(snap.kind, Inference::GuidePoint | Inference::OnGuide));
+        }
+    }
+
     fn fixture() -> (ReferenceImage, ImageAsset) {
         // One transparent PNG pixel, with a real IHDR and zlib payload.
         let png: &[u8] = &[

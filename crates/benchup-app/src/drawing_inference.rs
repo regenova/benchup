@@ -149,13 +149,13 @@ impl BenchUpApp {
         // it can still supply a reference for a later compatible intersection.
         let source = if geometry(base) {
             Some(base)
-        } else if lock.is_some() || self.hover.is_some() {
+        } else {
             // Reference geometry is not an editable selection. Query its world
             // position even when it belongs to a different group/component.
+            // In particular, a plane lock can reject the direct target while
+            // scoped selection hover is None. It must still acquire a reference.
             self.infer_snap(pos, None, None, false)
                 .filter(|snap| geometry(*snap))
-        } else {
-            None
         };
         // A hovered edge still has a free coordinate. Quantize that coordinate
         // before using it as a reference for a locked-axis projection.

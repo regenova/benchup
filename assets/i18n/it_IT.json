@@ -2341,5 +2341,7 @@
   "cli.agent_edit": "Modifica dell'agente",
   "agent_tools.split_face.invalid_line": "La linea deve attraversare la faccia selezionata e giacere su di essa.",
   "agent_tools.split_face.line_hint": "Usa due punti distinti sulla faccia selezionata, da un bordo all’altro.",
-  "tools.image_instructions": "Fai clic su due angoli opposti, poi scegli un'immagine locale. I tasti freccia bloccano il piano di disegno; inserisci larghezza, altezza per un posizionamento preciso."
+  "tools.image_instructions": "Fai clic su due angoli opposti, poi scegli un'immagine locale. I tasti freccia bloccano il piano di disegno; inserisci larghezza, altezza per un posizionamento preciso.",
+  "app.snap_to_measurements": "Aggancia alle misure",
+  "app.snap_to_measurements_tooltip": "Aggancia a quote, archi del goniometro, guide del metro, linee di richiamo del testo e angoli, centri e bordi delle immagini."
 }

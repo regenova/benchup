@@ -132,6 +132,9 @@ impl BenchUpApp {
         ui.text_weak(tab.help());
         if let Some(token) = self.agent_link.token.clone() {
             let command = tab.command(&token, port);
+            // Mask only the token when painting. Keep character counts identical
+            // so selection and keyboard copying still use the complete command.
+            let displayed_command = tab.command(&"•".repeat(token.chars().count()), port);
             egui::Frame::new()
                 .fill(colors.canvas)
                 .stroke(Stroke::new(1., colors.border))
@@ -146,17 +149,33 @@ impl BenchUpApp {
                             self.agent_link.copy(ui.ctx(), command.clone(), CopiedText::Setup(tab));
                         }
                         self.agent_link.copied_label(ui, CopiedText::Setup(tab));
-                        // An immutable buffer keeps selection and keyboard copying
-                        // enabled without letting edits diverge from the copied setup.
-                        let mut text = command.as_str();
-                        ui.add(
-                            egui::TextEdit::multiline(&mut text)
-                                .id_salt(("agent_setup_command", tab))
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(ui.available_width())
-                                .desired_rows(if tab == SetupTab::Mcp { 12 } else { 4 })
-                                .frame(egui::Frame::NONE),
-                        ).on_hover_text(tab.help());
+                        // Isolate the textarea from the right-to-left button row.
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(ui.available_width(), 0.),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                let mut layouter = |ui: &egui::Ui, _text: &dyn egui::TextBuffer, width: f32| {
+                                    ui.fonts_mut(|fonts| fonts.layout(
+                                        displayed_command.clone(),
+                                        egui::TextStyle::Monospace.resolve(ui.style()),
+                                        colors.ink,
+                                        width,
+                                    ))
+                                };
+                                let mut text = command.as_str();
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut text)
+                                        .id_salt(("agent_setup_command", tab))
+                                        .align(egui::Align2::LEFT_TOP)
+                                        .font(egui::TextStyle::Monospace)
+                                        .text_color(colors.ink)
+                                        .layouter(&mut layouter)
+                                        .desired_width(ui.available_width())
+                                        .desired_rows(if tab == SetupTab::Mcp { 12 } else { 4 })
+                                        .frame(egui::Frame::NONE),
+                                ).on_hover_text(tab.help());
+                            },
+                        );
                     });
                 });
         }

@@ -774,12 +774,26 @@ fn setup_tabs_display_and_copy_the_selected_command() {
         setup_ui_frame(&mut setup, vec![], true);
         let output = setup_ui_frame(&mut setup, vec![], true);
         let expected = tab.command(TOKEN, 5000);
-        let code = setup_text_rect(&output, &expected);
+        let displayed = tab.command(&"•".repeat(TOKEN.chars().count()), 5000);
+        let code = setup_text_rect(&output, &displayed);
+        assert!(code.width() > 100. && code.height() > 10., "the command stays visible");
+        assert!(code.left() >= 0. && code.right() <= 1000., "the command stays inside the settings panel");
+        assert!(!displayed.contains(TOKEN));
+        assert_eq!(displayed.chars().count(), expected.chars().count(), "masking preserves selection offsets");
         let copy = setup_text_rect(&output, "Copy");
         assert!(copy.left() > code.right(), "Copy stays to the right of the selectable command");
         assert!((copy.top() - code.top()).abs() < 4., "Copy shares the command's first line instead of stacking above it");
         let output = setup_ui_click(&mut setup, copy.center(), true);
         assert!(output.platform_output.commands.iter().any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == &expected)));
+
+        // Keyboard copying must work too, despite the token's painted mask.
+        setup_ui_click(&mut setup, code.center(), true);
+        setup_ui_frame(&mut setup, vec![egui::Event::Key {
+            key: Key::A, physical_key: None, pressed: true, repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }], true);
+        let output = setup_ui_frame(&mut setup, vec![egui::Event::Copy], true);
+        assert!(output.platform_output.commands.iter().any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == &expected)), "keyboard copy includes the actual token");
     }
 }
 

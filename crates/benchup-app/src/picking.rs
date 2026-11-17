@@ -95,6 +95,12 @@ impl<'a> SnapQuery<'a> {
     }
 }
 impl benchup_core::inference::FaceQuery for SnapQuery<'_> {
+    fn measurement_geometry(&self) -> Option<&benchup_core::inference::MeasurementGeometry> {
+        // Exclusions can differ from the retained scene while editing.
+        (self.excluded.is_none() && self.picking.snapping.current(self.faces, self.entities))
+            .then(|| self.picking.snapping.measurements())
+    }
+
     fn contains_target(
         &self,
         model: &Model,
@@ -110,6 +116,7 @@ impl benchup_core::inference::FaceQuery for SnapQuery<'_> {
             size,
             cursor,
             SnapTargets {
+                measurements: false,
                 edges: kind == Inference::OnEdge,
                 faces: kind == Inference::OnFace,
                 face_centers: false,
@@ -202,7 +209,9 @@ impl benchup_core::inference::FaceQuery for SnapQuery<'_> {
     }
 
     fn is_hidden(&self, model: &Model, id: u64) -> bool {
-        self.entities.get(id).hidden || self.excluded.is_some_and(|ids| ids.contains(&id))
+        (!self.picking.display.dimensions && model.dimensions.contains_key(&id))
+            || (!self.picking.display.guides && model.guides.contains_key(&id))
+            || self.entities.get(id).hidden || self.excluded.is_some_and(|ids| ids.contains(&id))
             || (model.faces.contains_key(&id) && !self.allows_face(id))
     }
 }
@@ -236,6 +245,7 @@ impl PickingCache {
                 .nearby(
                     pixel,
                     benchup_core::inference::SnapTargets {
+                        measurements: false,
                         edges: true,
                         faces: false,
                         face_centers: false,

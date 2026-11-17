@@ -415,6 +415,7 @@ pub struct BenchUpApp {
     snap: Option<Snap>,
     snap_to_grid: bool,
     snap_to_edge: bool,
+    snap_to_measurements: bool,
     snap_to_face: bool,
     snap_to_face_center: bool,
     snap_only_visible: bool,
@@ -617,6 +618,7 @@ impl BenchUpApp {
             snap: None,
             snap_to_grid: false,
             snap_to_edge: geometry_snapping,
+            snap_to_measurements: false,
             snap_to_face: geometry_snapping,
             snap_to_face_center: geometry_snapping,
             snap_only_visible: false,
@@ -1812,12 +1814,13 @@ impl BenchUpApp {
             preview: None,
             move_snap: matches!(self.tool, Tool::Move | Tool::Rotate | Tool::Scale)
                 .then(|| {
-                    if self.tool == Tool::Rotate {
+                    let cache = if self.tool == Tool::Rotate {
                         benchup_core::inference::MoveSnapCache::new(&self.doc.model)
                     } else {
                         benchup_core::inference::MoveSnapCache::excluding(&self.doc.model, &snap_excluded)
                             .with_x_ray(self.tool == Tool::Move)
-                    }
+                    };
+                    cache.with_measurement_visibility(self.doc.display.dimensions, self.doc.display.guides)
                 }),
             snap_excluded,
             move_preview: (self.tool == Tool::Move)
@@ -2069,6 +2072,7 @@ impl BenchUpApp {
                     self.doc.snap_to_geometry,
                     self.doc.snap_to_axes,
                     benchup_core::inference::SnapTargets {
+                        measurements: self.snap_to_measurements,
                         edges: self.snap_to_edge,
                         faces: self.snap_to_face,
                         face_centers: self.snap_to_face_center,
@@ -4654,17 +4658,18 @@ impl BenchUpApp {
     // planes and spatial hierarchy instead of rebuilding every face per target.
     fn snap_targets(&self) -> benchup_core::inference::SnapTargets {
         benchup_core::inference::SnapTargets {
+            measurements: self.snap_to_measurements,
             edges: self.snap_to_edge,
             faces: self.snap_to_face,
             face_centers: self.snap_to_face_center,
             only_visible: self.snap_only_visible,
         }
     }
-    // Keep the legacy document flag compatible with older clients. The three
+    // Keep the legacy document flag compatible with older clients. The
     // target preferences are the controls; there is no separate master switch.
     fn sync_geometry_snapping(&mut self) {
         self.doc.snap_to_geometry =
-            self.snap_to_edge || self.snap_to_face || self.snap_to_face_center;
+            self.snap_to_edge || self.snap_to_face || self.snap_to_face_center || self.snap_to_measurements;
     }
     fn infer_snap(
         &self,
@@ -5122,7 +5127,10 @@ impl BenchUpApp {
                 .evaluated_picking(&self.doc.model, &self.doc.display);
             (faces, entities, &*picking)
         };
-        let surface = picking.nearest_unscoped(faces, entities, ray)
+        // Context geometry is faded/hidden while editing another group. It
+        // must not slow zooming toward the active geometry behind it. The scoped
+        // query also excludes inherited object, geometry and tag visibility.
+        let surface = picking.nearest(faces, entities, ray, false)
             .map(|(_, _, hit)| hit);
         self.doc.camera.zoom_to_surface(
             scroll * self.general_settings.mouse_zoom_speed(), point, size, surface,
@@ -7084,14 +7092,16 @@ impl BenchUpApp {
                 let grid_changed = Self::menu_checkbox(ui, &mut self.snap_to_grid, tr!("app.snap_to_grid"))
                     .on_hover_text(tr!("app.snap_points_and_moves_to_the_grid_spacing"))
                     .changed();
+                let measurements_changed = Self::menu_checkbox(ui, &mut self.snap_to_measurements, tr!("app.snap_to_measurements"))
+                    .on_hover_text(tr!("app.snap_to_measurements_tooltip")).changed();
                 ui.separator();
                 let visible_changed = Self::menu_checkbox(ui, &mut self.snap_only_visible, tr!("app.snap_only_visible"))
                     .on_hover_text(tr!("app.snap_only_visible_tooltip"))
                     .changed();
-                if edges_changed || faces_changed || face_centers_changed {
+                if edges_changed || faces_changed || face_centers_changed || measurements_changed {
                     self.sync_geometry_snapping();
                 }
-                if axes_changed || grid_changed || edges_changed || faces_changed || face_centers_changed || visible_changed {
+                if axes_changed || grid_changed || edges_changed || faces_changed || face_centers_changed || visible_changed || measurements_changed {
                     self.drawing_reference = None;
                     self.drawing_axis_guides.clear();
                     self.snap = None;

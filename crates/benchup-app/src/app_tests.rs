@@ -7681,3 +7681,95 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
 
 #[path = "follow_me_ui_tests.rs"]
 mod follow_me_ui_tests;
+
+#[test]
+fn dimension_placement_aligns_to_a_parallel_annotation_beyond_its_measured_span() {
+    for (enabled, hidden, plane_locked) in [(true, false, false), (true, false, true), (false, false, false), (true, true, false)] {
+        let mut h = Harness::new();
+        let reference = h.app.doc.model.add_dimension(
+            DVec3::ZERO, DVec3::X * 3., -DVec3::Y * 2.,
+        ).unwrap();
+        // Different lengths must retain their original measured endpoints;
+        // only the annotation placement should align.
+        let start = DVec3::X * 3.;
+        let end = DVec3::X * 5.7;
+        h.app.doc.model.add_edge(start, end).unwrap();
+        if hidden { h.app.doc.model.hidden.insert(reference); }
+        h.app.snap_to_measurements = enabled;
+        h.app.doc.snap_to_axes = false;
+        h.app.set_tool(Tool::Dimensions);
+        h.click(h.at(start));
+        h.click(h.at(end));
+        if plane_locked {
+            h.key(Key::ArrowRight);
+            h.key(Key::ArrowLeft);
+        }
+        let center = (start + end) * 0.5;
+        let on_line = h.at(center - DVec3::Y * 2.);
+        let screen_direction = (h.at(DVec3::X * 3. - DVec3::Y * 2.)
+            - h.at(-DVec3::Y * 2.)).normalized();
+        let pointer = on_line + egui::vec2(-screen_direction.y, screen_direction.x) * 4.;
+        h.frame(vec![egui::Event::PointerMoved(pointer)], egui::Modifiers::NONE);
+        let offset = h.app.measurement.as_ref().unwrap().offset;
+        let should_snap = enabled && !hidden;
+        assert_eq!(offset.distance(-DVec3::Y * 2.) < 1e-6, should_snap,
+            "enabled={enabled}, hidden={hidden}, locked={plane_locked}: {offset:?}");
+        if should_snap {
+            assert_eq!(h.app.snap.unwrap().kind, Inference::OnGuide);
+        }
+        h.click(pointer);
+        let dimension = h.app.doc.model.dimensions.values()
+            .find(|dimension| dimension.id != reference).unwrap();
+        assert_eq!(dimension.points(&h.app.doc.model), (start, end));
+        assert!((dimension.length(&h.app.doc.model) - 2.7).abs() < 1e-6);
+        if should_snap {
+            assert!(dimension.offset.distance(-DVec3::Y * 2.) < 1e-6);
+        }
+    }
+}
+
+#[test]
+fn zoom_ignores_hidden_and_out_of_scope_foreground_surfaces() {
+    for state in ["visible", "hidden face", "hidden group", "outside edit group"] {
+        let mut h = Harness::new();
+        let size = dv(h.app.viewport.size());
+        let pixel = size * 0.5;
+        let camera = h.app.doc.camera.clone();
+        let eye = camera.eye();
+        let forward = (camera.target - eye).normalize();
+        let right = forward.cross(DVec3::Z).normalize();
+        let up = right.cross(forward).normalize();
+        let mut surface = |center: DVec3| {
+            let before = h.app.doc.model.selectable_entities();
+            let corners = [center - right - up, center + right - up,
+                center + right + up, center - right + up];
+            for i in 0..4 {
+                h.app.doc.model.add_edge(corners[i], corners[(i + 1) % 4]).unwrap();
+            }
+            let entities = h.app.doc.model.selectable_entities().difference(&before).copied().collect();
+            h.app.doc.model.make_object(&entities, false, "Zoom target").unwrap()
+        };
+        let near = eye + forward * 0.02;
+        let far = eye + forward * 3.;
+        let near_group = surface(near);
+        let far_group = surface(far);
+        match state {
+            "hidden face" => {
+                let face = h.app.doc.model.expand_entities(&BTreeSet::from([near_group])).into_iter()
+                    .find(|id| h.app.doc.model.faces.contains_key(id)).unwrap();
+                h.app.doc.model.hidden.insert(face);
+            }
+            "hidden group" => { h.app.doc.model.hidden.insert(near_group); }
+            "outside edit group" => { assert!(h.app.doc.model.enter_object(far_group)); }
+            _ => {}
+        }
+        let scroll = 120.;
+        let mut expected = camera;
+        expected.zoom_to_surface(scroll * h.app.general_settings.mouse_zoom_speed(),
+            pixel, size, Some(if state == "visible" { near } else { far }));
+        let pointer = h.app.viewport.min + pv(pixel);
+        h.app.zoom_camera_at(scroll, pointer);
+        assert!((h.app.doc.camera.distance - expected.distance).abs() < 1e-7, "{state}");
+        assert!(h.app.doc.camera.target.distance(expected.target) < 1e-7, "{state}");
+    }
+}

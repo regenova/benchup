@@ -2336,5 +2336,7 @@
   "cli.agent_edit": "Edición del agente",
   "agent_tools.split_face.invalid_line": "La línea debe atravesar la cara seleccionada y estar sobre ella.",
   "agent_tools.split_face.line_hint": "Usa dos puntos distintos sobre la cara seleccionada, de un borde al otro.",
-  "tools.image_instructions": "Haz clic en dos esquinas opuestas y luego elige una imagen local. Las flechas bloquean el plano de dibujo; ingresa ancho, alto para colocarla con precisión."
+  "tools.image_instructions": "Haz clic en dos esquinas opuestas y luego elige una imagen local. Las flechas bloquean el plano de dibujo; ingresa ancho, alto para colocarla con precisión.",
+  "app.snap_to_measurements": "Ajustar a medidas",
+  "app.snap_to_measurements_tooltip": "Ajustar a cotas, arcos del transportador, guías de cinta métrica, líneas de texto y esquinas, centros y bordes de imágenes."
 }

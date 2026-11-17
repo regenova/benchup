@@ -107,6 +107,7 @@ impl Lines {
 #[derive(Default)]
 pub(super) struct Index {
     key: Option<Key>,
+    measurements: benchup_core::inference::MeasurementGeometry,
     points: Vec<Point>,
     tiles: HashMap<(i32, i32), Vec<usize>>,
     lines: Option<[Lines; 3]>,
@@ -126,6 +127,11 @@ impl Index {
             size,
         }
     }
+    pub fn current(&self, faces: &FaceCache, entities: &EntityCache) -> bool {
+        self.key.as_ref().is_some_and(|key| key.source == faces.source_revision()
+            && key.faces == faces.revision() && key.entities == entities.revision())
+    }
+    pub fn measurements(&self) -> &benchup_core::inference::MeasurementGeometry { &self.measurements }
     pub fn matches(
         &self,
         faces: &FaceCache,
@@ -144,6 +150,9 @@ impl Index {
         size: DVec2,
     ) {
         let key = Self::key(faces, entities, camera, size);
+        if key.source.is_none() || !self.current(faces, entities) {
+            self.measurements = benchup_core::inference::MeasurementGeometry::new(model);
+        }
         if key.source.is_some() && self.key.as_ref() == Some(&key) {
             return;
         }

@@ -664,6 +664,7 @@ struct SnappingPreferences {
     edges: bool,
     faces: bool,
     face_centers: bool,
+    measurements: bool,
     axes: bool,
     grid: bool,
     only_visible: bool,
@@ -676,6 +677,7 @@ impl Default for SnappingPreferences {
             edges: true,
             faces: true,
             face_centers: true,
+            measurements: false,
             axes: true,
             grid: false,
             only_visible: false,
@@ -1016,6 +1018,7 @@ impl BenchUpApp {
         self.project.cutting_plan_selection_preference = preferences.cutting_plan.selection;
         self.project.cutting_plan_used_area_cost = preferences.cutting_plan.used_area_cost;
         if let Some(snapping) = &preferences.snapping {
+            self.snap_to_measurements = snapping.measurements;
             self.snap_to_edge = snapping.geometry && snapping.edges;
             self.snap_to_face = snapping.geometry && snapping.faces;
             self.snap_to_face_center = snapping.geometry && snapping.face_centers;
@@ -1107,6 +1110,7 @@ impl BenchUpApp {
                 edges: self.doc.snap_to_geometry && self.snap_to_edge,
                 faces: self.doc.snap_to_geometry && self.snap_to_face,
                 face_centers: self.doc.snap_to_geometry && self.snap_to_face_center,
+                measurements: self.snap_to_measurements,
                 axes: self.doc.snap_to_axes,
                 grid: self.snap_to_grid,
                 only_visible: self.snap_only_visible,
@@ -2776,7 +2780,8 @@ mod preference_tests {
 
     #[test]
     fn each_additional_option_saves_independently_without_a_model_edit() {
-        let options: [(&str, fn(&mut BenchUpApp)); 21] = [
+        let options: [(&str, fn(&mut BenchUpApp)); 22] = [
+            ("measurement snapping", |app| app.snap_to_measurements = true),
             ("face center snapping", |app| app.snap_to_face_center = false),
             ("axis snapping", |app| app.doc.snap_to_axes = false),
             ("edge snapping", |app| app.snap_to_edge = false),
@@ -6074,6 +6079,7 @@ mod face_center_preference_tests {
         assert!(!restored.snap_to_face_center);
         let older:SnappingPreferences=serde_json::from_str(r#"{"geometry":true,"faces":false}"#).unwrap();
         assert!(older.face_centers);
+        assert!(!older.measurements);
     }
 }
 
