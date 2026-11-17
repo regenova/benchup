@@ -1,5 +1,39 @@
 [
   {
+    "version": "0.7.4",
+    "date": "2026-11-17",
+    "title": "Follow Me, precise imperial dimensions, and live AI agents",
+    "sections": [
+      {
+        "title": "Modeling and measurement",
+        "changes": [
+          "Sweep a face along connected edges with the new Follow Me tool.",
+          "Enter and display fractional inch and foot dimensions for precise imperial measurements.",
+          "Hold V to orbit from any tool and return to your current tool when released.",
+          "Create and manage named reference volumes for 3D printers and other workspace limits, with GPU feedback for geometry outside the volume.",
+          "Use more reliable measurement snapping and remove leftover faces when pushing or pulling through a solid."
+        ]
+      },
+      {
+        "title": "AI agents and command line",
+        "changes": [
+          "Connect AI agents to the running app through the BenchUp bridge and in-app pairing controls.",
+          "Follow agent activity, status, and task completion in the viewport, with guided Codex setup and improved token refresh controls.",
+          "Use more reliable agent modeling tools, scoped zoom, project reviews, and batch operations."
+        ]
+      },
+      {
+        "title": "Workspace and reliability",
+        "changes": [
+          "Arrange the left sidebar with persistent draggable separators, grouped woodworking tools, and remembered tool choices.",
+          "See measured download progress while the browser app loads.",
+          "View clean routing profile previews and improved Linux project thumbnails.",
+          "Confirm drawings with less overhead when updating holes."
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.7.3",
     "date": "2026-11-15",
     "title": "Clearer tools, flexible sidebars, and viewport fixes",
