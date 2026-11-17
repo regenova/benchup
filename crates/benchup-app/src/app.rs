@@ -452,6 +452,8 @@ pub struct BenchUpApp {
     orbit_key_down: bool,
     /// The held V key has moved the camera, so its release is not a tap.
     orbit_key_moved: bool,
+    /// Accepted V transitions, replayed in order with this frame's pointer events.
+    orbit_key_transitions: Vec<egui::Event>,
     viewport_pointer: Option<Pos2>,
     viewport: Rect,
     viewports: viewports::Workspace,
@@ -654,6 +656,7 @@ impl BenchUpApp {
             drawing_orbit_pivot: None,
             orbit_key_down: false,
             orbit_key_moved: false,
+            orbit_key_transitions: Vec::new(),
             viewport_pointer: None,
             viewport: Rect::NOTHING,
             viewports: viewports::Workspace::default(),
@@ -2452,6 +2455,7 @@ impl BenchUpApp {
         // Hold-to-orbit ends whenever text entry, a dialog, or Walk owns the
         // keyboard; it is restored below only when viewport shortcuts apply.
         let orbit_key_was_down = std::mem::take(&mut self.orbit_key_down);
+        self.orbit_key_transitions.clear();
         // Track Ctrl through dialogs and shortcut early returns. When modeling
         // input is allowed, replay modifier events from the previous state.
         let pull_modifier_was_down = self.push_pull_modifier_down;
@@ -2636,6 +2640,9 @@ impl BenchUpApp {
             return;
         }
         self.orbit_key_down = orbit_key_was_down && self.general_settings.hold_v_to_orbit;
+        // Track text ownership here, but defer navigation and tap actions until
+        // the viewport replays the corresponding pointer/key event sequence.
+        let mut orbit_key_down = self.orbit_key_down;
         self.sidebar_shortcut(ctx);
         let events = ctx.input(|i| i.events.clone());
         let copy_event = events.iter().any(|e| matches!(e, egui::Event::Copy));
@@ -2697,24 +2704,19 @@ impl BenchUpApp {
                     modifiers,
                     ..
                 } if self.orbit_key_available(modifiers) => {
-                    self.orbit_key_down = true;
-                    self.orbit_key_moved = false;
+                    orbit_key_down = true;
+                    self.orbit_key_transitions.push(event);
                 }
                 egui::Event::Key {
                     key: Key::V,
                     pressed: false,
                     ..
-                } if self.orbit_key_down => {
-                    self.orbit_key_down = false;
-                    // A tap without camera motion keeps a custom V tool shortcut.
-                    if !self.orbit_key_moved
-                        && let Some(tool) = self.general_settings.tool_for_key(Key::V)
-                    {
-                        self.set_tool(tool);
-                    }
+                } if orbit_key_down => {
+                    orbit_key_down = false;
+                    self.orbit_key_transitions.push(event);
                 }
                 // The held orbit key must not type into a pending dimension.
-                egui::Event::Text(text) if self.orbit_key_down && text.eq_ignore_ascii_case("v") => {}
+                egui::Event::Text(text) if orbit_key_down && text.eq_ignore_ascii_case("v") => {}
                 egui::Event::Key {
                     key,
                     pressed: true,
@@ -2841,11 +2843,6 @@ impl BenchUpApp {
             }
         }
         self.push_pull_modifier_down = ctx.input(|i| i.modifiers.ctrl);
-        // Some platforms drop key releases, for example while a window loses
-        // focus. Never leave hover navigation latched after V is up.
-        if self.orbit_key_down && !ctx.input(|i| i.key_down(Key::V)) {
-            self.orbit_key_down = false;
-        }
     }
 
     /// Plain V, or Shift + V for panning, starts hold-to-orbit. Command
@@ -5270,11 +5267,33 @@ impl BenchUpApp {
         // Native mouse input interleaves absolute positions and raw deltas.
         // We do not use raw deltas; discard them before looking ahead so they
         // cannot turn one pending pointer position into hundreds of snap queries.
+        // Match the accepted key events themselves: UI controls may consume
+        // other events between keyboard handling and viewport replay.
+        let mut orbit_key_transitions = std::mem::take(&mut self.orbit_key_transitions);
         let mut events = events
             .into_iter()
             .filter(|event| !matches!(event, egui::Event::MouseMoved(_)))
             .peekable();
         while let Some(event) = events.next() {
+            if let egui::Event::Key { key: Key::V, pressed, modifiers, .. } = &event
+                && let Some(index) = orbit_key_transitions.iter().position(|key_event| key_event == &event)
+            {
+                orbit_key_transitions.drain(..=index);
+                let was_down = self.orbit_key_down;
+                self.orbit_key_down = *pressed;
+                if *pressed {
+                    self.orbit_key_moved = false;
+                } else if was_down && !self.orbit_key_moved
+                    && let Some(tool) = self.general_settings.tool_for_key(Key::V)
+                {
+                    self.set_tool(tool);
+                }
+                refresh_pointer = true;
+                self.update_drawing_orbit(*modifiers);
+                // The status bar was laid out before viewport input this frame.
+                ctx.request_repaint();
+                continue;
+            }
             // Keep every stroke sample, but coalesce consecutive hover/navigation
             // positions. Button and keyboard events remain ordered barriers.
             let stroking = self.gesture.as_ref().is_some_and(|gesture| {
@@ -5690,6 +5709,11 @@ impl BenchUpApp {
                 }
                 _ => {}
             }
+        }
+        // Reconcile missing releases only after replaying the frame: a complete
+        // press/move/release sequence can legitimately end with V already up.
+        if self.orbit_key_down && !ctx.input(|i| i.key_down(Key::V)) {
+            self.orbit_key_down = false;
         }
         self.update_drawing_orbit(ctx.input(|i| i.modifiers));
         // Menus and other overlays can cover the viewport without pointer motion.

@@ -540,8 +540,12 @@ impl Harness {
         mut events: Vec<egui::Event>,
         modifiers: egui::Modifiers,
     ) -> egui::FullOutput {
-        self.time += 0.01;
         events.insert(0, egui::Event::ModifiersChanged(modifiers));
+        self.frame_events(events)
+    }
+    // Replay backend events verbatim, without an artificial modifier event.
+    fn frame_events(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
+        self.time += 0.01;
         let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
             time: Some(self.time),
@@ -7798,6 +7802,82 @@ fn holding_v_cancels_an_interrupted_selection_click() {
     assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::Select { .. }));
     h.frame(orbit_key_event(true, egui::Modifiers::NONE), egui::Modifiers::NONE);
     assert!(matches!(h.app.gesture.as_ref().unwrap().kind, GestureKind::DrawingNavigate));
+}
+
+#[test]
+fn hold_v_replays_key_transitions_in_pointer_event_order() {
+    for shift in [false, true] {
+        let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+        let mut h = Harness::new();
+        let start = h.app.viewport.center();
+        h.frame(vec![egui::Event::PointerMoved(start)], modifiers);
+        let before = h.app.doc.camera.clone();
+        let mut events = orbit_key_event(true, modifiers);
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, modifiers));
+        // Motion after release belongs to the tool, even within the same frame.
+        events.push(egui::Event::PointerMoved(start + egui::vec2(24., 16.)));
+        h.frame_events(events);
+        let mut expected = before;
+        if shift {
+            expected.pan(DVec2::new(12., 8.), h.app.viewport.height() as f64);
+        } else {
+            expected.orbit_around(DVec2::new(12., 8.), DVec3::ZERO);
+        }
+        assert_eq!(h.app.doc.camera, expected);
+        assert!(!h.app.navigating());
+        assert!(!h.app.orbit_key_down);
+    }
+}
+
+#[test]
+fn v_release_waits_for_same_frame_motion_before_deciding_custom_shortcut() {
+    for press_in_same_frame in [false, true] {
+        let mut h = Harness::new();
+        let index = settings::TOOLS.iter().position(|(tool, _)| *tool == Tool::Rotate).unwrap();
+        h.app.general_settings.tool_keys[index] = "V".into();
+        h.app.set_tool(Tool::Line);
+        let start = h.at(DVec3::ZERO);
+        h.click(start);
+        let line_start = h.app.line_start;
+        assert!(line_start.is_some());
+        let before = h.app.doc.camera.clone();
+        let mut events = Vec::new();
+        if press_in_same_frame {
+            events.extend(orbit_key_event(true, egui::Modifiers::NONE));
+        } else {
+            h.frame_events(orbit_key_event(true, egui::Modifiers::NONE));
+        }
+        events.push(egui::Event::PointerMoved(start + egui::vec2(12., 8.)));
+        events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+        h.frame_events(events);
+        assert_ne!(h.app.doc.camera, before);
+        assert_eq!(h.app.tool, Tool::Line);
+        assert_eq!(h.app.line_start, line_start);
+        assert!(h.app.length_input.is_empty());
+        assert!(h.app.doc.model.edges.is_empty());
+        assert!(!h.app.navigating());
+    }
+}
+
+#[test]
+fn v_press_and_release_in_one_frame_cancel_an_interrupted_click() {
+    let mut h = Harness::new();
+    h.app.set_tool(Tool::Line);
+    let start = h.at(DVec3::ZERO);
+    h.pointer(start, egui::PointerButton::Primary, true, false);
+    let mut events = orbit_key_event(true, egui::Modifiers::NONE);
+    events.extend(orbit_key_event(false, egui::Modifiers::NONE));
+    events.push(egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.frame_events(events);
+    assert!(h.app.line_start.is_none());
+    assert!(h.app.doc.model.edges.is_empty());
+    assert!(h.app.gesture.is_none());
 }
 
 #[path = "follow_me_ui_tests.rs"]
