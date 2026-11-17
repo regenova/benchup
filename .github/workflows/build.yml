@@ -186,7 +186,8 @@ jobs:
             os: windows-2022
             target: x86_64-pc-windows-msvc
           - platform: macos-arm64
-            os: macos-15
+            # Use the current ARM image; macos-15 test jobs stalled in the runner queue.
+            os: macos-26
             target: aarch64-apple-darwin
           - platform: macos-x64
             os: macos-15-intel
