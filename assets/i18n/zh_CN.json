@@ -1,4 +1,8 @@
 {
+  "reference_volume.entry": "体积 {number}",
+  "reference_volume.add": "添加参考体积",
+  "reference_volume.empty": "请在设置 → 工具中添加参考体积。",
+  "reference_volume.settings_hint": "在此定义并命名体积，然后在视图 → 参考体积中切换其中一个。",
   "tools.add_separator": "添加分隔线",
   "tools.remove_separator": "移除分隔线",
   "follow_me.advanced_tools": "高级",
@@ -1352,7 +1356,6 @@
   "realtime.websocket_disconnected_2": "WebSocket 已断开：{e}",
   "realtime.websocket_host_missing": "缺少 WebSocket 主机",
   "realtime.websocket_unavailable": "WebSocket 不可用",
-  "reference_volume.show": "显示参考空间",
   "release_notes.format": "•",
   "release_notes.latest": " · 最新",
   "release_notes.newer": "较新",

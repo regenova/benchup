@@ -64,7 +64,7 @@ Orbiting always uses the combined bounding-box center of all objects, including 
 
 ## Views and cameras
 
-View → Reference volume, below Sections, controls a fixed reference box and its width (X), depth (Y), and height (Z) in the workspace's length units. The box is centered on the origin with its base at Z = 0. Face portions beyond its bounds receive a transparent red tint and trigger a warning. The box and its dimensions are remembered across projects and are never selectable or exported. Assign or clear **Toggle reference volume** in Settings → Shortcuts management; it is unassigned by default.
+Settings → Tools defines named reference volumes with width (X), depth (Y), and height (Z) in the workspace's length units. Add or remove entries there. View → Reference volume, below Sections, lists those entries: select one to show it, select it again to hide it, or select another to switch. Only one volume is visible at a time. The box is centered on the origin with its base at Z = 0. Face portions beyond its bounds receive a transparent red tint and trigger a warning. Entries and dimensions are remembered across projects. Reference volumes are not model geometry and are never exported. Assign or clear **Toggle reference volume** in Settings → Shortcuts management; it is unassigned by default.
 
 Click an axis label on the compass to look along it: −Y is the Front view, +X Right, +Y Back, −X Left, +Z Top, and −Z Bottom. The front of a model faces −Y. The sidebar's **Camera** section chooses Perspective or Parallel (orthographic) projection, sets the field of view in perspective (15–100°), and offers **Fit model**, **Fit selection**, and **Reset camera**.
 

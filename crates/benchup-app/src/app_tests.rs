@@ -7687,7 +7687,7 @@ fn toggling_the_printer_volume_frames_it_and_leaves_the_camera_alone_when_hidden
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
         visible: false,
-        size_m: [0.256, 0.256, 0.256],
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
         ..Default::default()
     };
     let before = h.app.doc.camera.clone();
@@ -7719,6 +7719,8 @@ fn toggling_the_printer_volume_frames_it_and_leaves_the_camera_alone_when_hidden
 #[test]
 fn reference_volume_is_below_sections_and_toggles_from_the_view_menu() {
     let mut h = Harness::new();
+    h.app.general_settings.volume.add_entry();
+    h.app.general_settings.volume.entries[1].name = "Room".into();
     let output = h.frame(vec![], egui::Modifiers::NONE);
     h.click(text_position(&output, tr!("app.view")));
     let output = h.frame(vec![], egui::Modifiers::NONE);
@@ -7727,13 +7729,15 @@ fn reference_volume_is_below_sections_and_toggles_from_the_view_menu() {
     assert!(reference.y > sections.y);
     h.click(reference);
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    for label in [tr!("settings.width_x"), tr!("settings.depth_y"), tr!("settings.height_z")] {
-        text_position(&output, label);
-    }
-    h.click(text_position(&output, tr!("reference_volume.show")));
+    let label = tr!("reference_volume.entry", number = 1);
+    h.click(text_position(&output, &label));
     assert!(h.app.general_settings.volume.visible);
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    h.click(text_position(&output, tr!("reference_volume.show")));
+    h.click(text_position(&output, "Room"));
+    assert!(h.app.general_settings.volume.visible);
+    assert_eq!(h.app.general_settings.volume.selected, Some(h.app.general_settings.volume.entries[1].id));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Room"));
     assert!(!h.app.general_settings.volume.visible);
 }
 
@@ -7742,7 +7746,7 @@ fn volume_warning_is_gated_on_visibility_and_geometry() {
     let mut h = Harness::new();
     h.app.general_settings.volume = printer_volume::Settings {
         visible: true,
-        size_m: [0.256, 0.256, 0.256],
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
         ..Default::default()
     };
     assert!(!h.app.volume_exceeded(&h.ctx, 1), "an empty model fits the volume");
@@ -7807,7 +7811,7 @@ fn volume_settings_never_enter_the_saved_document() {
     let before = serde_json::to_string(&h.app.doc).unwrap();
 
     h.app.general_settings.volume.visible = true;
-    h.app.general_settings.volume.size_m = [7., 7., 7.];
+    h.app.general_settings.volume.entries[0].size_m = [7., 7., 7.];
     h.app.general_settings.volume.hotkey = Some("V".into());
 
     let after = serde_json::to_string(&h.app.doc).unwrap();
@@ -7914,7 +7918,7 @@ fn exports_contain_only_model_geometry() {
 
     h.app.general_settings.volume = printer_volume::Settings {
         visible: true,
-        size_m: [3., 3., 3.],
+        entries: vec![printer_volume::Entry { size_m: [3., 3., 3.], ..Default::default() }],
         ..Default::default()
     };
     let shown = crate::interchange::export_obj(&h.app.doc.model).unwrap();

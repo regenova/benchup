@@ -1,4 +1,8 @@
 {
+  "reference_volume.entry": "Thể tích {number}",
+  "reference_volume.add": "Thêm thể tích tham chiếu",
+  "reference_volume.empty": "Thêm thể tích tham chiếu trong Cài đặt → Công cụ.",
+  "reference_volume.settings_hint": "Đặt tên và kích thước cho các thể tích tại đây, rồi bật một thể tích trong Xem → Thể tích tham chiếu.",
   "tools.add_separator": "Thêm đường phân cách",
   "tools.remove_separator": "Xóa đường phân cách",
   "follow_me.advanced_tools": "Nâng cao",
@@ -1347,7 +1351,6 @@
   "realtime.websocket_disconnected_2": "WebSocket đã bị ngắt kết nối: {e}",
   "realtime.websocket_host_missing": "WebSocket",
   "realtime.websocket_unavailable": "WebSocket không có sẵn",
-  "reference_volume.show": "Hiện khối tham chiếu",
   "release_notes.format": "•",
   "release_notes.latest": "  · Mới nhất",
   "release_notes.newer": "Mới hơn",

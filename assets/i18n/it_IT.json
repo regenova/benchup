@@ -1,4 +1,8 @@
 {
+  "reference_volume.entry": "Volume {number}",
+  "reference_volume.add": "Aggiungi volume di riferimento",
+  "reference_volume.empty": "Aggiungi volumi di riferimento in Impostazioni → Strumenti.",
+  "reference_volume.settings_hint": "Definisci qui i volumi con un nome, poi attivane uno in Vista → Volume di riferimento.",
   "tools.add_separator": "Aggiungi separatore",
   "tools.remove_separator": "Rimuovi separatore",
   "follow_me.advanced_tools": "Avanzate",
@@ -1352,7 +1356,6 @@
   "realtime.websocket_disconnected_2": "WebSocket disconnesso: {e}",
   "realtime.websocket_host_missing": "Host WebSocket mancante",
   "realtime.websocket_unavailable": "WebSocket non disponibile",
-  "reference_volume.show": "Mostra volume di riferimento",
   "release_notes.format": "•",
   "release_notes.latest": " · Ultima",
   "release_notes.newer": "Più recenti",

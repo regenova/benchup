@@ -246,7 +246,7 @@ fn printer_volume_toggles_and_resizes_keep_large_scene_geometry_resident() {
     assert_eq!(app.scene_cache.resident_builds(), 1);
     for (visible, size) in [(true, [0.256; 3]), (true, [1.; 3]), (false, [1.; 3])] {
         app.general_settings.volume.visible = visible;
-        app.general_settings.volume.size_m = size;
+        app.general_settings.volume.entries[0].size_m = size;
         render(&mut app, &ctx, rect);
         app.doc.camera.yaw += 0.1;
         render(&mut app, &ctx, rect);

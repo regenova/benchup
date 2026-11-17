@@ -654,6 +654,7 @@ impl BenchUpApp {
                     tr!("settings.automatically_group_new_shapes"),
                 )
                 .on_hover_text(tr!("settings.group_new_shapes_outside_existing_objects"));
+                self.reference_volume_settings(ui);
             }
             Section::Rendering => {
                 ui.checkbox(&mut self.doc.display.shadow_antialiasing, tr!("settings.shadow_antialiasing"))
@@ -874,13 +875,13 @@ mod tests {
 
         let mut settings = GeneralSettings::default();
         settings.volume.visible = true;
-        settings.volume.size_m = [0.3, 0.25, 0.4];
+        settings.volume.entries[0].size_m = [0.3, 0.25, 0.4];
         settings.volume.hotkey = Some("V".into());
 
         let saved = serde_json::to_string(&settings).unwrap();
         let restored: GeneralSettings = serde_json::from_str(&saved).unwrap();
         assert!(restored.volume.visible);
-        assert_eq!(restored.volume.size_m, [0.3, 0.25, 0.4]);
+        assert_eq!(restored.volume.entries[0].size_m, [0.3, 0.25, 0.4]);
         assert_eq!(restored.volume.hotkey.as_deref(), Some("V"));
     }
 
@@ -889,13 +890,13 @@ mod tests {
         let mut settings = GeneralSettings::default();
         // A zero width is repaired, a non-finite depth falls back, an absurd
         // height clamps: each axis is handled independently.
-        settings.volume.size_m = [0., f64::INFINITY, 1e12];
+        settings.volume.entries[0].size_m = [0., f64::INFINITY, 1e12];
         settings.normalize();
         assert_eq!(
-            settings.volume.size_m,
+            settings.volume.entries[0].size_m,
             [
                 printer_volume::MIN_M,
-                printer_volume::Settings::default().size_m[1],
+                printer_volume::Settings::default().size_m()[1],
                 printer_volume::MAX_M
             ]
         );
@@ -1383,20 +1384,20 @@ mod tests {
         ).unwrap();
         settings.normalize();
         assert!(settings.volume.visible);
-        assert_eq!(settings.volume.size_m, [0.3, 0.2, 0.1]);
+        assert_eq!(settings.volume.entries[0].size_m, [0.3, 0.2, 0.1]);
         assert_eq!(settings.volume.hotkey.as_deref(), Some("V"));
         assert!(!serde_json::to_string(&settings.volume).unwrap().contains("show_button"));
     }
 
     #[test]
-    fn reference_volume_shortcut_has_a_searchable_name_and_leaves_tool_settings() {
+    fn reference_volume_values_are_in_tools_and_shortcut_is_searchable() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         app.general_settings.section = Section::Tools;
         let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
         let text = rendered_text(&output.shapes);
-        assert!(!text.iter().any(|label| label == tr!("settings.printer_and_tool_volume")));
-        assert!(!text.iter().any(|label| label == tr!("settings.width_x")));
+        assert!(text.iter().any(|label| label == tr!("settings.printer_and_tool_volume")));
+        assert!(text.iter().any(|label| label == tr!("settings.width_x")));
 
         app.general_settings.section = Section::Shortcuts;
         app.shortcut_filter = "reference volume".into();
@@ -1418,7 +1419,7 @@ mod tests {
             ("vi_VN", include_str!("../../../assets/i18n/vi_VN.json")),
             ("zh_CN", include_str!("../../../assets/i18n/zh_CN.json")),
         ];
-        const KEYS: [&str; 10] = [
+        const KEYS: [&str; 13] = [
             "app.show_or_hide_the_printer_or_tool_volume",
             "app.the_model_is_outside_the_printer_or_tool_volume",
             "settings.printer_and_tool_volume",
@@ -1427,7 +1428,10 @@ mod tests {
             "settings.depth_y",
             "settings.height_z",
             "settings.clear_the_toggle_shortcut",
-            "reference_volume.show",
+            "reference_volume.entry",
+            "reference_volume.add",
+            "reference_volume.empty",
+            "reference_volume.settings_hint",
             "settings.toggle_reference_volume",
         ];
         for (language, raw) in CATALOGS {

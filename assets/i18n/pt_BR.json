@@ -1,4 +1,8 @@
 {
+  "reference_volume.entry": "Volume {number}",
+  "reference_volume.add": "Adicionar volume de referência",
+  "reference_volume.empty": "Adicione volumes de referência em Configurações → Ferramentas.",
+  "reference_volume.settings_hint": "Defina volumes com nome aqui e ative um em Visualizar → Volume de referência.",
   "tools.add_separator": "Adicionar separador",
   "tools.remove_separator": "Remover separador",
   "follow_me.advanced_tools": "Avançado",
@@ -1350,7 +1354,6 @@
   "realtime.websocket_disconnected_2": "WebSocket desconectado: {e}",
   "realtime.websocket_host_missing": "Host do WebSocket ausente",
   "realtime.websocket_unavailable": "WebSocket indisponível",
-  "reference_volume.show": "Mostrar volume de referência",
   "release_notes.format": "•",
   "release_notes.latest": " · Mais recente",
   "release_notes.newer": "Mais nova",

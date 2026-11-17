@@ -3,46 +3,136 @@ use super::*;
 /// A user-defined reference volume drawn as a locked wireframe in the viewport.
 ///
 /// The volume is a global preference, not document geometry, so the same space
-/// can be checked across projects. It cannot be selected, edited, or moved.
+/// can be checked across projects. It cannot be selected, edited, or moved in the viewport.
 /// Limits in metres, from small parts up to room-sized reference spaces.
 pub(super) const MIN_M: f64 = 0.001;
 pub(super) const MAX_M: f64 = 100.;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
-pub(super) struct Settings {
-    /// Draw the wireframe box in the viewport.
-    pub visible: bool,
-    /// Width (X), depth (Y) and height (Z) in metres, matching the model space.
-    /// The settings UI converts to and from the user's display units, so a user
-    /// working in feet sees and enters feet while the stored value stays exact.
+pub(super) struct Entry {
+    pub id: u64,
+    pub name: String,
+    /// Width (X), depth (Y), height (Z), always stored in metres.
     pub size_m: [f64; 3],
-    /// Optional shortcut that toggles `visible`. Unassigned by default.
+}
+
+impl Default for Entry {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+            size_m: [0.256; 3],
+        }
+    }
+}
+
+impl Entry {
+    fn axis_in(&self, axis: usize, unit: benchup_core::LengthUnit) -> f64 {
+        self.size_m[axis] / unit.factor()
+    }
+
+    fn set_axis_from(&mut self, axis: usize, value: f64, unit: benchup_core::LengthUnit) {
+        self.size_m[axis] = value * unit.factor();
+    }
+
+    fn display_name(&self, index: usize) -> String {
+        if self.name.trim().is_empty() {
+            tr!("reference_volume.entry", number = index + 1).into()
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "SavedSettings")]
+pub(super) struct Settings {
+    pub visible: bool,
+    pub entries: Vec<Entry>,
+    /// Retain the last selection while hidden, so the shortcut can restore it.
+    pub selected: Option<u64>,
+    pub next_id: u64,
     pub hotkey: Option<String>,
 }
 
-impl Default for Settings {
+// Read older single-volume preferences without recreating entries when the user
+// deliberately saves an empty catalog. Serialization only writes the new schema.
+#[derive(serde::Deserialize)]
+#[serde(default)]
+struct SavedSettings {
+    visible: bool,
+    size_m: [f64; 3],
+    entries: Option<Vec<Entry>>,
+    selected: Option<u64>,
+    next_id: u64,
+    hotkey: Option<String>,
+}
+
+impl Default for SavedSettings {
     fn default() -> Self {
         Self {
             visible: false,
-            // A compact starting reference; users set the space they need.
-            size_m: [0.256, 0.256, 0.256],
+            size_m: [0.256; 3],
+            entries: None,
+            selected: Some(1),
+            next_id: 2,
             hotkey: None,
         }
     }
 }
 
+impl From<SavedSettings> for Settings {
+    fn from(saved: SavedSettings) -> Self {
+        let mut settings = Self {
+            visible: saved.visible,
+            entries: saved.entries.unwrap_or_else(|| {
+                vec![Entry {
+                    size_m: saved.size_m,
+                    ..Entry::default()
+                }]
+            }),
+            selected: saved.selected,
+            next_id: saved.next_id,
+            hotkey: saved.hotkey,
+        };
+        settings.sanitize();
+        settings
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        SavedSettings::default().into()
+    }
+}
+
 impl Settings {
-    /// Keep saved preferences usable. Older files lack these fields entirely and
-    /// `#[serde(default)]` supplies them; damaged values fall back per axis so one
-    /// bad dimension never discards the others.
     pub(super) fn sanitize(&mut self) {
-        let fallback = Self::default().size_m;
-        for (value, default) in self.size_m.iter_mut().zip(fallback) {
-            if !value.is_finite() {
-                *value = default;
+        let mut used = std::collections::HashSet::new();
+        let mut next = self.next_id.max(2);
+        for entry in &mut self.entries {
+            if entry.id == 0 || used.contains(&entry.id) {
+                while used.contains(&next) || next == 0 {
+                    next = next.wrapping_add(1);
+                }
+                entry.id = next;
             }
-            *value = value.clamp(MIN_M, MAX_M);
+            used.insert(entry.id);
+            next = next.max(entry.id.saturating_add(1));
+            for value in &mut entry.size_m {
+                if !value.is_finite() {
+                    *value = 0.256;
+                }
+                *value = value.clamp(MIN_M, MAX_M);
+            }
+        }
+        self.next_id = next;
+        if !self.selected.is_some_and(|id| used.contains(&id)) {
+            self.selected = self.entries.first().map(|entry| entry.id);
+        }
+        if self.entries.is_empty() {
+            self.visible = false;
         }
         if let Some(key) = &self.hotkey
             && !super::shortcut_input::valid_tool_key(key)
@@ -51,54 +141,64 @@ impl Settings {
         }
     }
 
+    pub(super) fn add_entry(&mut self) {
+        let mut id = self.next_id;
+        while id == 0 || self.entries.iter().any(|entry| entry.id == id) {
+            id = id.wrapping_add(1);
+        }
+        self.entries.push(Entry {
+            id,
+            ..Entry::default()
+        });
+        self.next_id = id.wrapping_add(1);
+        if self.selected.is_none() {
+            self.selected = Some(id);
+        }
+    }
+
+    pub(super) fn remove_entry(&mut self, id: u64) {
+        self.entries.retain(|entry| entry.id != id);
+        if self.selected == Some(id) {
+            self.visible = false;
+            self.selected = self.entries.first().map(|entry| entry.id);
+        }
+    }
+
+    pub(super) fn toggle_entry(&mut self, id: u64) {
+        if self.entries.iter().any(|entry| entry.id == id) {
+            self.visible = !(self.visible && self.selected == Some(id));
+            self.selected = Some(id);
+        }
+    }
+
     pub(super) fn toggle(&mut self) {
-        self.visible = !self.visible;
+        if let Some(id) = self.selected {
+            self.toggle_entry(id);
+        }
     }
 
-    /// A stored axis length expressed in `unit`. The value is always held in
-    /// metres, so switching display units re-presents the same physical volume.
-    pub(super) fn axis_in(&self, axis: usize, unit: benchup_core::LengthUnit) -> f64 {
-        self.size_m[axis] / unit.factor()
+    pub(super) fn size_m(&self) -> [f64; 3] {
+        self.entries
+            .iter()
+            .find(|entry| Some(entry.id) == self.selected)
+            .map_or([0.256; 3], |entry| entry.size_m)
     }
 
-    /// Store an axis length entered in `unit`.
-    pub(super) fn set_axis_from(
-        &mut self,
-        axis: usize,
-        value: f64,
-        unit: benchup_core::LengthUnit,
-    ) {
-        self.size_m[axis] = value * unit.factor();
-    }
-
-    /// Half extent of the volume in metres.
-    fn half_extent(&self) -> DVec3 {
-        DVec3::new(self.size_m[0], self.size_m[1], self.size_m[2]) * 0.5
-    }
-
-    /// The occupied region in model space: centred on the origin in X and Y, and
-    /// sitting on Z = 0. That puts the bottom face's centre at the origin.
     pub(super) fn bounds(&self) -> (DVec3, DVec3) {
-        let half = self.half_extent();
+        let size = self.size_m();
+        let half = DVec3::from_array(size) * 0.5;
         (
             DVec3::new(-half.x, -half.y, 0.),
-            DVec3::new(half.x, half.y, self.size_m[2]),
+            DVec3::new(half.x, half.y, size[2]),
         )
     }
 
-    /// True when the given bounds fit inside the volume. Touching counts as
-    /// fitting, so geometry exactly on the boundary is not flagged.
     pub(super) fn contains(&self, low: DVec3, high: DVec3) -> bool {
         let (min, max) = self.bounds();
         let tolerance = 1e-9;
-        (0..3).all(|axis| {
-            low[axis] >= min[axis] - tolerance && high[axis] <= max[axis] + tolerance
-        })
+        (0..3).all(|axis| low[axis] >= min[axis] - tolerance && high[axis] <= max[axis] + tolerance)
     }
 
-    /// Any geometry outside the volume means a vertex is outside, and therefore
-    /// that the model's bounds leave the volume, so one bounds test is exact and
-    /// far cheaper than walking every vertex.
     pub(super) fn exceeds(&self, model: &Model) -> bool {
         model
             .bounds()
@@ -106,9 +206,7 @@ impl Settings {
     }
 
     pub(super) fn hotkey(&self) -> Option<egui::Key> {
-        self.hotkey
-            .as_deref()
-            .and_then(egui::Key::from_name)
+        self.hotkey.as_deref().and_then(egui::Key::from_name)
     }
 
     /// The shared reference-mesh API consumes projected strips, so preparation
@@ -148,11 +246,17 @@ impl Settings {
 
 impl BenchUpApp {
     pub(super) fn reference_volume_menu(&mut self, ui: &mut egui::Ui) {
-        let button = egui::Button::new((Self::menu_item_icon(ui, Some("reference_volume")), tr!("settings.printer_and_tool_volume")))
-            .gap(ui.spacing().icon_spacing)
-            .right_text(egui::menu::SubMenuButton::arrow_atom(None));
+        let button = egui::Button::new((
+            Self::menu_item_icon(ui, Some("reference_volume")),
+            tr!("settings.printer_and_tool_volume"),
+        ))
+        .gap(ui.spacing().icon_spacing)
+        .right_text(egui::menu::SubMenuButton::arrow_atom(None));
         egui::menu::SubMenuButton::from_button(button)
-            .config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside))
+            .config(
+                egui::menu::MenuConfig::new()
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+            )
             .ui(ui, |ui| {
                 Self::menu_style(ui.style_mut());
                 ui.set_width(264.);
@@ -161,50 +265,152 @@ impl BenchUpApp {
     }
 
     pub(super) fn reference_volume_controls(&mut self, ui: &mut egui::Ui) {
-        let mut visible = self.general_settings.volume.visible;
-        if Self::menu_checkbox(ui, &mut visible, tr!("reference_volume.show"))
-            .on_hover_text(tr!("app.show_or_hide_the_printer_or_tool_volume")).changed()
-        {
-            self.toggle_printer_volume(ui.ctx());
+        let entries: Vec<_> = self
+            .general_settings
+            .volume
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| (entry.id, entry.display_name(index)))
+            .collect();
+        if entries.is_empty() {
+            ui.text_weak(tr!("reference_volume.empty"));
         }
-        ui.text_weak(tr!("settings.a_locked_reference_box_for_a_printer_s_build"));
+        for (id, name) in entries {
+            let mut active = self.general_settings.volume.visible
+                && self.general_settings.volume.selected == Some(id);
+            if Self::menu_checkbox(ui, &mut active, &name).changed() {
+                self.general_settings.volume.toggle_entry(id);
+                self.frame_reference_volume(ui.ctx());
+            }
+        }
+    }
+
+    pub(super) fn reference_volume_settings(&mut self, ui: &mut egui::Ui) {
+        use crate::inspector_table::{Column, InspectorTable};
         ui.separator();
+        ui.text_heading(tr!("settings.printer_and_tool_volume"));
+        ui.text_weak(tr!("reference_volume.settings_hint"));
         let units = self.doc.display.units;
         let length = units.length;
         let factor = length.factor();
         let decimals = units.precision.length.unwrap_or(3) as usize;
-        let mut table = crate::inspector_table::InspectorTable::new(
-            ui.available_width(),
-            [crate::inspector_table::Column::flex(0.5), crate::inspector_table::Column::flex(0.5)],
+        let remove_width = ui
+            .painter()
+            .layout_no_wrap(
+                tr!("common.remove").into(),
+                egui::TextStyle::Button.resolve(ui.style()),
+                ui.visuals().text_color(),
+            )
+            .size()
+            .x
+            + 2. * ui.spacing().button_padding.x
+            + 4.;
+        let key = "settings/reference_volumes";
+        let scroll = sidebar::restored_scroll_area(
+            ui,
+            key,
+            egui::ScrollArea::horizontal()
+                .id_salt(key)
+                .auto_shrink([false, true]),
         );
-        for (axis, label) in [tr!("settings.width_x"), tr!("settings.depth_y"), tr!("settings.height_z")].into_iter().enumerate() {
-            table.row(ui, ("settings_volume_axis", axis), |column, ui| {
-                if column == 0 {
-                    ui.text_label(label);
-                } else {
-                    let mut value = self.general_settings.volume.axis_in(axis, length);
-                    if ui.add(egui::DragValue::new(&mut value).speed(1.).max_decimals(decimals)
-                        .range(MIN_M / factor..=MAX_M / factor).suffix(format!(" {}", length.symbol()))).changed()
-                    {
-                        self.general_settings.volume.set_axis_from(axis, value, length);
-                    }
-                }
-            });
+        let mut remove = None;
+        let output = scroll.show(ui, |ui| {
+            let mut table = InspectorTable::new(
+                ui.available_width(),
+                [
+                    Column::at_least(150.),
+                    Column::at_least(110.),
+                    Column::at_least(110.),
+                    Column::at_least(110.),
+                    Column::fixed(remove_width),
+                ],
+            );
+            table.header(
+                ui,
+                [
+                    tr!("common.name"),
+                    tr!("settings.width_x"),
+                    tr!("settings.depth_y"),
+                    tr!("settings.height_z"),
+                    "",
+                ],
+            );
+            for (index, entry) in self.general_settings.volume.entries.iter_mut().enumerate() {
+                let hint = entry.display_name(index);
+                table.row(
+                    ui,
+                    ("reference_volume_entry", entry.id),
+                    |column, cell| match column {
+                        0 => {
+                            cell.add(
+                                egui::TextEdit::singleline(&mut entry.name)
+                                    .hint_text(hint.as_str()),
+                            );
+                        }
+                        1..=3 => {
+                            let axis = column - 1;
+                            let mut value = entry.axis_in(axis, length);
+                            if cell
+                                .add(
+                                    egui::DragValue::new(&mut value)
+                                        .speed(1.)
+                                        .max_decimals(decimals)
+                                        .range(MIN_M / factor..=MAX_M / factor)
+                                        .suffix(format!(" {}", length.symbol())),
+                                )
+                                .changed()
+                            {
+                                entry.set_axis_from(axis, value, length);
+                            }
+                        }
+                        _ => {
+                            if cell.button(tr!("common.remove")).clicked() {
+                                remove = Some(entry.id);
+                            }
+                        }
+                    },
+                );
+            }
+        });
+        sidebar::remember_scroll(ui.ctx(), key, output.state.clamped_offset());
+        if let Some(id) = remove {
+            self.general_settings.volume.remove_entry(id);
+        }
+        if ui.button(tr!("reference_volume.add")).clicked() {
+            self.general_settings.volume.add_entry();
         }
     }
 
     pub(super) fn reference_volume_shortcut(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let assigned = self.general_settings.volume.hotkey.is_some();
-            let shown = self.general_settings.volume.hotkey.clone().unwrap_or_else(|| tr!("common.none").into());
+            let shown = self
+                .general_settings
+                .volume
+                .hotkey
+                .clone()
+                .unwrap_or_else(|| tr!("common.none").into());
             let width = (ui.available_width() - if assigned { 32. } else { 0. }).max(24.);
-            if let Some(key) = super::shortcut_input::shortcut_input(ui, "settings_volume_key", &shown, width) {
+            if let Some(key) =
+                super::shortcut_input::shortcut_input(ui, "settings_volume_key", &shown, width)
+            {
                 self.general_settings.volume.hotkey = Some(key);
             }
             if assigned {
-                let clear = ui.small_button("✕").on_hover_text(tr!("settings.clear_the_toggle_shortcut"));
-                clear.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr!("settings.clear_the_toggle_shortcut")));
-                if clear.clicked() { self.general_settings.volume.hotkey = None; }
+                let clear = ui
+                    .small_button("✕")
+                    .on_hover_text(tr!("settings.clear_the_toggle_shortcut"));
+                clear.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::Role::Button,
+                        true,
+                        tr!("settings.clear_the_toggle_shortcut"),
+                    )
+                });
+                if clear.clicked() {
+                    self.general_settings.volume.hotkey = None;
+                }
             }
         });
     }
@@ -213,12 +419,16 @@ impl BenchUpApp {
     /// Toggling off leaves the camera untouched.
     pub(super) fn toggle_printer_volume(&mut self, ctx: &egui::Context) {
         self.general_settings.volume.toggle();
+        self.frame_reference_volume(ctx);
+    }
+
+    fn frame_reference_volume(&mut self, ctx: &egui::Context) {
         if self.general_settings.volume.visible {
             self.doc.camera.fit(
                 Some(self.general_settings.volume.bounds()),
                 dv(self.viewport.size().max(Vec2::splat(1.))),
             );
-            self.changed(ctx);
+            self.camera_changed(ctx);
         }
         ctx.request_repaint();
     }
@@ -231,7 +441,7 @@ impl BenchUpApp {
             return false;
         }
         let id = egui::Id::unique("printer_volume_warning");
-        let size = self.general_settings.volume.size_m;
+        let size = self.general_settings.volume.size_m();
         if let Some((cached_revision, cached_size, exceeded)) =
             ctx.data(|data| data.get_temp::<(u64, [f64; 3], bool)>(id))
             && cached_revision == revision
@@ -295,13 +505,16 @@ mod tests {
         let settings = Settings::default();
         assert!(!settings.visible);
         assert_eq!(settings.hotkey, None);
-        assert_eq!(settings.size_m, [0.256, 0.256, 0.256]);
+        assert_eq!(settings.size_m(), [0.256, 0.256, 0.256]);
     }
 
     #[test]
     fn bottom_face_center_sits_on_the_origin() {
         let settings = Settings {
-            size_m: [0.2, 0.1, 0.05],
+            entries: vec![Entry {
+                size_m: [0.2, 0.1, 0.05],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let (min, max) = settings.bounds();
@@ -319,7 +532,10 @@ mod tests {
     #[test]
     fn touching_the_volume_still_fits() {
         let settings = Settings {
-            size_m: [0.1, 0.1, 0.1],
+            entries: vec![Entry {
+                size_m: [0.1, 0.1, 0.1],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let (min, max) = settings.bounds();
@@ -330,7 +546,10 @@ mod tests {
     #[test]
     fn geometry_outside_the_volume_is_detected() {
         let settings = Settings {
-            size_m: [0.1, 0.1, 0.1],
+            entries: vec![Entry {
+                size_m: [0.1, 0.1, 0.1],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let (min, max) = settings.bounds();
@@ -347,19 +566,28 @@ mod tests {
     fn damaged_sizes_fall_back_per_axis_and_extremes_clamp() {
         // One damaged axis keeps the user's other two values.
         let mut settings = Settings {
-            size_m: [f64::NAN, 0.01, 0.01],
+            entries: vec![Entry {
+                size_m: [f64::NAN, 0.01, 0.01],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         settings.sanitize();
-        assert_eq!(settings.size_m, [Settings::default().size_m[0], 0.01, 0.01]);
+        assert_eq!(
+            settings.size_m(),
+            [Settings::default().size_m()[0], 0.01, 0.01]
+        );
 
         let mut settings = Settings {
-            size_m: [-5., 1e9, 0.05],
+            entries: vec![Entry {
+                size_m: [-5., 1e9, 0.05],
+                ..Default::default()
+            }],
             hotkey: Some("nope".into()),
             ..Default::default()
         };
         settings.sanitize();
-        assert_eq!(settings.size_m, [MIN_M, MAX_M, 0.05]);
+        assert_eq!(settings.size_m(), [MIN_M, MAX_M, 0.05]);
         assert_eq!(settings.hotkey, None, "an invalid key is dropped");
     }
 
@@ -380,22 +608,22 @@ mod tests {
         let settings = Settings::default();
 
         // The default 256 mm cube reads as millimetres, centimetres and feet.
-        assert!((settings.axis_in(0, LengthUnit::Millimeters) - 256.).abs() < 1e-9);
-        assert!((settings.axis_in(0, LengthUnit::Centimeters) - 25.6).abs() < 1e-9);
-        assert!((settings.axis_in(2, LengthUnit::Millimeters) - 256.).abs() < 1e-9);
-        let feet = settings.axis_in(0, LengthUnit::Feet);
+        assert!((settings.entries[0].axis_in(0, LengthUnit::Millimeters) - 256.).abs() < 1e-9);
+        assert!((settings.entries[0].axis_in(0, LengthUnit::Centimeters) - 25.6).abs() < 1e-9);
+        assert!((settings.entries[0].axis_in(2, LengthUnit::Millimeters) - 256.).abs() < 1e-9);
+        let feet = settings.entries[0].axis_in(0, LengthUnit::Feet);
         assert!((feet - 0.256 / 0.3048).abs() < 1e-12, "got {feet} ft");
 
         // What the user types in one unit lands as the same physical size.
         let mut settings = Settings::default();
-        settings.set_axis_from(0, 1., LengthUnit::Feet);
-        assert!((settings.size_m[0] - 0.3048).abs() < 1e-12);
-        assert!((settings.axis_in(0, LengthUnit::Millimeters) - 304.8).abs() < 1e-9);
+        settings.entries[0].set_axis_from(0, 1., LengthUnit::Feet);
+        assert!((settings.size_m()[0] - 0.3048).abs() < 1e-12);
+        assert!((settings.entries[0].axis_in(0, LengthUnit::Millimeters) - 304.8).abs() < 1e-9);
 
         // Switching units must not change the stored value.
-        let before = settings.size_m;
-        let _ = settings.axis_in(0, LengthUnit::Inches);
-        assert_eq!(settings.size_m, before);
+        let before = settings.size_m();
+        let _ = settings.entries[0].axis_in(0, LengthUnit::Inches);
+        assert_eq!(settings.size_m(), before);
     }
 
     #[test]
@@ -410,7 +638,10 @@ mod tests {
     fn bounds_follow_the_configured_size() {
         for size in [[0.1, 0.2, 0.3], [1., 1., 1.], [0.256, 0.256, 0.256]] {
             let settings = Settings {
-                size_m: size,
+                entries: vec![Entry {
+                    size_m: size,
+                    ..Default::default()
+                }],
                 ..Default::default()
             };
             let (min, max) = settings.bounds();
@@ -426,10 +657,68 @@ mod tests {
     #[test]
     fn an_empty_model_never_exceeds_the_volume() {
         let settings = Settings {
-            size_m: [0.001, 0.001, 0.001],
+            entries: vec![Entry {
+                size_m: [0.001, 0.001, 0.001],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         assert!(!settings.exceeds(&Model::default()));
     }
 
+    #[test]
+    fn selecting_entries_is_exclusive_and_shortcut_restores_last_selection() {
+        let mut settings = Settings::default();
+        settings.add_entry();
+        let second = settings.entries[1].id;
+        settings.entries[1].size_m = [1., 2., 3.];
+        settings.toggle_entry(1);
+        assert!(settings.visible);
+        settings.toggle_entry(second);
+        assert!(settings.visible);
+        assert_eq!(settings.selected, Some(second));
+        assert_eq!(settings.size_m(), [1., 2., 3.]);
+        settings.toggle_entry(second);
+        assert!(!settings.visible);
+        settings.toggle();
+        assert!(settings.visible);
+        assert_eq!(settings.selected, Some(second));
+        settings.remove_entry(1);
+        assert!(
+            settings.visible,
+            "removing an inactive entry preserves the active volume"
+        );
+        settings.remove_entry(second);
+        settings.toggle();
+        assert!(!settings.visible);
+        assert_eq!(settings.selected, None);
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(
+            restored, settings,
+            "empty catalogs remain empty after reload"
+        );
+        settings.add_entry();
+        assert_ne!(settings.entries[0].id, second, "deleted IDs are not reused");
+    }
+
+    #[test]
+    fn damaged_catalog_ids_and_selection_are_repaired() {
+        let mut settings = Settings::default();
+        settings.entries.push(Entry::default());
+        settings.entries.push(Entry {
+            id: 0,
+            ..Default::default()
+        });
+        settings.selected = Some(99);
+        settings.sanitize();
+        let ids: std::collections::HashSet<_> =
+            settings.entries.iter().map(|entry| entry.id).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(!ids.contains(&0));
+        assert_eq!(settings.selected, Some(settings.entries[0].id));
+        settings.add_entry();
+        assert_eq!(settings.entries.len(), 4);
+        assert!(!ids.contains(&settings.entries[3].id));
+    }
 }
