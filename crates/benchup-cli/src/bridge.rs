@@ -713,7 +713,10 @@ impl Client {
     /// Connects and pairs; the bridge must prove it knows the token too.
     fn connect(&self) -> Result<WebSocket<TcpStream>, ClientError> {
         let address = SocketAddr::from((Ipv4Addr::LOCALHOST, self.port));
-        let stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|e| match e.kind() {
+        // Windows can take more than two seconds to report a refused loopback
+        // connection. Let that refusal arrive so bridge startup and takeover
+        // distinguish an absent listener from an unresponsive one.
+        let stream = TcpStream::connect_timeout(&address, AUTH_TIMEOUT).map_err(|e| match e.kind() {
             std::io::ErrorKind::ConnectionRefused => ClientError::NoBridge,
             _ => ClientError::Failed(format!("cannot reach the bridge on 127.0.0.1:{}: {e}", self.port)),
         })?;

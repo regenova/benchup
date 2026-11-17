@@ -19,7 +19,8 @@
         "changes": [
           "Connect AI agents to the running app through the BenchUp bridge and in-app pairing controls.",
           "Follow agent activity, status, and task completion in the viewport, with guided Codex setup and improved token refresh controls.",
-          "Use more reliable agent modeling tools, scoped zoom, project reviews, and batch operations."
+          "Use more reliable agent modeling tools, scoped zoom, project reviews, and batch operations.",
+          "Start or take over a local agent bridge reliably on Windows when no bridge is listening."
         ]
       },
       {
