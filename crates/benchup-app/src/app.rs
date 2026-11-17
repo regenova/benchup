@@ -69,6 +69,8 @@ pub(crate) mod surface_appearance;
 mod grid;
 #[path = "grain_direction.rs"]
 mod grain_direction;
+#[path = "printer_volume.rs"]
+mod printer_volume;
 #[path = "measurement_tools.rs"]
 mod measurement_tools;
 #[path = "move_tool.rs"]
@@ -2732,6 +2734,12 @@ impl BenchUpApp {
                     }
                     if let Some(tool) = self.general_settings.tool_for_key(key) {
                         self.set_tool(tool);
+                        continue;
+                    }
+                    // Tool shortcuts win over the volume toggle, so a conflicting
+                    // assignment can never shadow a tool.
+                    if self.general_settings.volume.hotkey() == Some(key) {
+                        self.toggle_printer_volume(ctx);
                         continue;
                     }
                     match key {
@@ -5947,6 +5955,8 @@ impl BenchUpApp {
             && self.measurement.as_ref().is_none_or(|m| {
                 m.complete && m.dimension_id.is_some() && self.length_input.trim().is_empty()
             });
+        let reference_bounds = self.general_settings.volume.visible
+            .then(|| self.general_settings.volume.bounds());
         let key = ((self.modeling.is_none() || self.tool == Tool::Scale)
             && self.grain_anchor.is_none()
             && self.paste_preview.is_none()
@@ -5964,6 +5974,7 @@ impl BenchUpApp {
             display: display.clone(),
             surface_catalog: surface_catalog.clone(),
             dark: ui.visuals().dark_mode,
+            reference_bounds,
             tool: self.tool,
             selected: selected.clone(),
             hover,
@@ -6002,6 +6013,9 @@ impl BenchUpApp {
                 let v = axis.vector() * renderer::ReferenceFade::new(camera).axis_length();
                 references.axis_line(camera, -v, DVec3::ZERO, 0.85, self.axis_color(axis).gamma_multiply(0.35));
                 references.axis_line(camera, DVec3::ZERO, v, 1.1, self.axis_color(axis).gamma_multiply(0.8));
+            }
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut references);
             }
             self.add_drawing_preview(&mut references, camera, ui);
             self.scene_cache.paint_resident(key, model, &self.face_cache, entities, ui, rect, references);
@@ -6053,7 +6067,10 @@ impl BenchUpApp {
                 && !selected_entities.is_empty();
             let mut mesh = renderer::Mesh::cached(camera, size, &mut self.scene_cache);
             mesh.remap_agent_effects(model);
-            mesh.set_scene_clip_planes(camera, self.render_model.bounds());
+            mesh.set_scene_clip_planes(camera, renderer::include_reference_bounds(
+                self.render_model.bounds(), reference_bounds,
+            ));
+            mesh.set_reference_bounds(reference_bounds);
             mesh.reference_image_depth_bounds(model);
             mesh.set_pixels_per_point(ui.ctx().pixels_per_point());
             mesh.set_display(display);
@@ -6275,6 +6292,9 @@ impl BenchUpApp {
                 display,
                 &faces,
             );
+            if self.general_settings.volume.visible {
+                self.general_settings.volume.paint(&mut mesh);
+            }
             let grain_preview = self.history_preview.is_none()
                 .then(|| self.grain_preview_axes())
                 .unwrap_or_default();
@@ -6976,6 +6996,7 @@ impl BenchUpApp {
                 p.galley(r.min + egui::vec2(12., 10.), galley, colors.ink);
             }
         }
+        self.paint_volume_warning(ui.ctx(), &p, rect, colors.paper, colors.ink, cache_revision);
     }
     fn edit_context_bar(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);

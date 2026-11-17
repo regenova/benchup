@@ -75,7 +75,7 @@ async function validate(sources) {
   const projectedLayout=device.createBindGroupLayout({entries:[
    {binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float'}},
    {binding:1,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'filtering'}},
-   {binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:'uniform',minBindingSize:32}}
+   {binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:'uniform',minBindingSize:144}}
   ]});
   const projectedPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[projectedLayout]});
   for(const srgb of [false,true])for(const effects of [false,true]){
@@ -91,6 +91,36 @@ async function validate(sources) {
   ])await make(modules['resident_scene.wgsl'],vertex,fragment,buffers,format);
   const robot=await make(modules['agent_robot.wgsl'],'robot_vertex','robot_color',[]);
   const departing=await make(modules['agent_robot.wgsl'],'ghost_vertex','ghost_color',[ghost]);
+  const overflowFaces=await make(modules['edges.wgsl'],'vertex_main','fragment_faces_effect',[compact],'rgba8unorm',projectedPipelineLayout);
+  // Sample the shared overflow shader across all six boundaries, including
+  // points on the boundary and inside the very same crossing face.
+  const positions=[[0,0,.128],[-.128,0,.128],[.128,0,.128],[0,-.128,.128],[0,.128,.128],[0,0,0],[0,0,.256],
+   [-.2,0,.128],[.2,0,.128],[0,-.2,.128],[0,.2,.128],[0,0,-.02],[0,0,.3],[-.05,0,.128],[.05,0,.128]];
+  const overflowProbe=device.createShaderModule({code:sources['surface_appearance.wgsl']+`
+   @group(0) @binding(0) var<storage,read_write> samples: array<vec4<f32>>;
+   @compute @workgroup_size(1) fn probe(@builtin(global_invocation_id) id:vec3<u32>) {
+    let points=array<vec3<f32>,${positions.length}>(${positions.map(p=>`vec3<f32>(${p.join(',')})`).join(',')});
+    let low=vec4<f32>(-.128,-.128,0.0,1.0);let high=vec4<f32>(.128,.128,.256,0.0);
+    let color=reference_overflow_color(points[id.x],low,high);
+    let tinted=reference_overflow_tint(vec4<f32>(.2,.3,.4,.6),points[id.x],low,high,false);
+    let disabled=reference_overflow_color(points[id.x],vec4<f32>(low.xyz,0.0),high);
+    samples[id.x]=vec4<f32>(color.a,tinted.a,tinted.r,disabled.a);
+   }`});
+  const overflowPipeline=await device.createComputePipelineAsync({layout:'auto',compute:{module:overflowProbe,entryPoint:'probe'}});
+  const overflowOutput=device.createBuffer({size:positions.length*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+  const overflowRead=device.createBuffer({size:positions.length*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  const overflowBind=device.createBindGroup({layout:overflowPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:overflowOutput}}]});
+  const overflowEncoder=device.createCommandEncoder(),overflowPass=overflowEncoder.beginComputePass();
+  overflowPass.setPipeline(overflowPipeline);overflowPass.setBindGroup(0,overflowBind);overflowPass.dispatchWorkgroups(positions.length);overflowPass.end();
+  overflowEncoder.copyBufferToBuffer(overflowOutput,0,overflowRead,0,positions.length*16);device.queue.submit([overflowEncoder.finish()]);
+  await overflowRead.mapAsync(GPUMapMode.READ);const overflowValues=new Float32Array(overflowRead.getMappedRange());
+  for(let i=0;i<positions.length;i++){
+   const outside=i>=7&&i<=12;
+   for(const [column,expected] of [[0,outside ? .35 : 0],[1,.6],[2,outside ? .34 : .2],[3,0]]){
+    if(Math.abs(overflowValues[i*4+column]-expected)>1e-5)throw Error(`Reference overflow differs at ${i}:${column}`);
+   }
+  }
+  overflowRead.unmap();overflowOutput.destroy();overflowRead.destroy();
   const W=192,H=192;
   const capture=async(pipeline,bind,vertices=null,count=6)=>{
    const image=device.createTexture({size:[W,H],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
@@ -121,7 +151,8 @@ async function validate(sources) {
    const base=i*32;dv.setFloat32(base,p[0],true);dv.setFloat32(base+4,p[1],true);dv.setFloat32(base+8,.5,true);
    [145,160,174,255].forEach((v,j)=>dv.setUint8(base+12+j,v));dv.setFloat32(base+24,-1,true);dv.setFloat32(base+28,10,true);
   }
-  const geometry=buffer(data,GPUBufferUsage.VERTEX),effectData=new Float32Array([10,-1,0,1,W,H,1,0]);
+  const geometry=buffer(data,GPUBufferUsage.VERTEX),effectData=new Float32Array(36);
+  effectData.set([10,-1,0,1,W,H,1,0]);
   const effectUniform=buffer(effectData,GPUBufferUsage.UNIFORM);
   const empty=device.createTexture({size:[1,1],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING});
   const effectBind=device.createBindGroup({layout:projectedLayout,entries:[{binding:0,resource:empty.createView()},{binding:1,resource:device.createSampler()},{binding:2,resource:{buffer:effectUniform}}]});
@@ -158,9 +189,23 @@ async function validate(sources) {
    dissolveCoverage.push(image.reduce((n,v,i)=>n+Number(i%4===3&&v>0),0)/(W*H));
   }
   if(dissolveCoverage[0]<.99||dissolveCoverage[1]<.35||dissolveCoverage[1]>.65||dissolveCoverage[2]!==0)throw Error('Incorrect digital dissolve: '+dissolveCoverage);
+  effectData.fill(0);effectData.set([20,-1,0,1,W,H,0,0]);
+  for(let i=0;i<4;i++)effectData[8+i*5]=1;
+  effectData.set([-.25,-.25,0,1],28);effectData.set([.25,.25,1,0],32);
+  device.queue.writeBuffer(effectUniform,0,effectData);
+  const overflowImage=await capture(overflowFaces,effectBind,geometry,3);samples.push(overflowImage);
+  const pixel=(image,x,y)=>Array.from(image.slice((y*W+x)*4,(y*W+x)*4+4));
+  const expect=(actual,expected,label)=>{if(actual.some((v,i)=>Math.abs(v-expected[i])>2))throw Error(label+': '+actual)};
+  expect(pixel(overflowImage,W/2,H/2),[145,160,174,255],'inside portion of crossing face');
+  expect(pixel(overflowImage,W/8,H/2),[184,115,120,255],'overflowing portion of crossing face');
+  const unaffectedEdges=await capture(assembly,effectBind,geometry,3);
+  expect(pixel(unaffectedEdges,W/8,H/2),[145,160,174,255],'edges retain their original color');
+  effectData[31]=0;device.queue.writeBuffer(effectUniform,0,effectData);
+  const hiddenVolume=await capture(overflowFaces,effectBind,geometry,3);
+  expect(pixel(hiddenVolume,W/8,H/2),[145,160,174,255],'hiding the volume removes its tint');
   const sheet=new OffscreenCanvas(W*5,(H+32)*Math.ceil(samples.length/5)),ctx=sheet.getContext('2d');
   ctx.fillStyle='#101820';ctx.fillRect(0,0,sheet.width,sheet.height);ctx.font='14px sans-serif';ctx.fillStyle='#d9f8ff';
-  const captions=['Looking / 0.2s','Looking / 1.1s','Preparing / 0.2s','Preparing / 0.8s','Reveal / start','Reveal / half','Reveal / complete','Scan / bottom','Scan / top','Scan / bottom','Scan / top','Dissolve / start','Dissolve / half','Dissolve / complete'];
+  const captions=['Looking / 0.2s','Looking / 1.1s','Preparing / 0.2s','Preparing / 0.8s','Reveal / start','Reveal / half','Reveal / complete','Scan / bottom','Scan / top','Scan / bottom','Scan / top','Dissolve / start','Dissolve / half','Dissolve / complete','Reference overflow'];
   for(const [i,bytes] of samples.entries()){
    const pixels=bytes.slice();for(let j=0;j<pixels.length;j+=4)if(pixels[j+3])for(let k=0;k<3;k++)pixels[j+k]=Math.min(255,Math.round(pixels[j+k]*255/pixels[j+3]));
    const image=new OffscreenCanvas(W,H);image.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pixels),W,H),0,0);
@@ -169,6 +214,6 @@ async function validate(sources) {
   const blob=await sheet.convertToBlob({type:'image/png'});
   const preview=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob)});
   const error=await device.popErrorScope();if(error)throw Error(error.message);
-  return {passed:true,shader_modules:3,pipelines:pipelineCount,eye_motion_pixels:eyeMotion,gear_motion_pixels:gearMotion,reveal_coverage:coverage,dissolve_coverage:dissolveCoverage,scan_rows:scanRows,adapter:adapter.info.vendor,preview};
+  return {passed:true,shader_modules:4,pipelines:pipelineCount,overflow_samples:positions.length,eye_motion_pixels:eyeMotion,gear_motion_pixels:gearMotion,reveal_coverage:coverage,dissolve_coverage:dissolveCoverage,scan_rows:scanRows,adapter:adapter.info.vendor,preview};
  }finally{device.destroy()}
 }

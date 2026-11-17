@@ -237,10 +237,14 @@ fn grain_direction_coverage(packed: vec4<f32>, dx: vec4<f32>, dy: vec4<f32>, wid
     return coverage;
 }
 
-// Precision display modes retain their projected buffers too. Only these
-// fragment variants consume the live animation parameters; ordinary rendering
-// and offscreen shadow masks keep their existing binding layouts.
-struct AgentEffect { parameters: vec4<f32>, size: vec4<f32> }
+// Precision display modes retain their projected buffers too. Face fragments
+// combine live animation and reference-volume bounds without new geometry;
+// ordinary rendering and offscreen masks keep their existing binding layouts.
+struct AgentEffect {
+    parameters: vec4<f32>, size: vec4<f32>,
+    volume_inverse: mat4x4<f32>, volume_depth: vec4<f32>,
+    volume_low: vec4<f32>, volume_high: vec4<f32>,
+}
 @group(0) @binding(2) var<uniform> agent_effect: AgentEffect;
 fn active_stamp(stamp: f32) -> f32 {
     // Old retained vertices must not reassemble when the timer wraps later.
@@ -248,6 +252,22 @@ fn active_stamp(stamp: f32) -> f32 {
 }
 fn animated_color(input: EdgeVertex, color: vec4<f32>) -> vec4<f32> {
     return agent_surface(color, active_stamp(input.effect), input.uv, agent_effect.size.xy, agent_effect.parameters);
+}
+fn projected_face_color(input: EdgeVertex, color: vec4<f32>) -> vec4<f32> {
+    let animated = animated_color(input, color);
+    if agent_effect.volume_low.w == 0.0 { return animated; }
+    var depth = input.position.z;
+    if agent_effect.volume_depth.w != 0.0 {
+        depth = agent_effect.volume_depth.x + (depth - agent_effect.volume_depth.z) * agent_effect.volume_depth.y / 0.8;
+    }
+    let world = agent_effect.volume_inverse * vec4<f32>(input.uv * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0), depth, 1.0);
+    return reference_overflow_tint(animated, world.xyz / world.w,
+        agent_effect.volume_low, agent_effect.volume_high, agent_effect.size.w != 0.0);
+}
+@fragment fn fragment_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
+    let coverage = stroke_coverage(input);
+    if coverage < 0.001 { discard; }
+    return projected_face_color(input, input.color) * coverage;
 }
 @fragment fn fragment_main_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
     let coverage = stroke_coverage(input);
@@ -264,16 +284,16 @@ fn animated_color(input: EdgeVertex, color: vec4<f32>) -> vec4<f32> {
     let coverage = stroke_coverage(input);
     let color = shade_finish(input, input.color, 0.0);
     if coverage < 0.001 { discard; }
-    return animated_color(input, color) * coverage;
+    return projected_face_color(input, color) * coverage;
 }
 @fragment fn fragment_shadow_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
     let coverage = textureSample(shadow_mask, shadow_sampler, input.uv).r;
     let color = mix(input.color, input.shadow_color, coverage * select(0.0, 1.0, input.shadow_color.a > 0.0));
-    return animated_color(input, color);
+    return projected_face_color(input, color);
 }
 @fragment fn fragment_material_shadow_faces_effect(input: EdgeVertex) -> @location(0) vec4<f32> {
     let coverage = textureSample(shadow_mask, shadow_sampler, input.uv).r;
     let amount = coverage * select(0.0, 1.0, input.shadow_color.a > 0.0);
     let color = shade_finish(input, mix(input.color, input.shadow_color, amount), amount);
-    return animated_color(input, color);
+    return projected_face_color(input, color);
 }

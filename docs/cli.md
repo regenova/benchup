@@ -85,7 +85,7 @@ agent ──MCP (stdio) or benchup … --live──▶ benchup bridge (127.0.0.1
 ```
 
 1. In BenchUp, open **Settings → Agent connection** and turn on **Allow agent connection**. It is off by default; the setting is remembered.
-2. Copy the pairing token shown there (or one of the setup snippets) and give it to the agent as `BENCHUP_AGENT_TOKEN`. The token stays on that device; **New token** replaces it and disconnects agents that use the old one.
+2. Copy the pairing token shown there (or one of the setup snippets) and give it to the agent as `BENCHUP_AGENT_TOKEN`. The token stays on that device; **Refresh token** asks for confirmation before replacing it and disconnecting agents that use the old one.
 3. Connect the agent:
 
    ```sh

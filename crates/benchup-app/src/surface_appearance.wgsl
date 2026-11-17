@@ -1,5 +1,25 @@
 // Shared by the retained world renderer and the clipped/annotation renderer.
 // Coordinates are in metres: part space for wood, face-plane space for glue.
+// A translucent warning coat is evaluated per fragment, never per object or
+// triangle. Keep the original face alpha and let its material remain visible.
+fn reference_overflow_color(point: vec3<f32>, low: vec4<f32>, high: vec4<f32>) -> vec4<f32> {
+    if low.w == 0.0 { return vec4<f32>(0.0); }
+    let tolerance = max((high.xyz - low.xyz) * 0.000001, vec3<f32>(0.0000001));
+    if all(point >= low.xyz - tolerance) && all(point <= high.xyz + tolerance) {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(vec3<f32>(1.0, 0.12, 0.08) * 0.35, 0.35);
+}
+fn reference_overflow_tint(color: vec4<f32>, point: vec3<f32>, low: vec4<f32>, high: vec4<f32>, linear_target: bool) -> vec4<f32> {
+    if low.w == 0.0 { return color; }
+    var warning = reference_overflow_color(point, low, high);
+    if warning.a == 0.0 { return color; }
+    if linear_target {
+        warning = vec4<f32>(finish_srgb_to_linear(warning.rgb / max(warning.a, 0.000001)) * warning.a, warning.a);
+    }
+    return vec4<f32>(color.rgb * (1.0 - warning.a) + warning.rgb * color.a, color.a);
+}
+
 fn finish_color(rgb: vec3<f32>, alpha: f32, p: vec3<f32>, finish: vec4<f32>) -> vec3<f32> {
     return finish_color_with_derivatives(rgb, alpha, p, finish, dpdx(p.xy), dpdy(p.xy), fwidth(p));
 }

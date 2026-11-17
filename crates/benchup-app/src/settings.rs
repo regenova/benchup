@@ -207,6 +207,7 @@ pub(super) struct GeneralSettings {
     pub auto_group_new_shapes: bool,
     pub show_fps: bool,
     pub default_units: benchup_core::UnitSettings,
+    pub volume: super::printer_volume::Settings,
     pub tool_keys: Vec<String>,
     pub stock: stock_settings::Settings,
     pub export_scale: export_scale::Preferences,
@@ -232,6 +233,7 @@ impl Default for GeneralSettings {
             auto_group_new_shapes: false,
             show_fps: false,
             default_units: Default::default(),
+            volume: Default::default(),
             stock: Default::default(),
             export_scale: Default::default(),
             agent: Default::default(),
@@ -297,6 +299,7 @@ impl GeneralSettings {
         self.space_mouse.normalize();
         self.stock.normalize();
         self.export_scale.normalize();
+        self.volume.sanitize();
         self.agent.normalize();
         // Earlier builds saved bare codes; every catalog now uses language_REGION.
         match self.language.as_str() {
@@ -651,6 +654,7 @@ impl BenchUpApp {
                     tr!("settings.automatically_group_new_shapes"),
                 )
                 .on_hover_text(tr!("settings.group_new_shapes_outside_existing_objects"));
+                self.reference_volume_settings(ui);
             }
             Section::Rendering => {
                 ui.checkbox(&mut self.doc.display.shadow_antialiasing, tr!("settings.shadow_antialiasing"))
@@ -765,11 +769,20 @@ impl BenchUpApp {
                         }
                     });
                 }
+                let reference_label = tr!("settings.toggle_reference_volume");
+                if reference_label.to_lowercase().contains(&query) {
+                    matches += 1;
+                    table.row(ui, "settings_volume_hotkey", |column, ui| {
+                        if column == 0 { ui.text_label(reference_label); }
+                        else { self.reference_volume_shortcut(ui); }
+                    });
+                }
                 if matches == 0 {
                     ui.text_weak(tr!("settings.no_tools_match_your_search"));
                 }
                 if ui.button(tr!("settings.restore_default_shortcuts")).clicked() {
                     self.general_settings.tool_keys = GeneralSettings::default().tool_keys;
+                    self.general_settings.volume.hotkey = None;
                 }
             }
             Section::Units => {
@@ -850,6 +863,45 @@ fn color_row(ui: &mut egui::Ui, label: &str, color: &mut [u8; 3]) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn printer_volume_persists_and_defaults_for_older_saves() {
+        // Preferences saved before this feature must still load.
+        let older: GeneralSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            older.volume,
+            printer_volume::Settings::default(),
+            "missing volume settings fall back to the defaults"
+        );
+
+        let mut settings = GeneralSettings::default();
+        settings.volume.visible = true;
+        settings.volume.entries[0].size_m = [0.3, 0.25, 0.4];
+        settings.volume.hotkey = Some("V".into());
+
+        let saved = serde_json::to_string(&settings).unwrap();
+        let restored: GeneralSettings = serde_json::from_str(&saved).unwrap();
+        assert!(restored.volume.visible);
+        assert_eq!(restored.volume.entries[0].size_m, [0.3, 0.25, 0.4]);
+        assert_eq!(restored.volume.hotkey.as_deref(), Some("V"));
+    }
+
+    #[test]
+    fn normalize_keeps_valid_volume_and_clamps_damaged_values() {
+        let mut settings = GeneralSettings::default();
+        // A zero width is repaired, a non-finite depth falls back, an absurd
+        // height clamps: each axis is handled independently.
+        settings.volume.entries[0].size_m = [0., f64::INFINITY, 1e12];
+        settings.normalize();
+        assert_eq!(
+            settings.volume.entries[0].size_m,
+            [
+                printer_volume::MIN_M,
+                printer_volume::Settings::default().size_m()[1],
+                printer_volume::MAX_M
+            ]
+        );
+    }
+
     fn rendered_text(shapes: &[egui::epaint::ClippedShape]) -> Vec<String> {
         fn collect(shape: &egui::Shape, text: &mut Vec<String>) {
             match shape {
@@ -1325,4 +1377,73 @@ mod tests {
         assert!(text.iter().any(|label| label == "Language"));
         assert!(text.iter().any(|label| label == "English"));
     }
+    #[test]
+    fn legacy_toolbar_preferences_keep_reference_volume_visibility_and_shortcut() {
+        let mut settings: GeneralSettings = serde_json::from_str(
+            r#"{"volume":{"show_button":false,"visible":true,"size_m":[0.3,0.2,0.1],"hotkey":"V"}}"#,
+        ).unwrap();
+        settings.normalize();
+        assert!(settings.volume.visible);
+        assert_eq!(settings.volume.entries[0].size_m, [0.3, 0.2, 0.1]);
+        assert_eq!(settings.volume.hotkey.as_deref(), Some("V"));
+        assert!(!serde_json::to_string(&settings.volume).unwrap().contains("show_button"));
+    }
+
+    #[test]
+    fn reference_volume_values_are_in_tools_and_shortcut_is_searchable() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.general_settings.section = Section::Tools;
+        let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
+        let text = rendered_text(&output.shapes);
+        assert!(text.iter().any(|label| label == tr!("settings.printer_and_tool_volume")));
+        assert!(text.iter().any(|label| label == tr!("settings.width_x")));
+
+        app.general_settings.section = Section::Shortcuts;
+        app.shortcut_filter = "reference volume".into();
+        app.general_settings.volume.hotkey = Some("V".into());
+        let output = ctx.run_test_ui(egui::RawInput::default(), |ui| app.settings_contents(ui));
+        let text = rendered_text(&output.shapes);
+        assert!(text.iter().any(|label| label == tr!("settings.toggle_reference_volume")));
+        assert!(text.iter().any(|label| label == "V"));
+        assert!(!text.iter().any(|label| label == tr!("settings.no_tools_match_your_search")));
+    }
+
+    #[test]
+    fn every_printer_volume_label_is_translated_in_all_catalogs() {
+        const CATALOGS: [(&str, &str); 6] = [
+            ("en_US", include_str!("../../../assets/i18n/en_US.json")),
+            ("es_419", include_str!("../../../assets/i18n/es_419.json")),
+            ("it_IT", include_str!("../../../assets/i18n/it_IT.json")),
+            ("pt_BR", include_str!("../../../assets/i18n/pt_BR.json")),
+            ("vi_VN", include_str!("../../../assets/i18n/vi_VN.json")),
+            ("zh_CN", include_str!("../../../assets/i18n/zh_CN.json")),
+        ];
+        const KEYS: [&str; 13] = [
+            "app.show_or_hide_the_printer_or_tool_volume",
+            "app.the_model_is_outside_the_printer_or_tool_volume",
+            "settings.printer_and_tool_volume",
+            "settings.a_locked_reference_box_for_a_printer_s_build",
+            "settings.width_x",
+            "settings.depth_y",
+            "settings.height_z",
+            "settings.clear_the_toggle_shortcut",
+            "reference_volume.entry",
+            "reference_volume.add",
+            "reference_volume.empty",
+            "reference_volume.settings_hint",
+            "settings.toggle_reference_volume",
+        ];
+        for (language, raw) in CATALOGS {
+            let catalog: serde_json::Value = serde_json::from_str(raw).unwrap();
+            for key in KEYS {
+                let text = catalog
+                    .get(key)
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_else(|| panic!("{language} is missing {key}"));
+                assert!(!text.trim().is_empty(), "{language} has an empty {key}");
+            }
+        }
+    }
+
 }

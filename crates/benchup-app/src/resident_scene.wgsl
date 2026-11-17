@@ -21,6 +21,8 @@ struct Camera {
     scale_pivot: vec4<f32>,
     scale_factors: vec4<f32>,
     agent_effect: vec4<f32>,
+    volume_low: vec4<f32>,
+    volume_high: vec4<f32>,
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var interaction_states: texture_2d<u32>;
@@ -78,6 +80,7 @@ struct FaceOutput {
     @location(8) clip: vec3<f32>,
     @location(5) grain: vec3<f32>,
     @location(6) @interpolate(flat) finish: vec4<f32>,
+    @location(9) world: vec3<f32>,
 }
 fn target_color(color: vec4<f32>) -> vec4<f32> {
     if camera.flags.x == 0.0 { return color; }
@@ -117,6 +120,7 @@ fn surface_vertex(position: vec3<f32>, normal: vec3<f32>, anchor: vec3<f32>, col
     let shaded = vec4<f32>(floor(material.rgb * brightness * 255.0 + vec3<f32>(0.5)) / 255.0, material.a);
     var output: FaceOutput;
     output.position = camera.matrix * vec4<f32>(preview_point(position,state),1.0);
+    output.world = preview_point(position,state);
     if ((state&64u)!=0u && (camera.interaction.w&4u)==0u) || (camera.interaction.y!=0u && (state&4u)==0u) {output.position=vec4<f32>(2.0,2.0,2.0,1.0);}
     output.stamp = agent_stamp(interaction);
     output.clip = output.position.xyw;
@@ -189,7 +193,8 @@ fn face_color(input: FaceOutput) -> @location(0) vec4<f32> {
     let amount = shadow_coverage(input);
     let dark = floor(input.color.rgb * (1.0-camera.shadow_params.x) * 255.0 + vec3<f32>(0.5))/255.0;
     let rgb = mix(input.color.rgb,dark,amount);
-    return target_color(agent_color(vec4<f32>(rgb, input.color.a), input.stamp, input.clip));
+    let color = agent_color(vec4<f32>(rgb, input.color.a), input.stamp, input.clip);
+    return reference_overflow_tint(target_color(color), input.world, camera.volume_low, camera.volume_high, camera.flags.x != 0.0);
 }
 @fragment
 fn material_color(input: FaceOutput) -> @location(0) vec4<f32> {
@@ -197,7 +202,8 @@ fn material_color(input: FaceOutput) -> @location(0) vec4<f32> {
     let dark = floor(input.color.rgb * (1.0-camera.shadow_params.x) * 255.0 + vec3<f32>(0.5))/255.0;
     let rgb = mix(input.color.rgb,dark,amount);
     let finish = vec4<f32>(input.finish.xyz, input.finish.w * (1.0 - amount * camera.shadow_params.x));
-    return target_color(agent_color(vec4<f32>(finish_color(rgb, input.color.a, input.grain, finish), input.color.a), input.stamp, input.clip));
+    let color = agent_color(vec4<f32>(finish_color(rgb, input.color.a, input.grain, finish), input.color.a), input.stamp, input.clip);
+    return reference_overflow_tint(target_color(color), input.world, camera.volume_low, camera.volume_high, camera.flags.x != 0.0);
 }
 // Offset depth only across the actual incident face, never its extension past
 // a silhouette. Using homogeneous planes also works at near-plane crossings.

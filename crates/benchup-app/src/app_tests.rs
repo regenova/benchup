@@ -7681,3 +7681,252 @@ fn focus_picker_highlights_like_pointer_without_selecting() {
 
 #[path = "follow_me_ui_tests.rs"]
 mod follow_me_ui_tests;
+
+#[test]
+fn toggling_the_printer_volume_frames_it_and_leaves_the_camera_alone_when_hidden() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: false,
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
+        ..Default::default()
+    };
+    let before = h.app.doc.camera.clone();
+
+    h.app.toggle_printer_volume(&h.ctx);
+    assert!(h.app.general_settings.volume.visible);
+
+    // The framed target is the volume's centre: X/Y on the origin, half the
+    // height up, because the base sits on Z = 0.
+    let target = h.app.doc.camera.target;
+    assert!(target.x.abs() < 1e-9, "x {}", target.x);
+    assert!(target.y.abs() < 1e-9, "y {}", target.y);
+    assert!((target.z - 0.128).abs() < 1e-9, "z {}", target.z);
+    assert!(
+        h.app.doc.camera.distance < before.distance,
+        "fitting should move the camera closer: {} -> {}",
+        before.distance,
+        h.app.doc.camera.distance
+    );
+
+    // Hiding the box must not disturb the view.
+    let framed = h.app.doc.camera.clone();
+    h.app.toggle_printer_volume(&h.ctx);
+    assert!(!h.app.general_settings.volume.visible);
+    assert_eq!(h.app.doc.camera.target, framed.target);
+    assert_eq!(h.app.doc.camera.distance, framed.distance);
+}
+
+#[test]
+fn reference_volume_is_below_sections_and_toggles_from_the_view_menu() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume.add_entry();
+    h.app.general_settings.volume.entries[1].name = "Room".into();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, tr!("app.view")));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let sections = text_position(&output, tr!("view_controls.sections"));
+    let reference = text_position(&output, tr!("settings.printer_and_tool_volume"));
+    assert!(reference.y > sections.y);
+    h.click(reference);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let label = tr!("reference_volume.entry", number = 1);
+    h.click(text_position(&output, &label));
+    assert!(h.app.general_settings.volume.visible);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Room"));
+    assert!(h.app.general_settings.volume.visible);
+    assert_eq!(h.app.general_settings.volume.selected, Some(h.app.general_settings.volume.entries[1].id));
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Room"));
+    assert!(!h.app.general_settings.volume.visible);
+}
+
+#[test]
+fn volume_warning_is_gated_on_visibility_and_geometry() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        entries: vec![printer_volume::Entry { size_m: [0.256, 0.256, 0.256], ..Default::default() }],
+        ..Default::default()
+    };
+    assert!(!h.app.volume_exceeded(&h.ctx, 1), "an empty model fits the volume");
+
+    // A board well past the 256 mm cube.
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::new(-2., -2., 0.), DVec3::new(2., 2., 2.))
+        .unwrap();
+    // A new scene revision is what invalidates the memoized answer.
+    assert!(
+        h.app.volume_exceeded(&h.ctx, 2),
+        "geometry outside the volume must raise the warning"
+    );
+    // Same revision reuses the cached answer.
+    assert!(h.app.volume_exceeded(&h.ctx, 2));
+
+    h.app.general_settings.volume.visible = false;
+    assert!(
+        !h.app.volume_exceeded(&h.ctx, 3),
+        "hiding the box must also hide the warning"
+    );
+}
+
+#[test]
+fn shortcut_toggles_the_printer_volume_through_the_keyboard() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: false,
+        hotkey: Some("V".into()),
+        ..Default::default()
+    };
+    let event = |pressed| egui::Event::Key {
+        key: Key::V,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let press = |h: &mut Harness| {
+        h.frame(vec![event(true)], egui::Modifiers::NONE);
+        h.frame(vec![event(false)], egui::Modifiers::NONE);
+    };
+
+    press(&mut h);
+    assert!(h.app.general_settings.volume.visible, "V shows the volume");
+    press(&mut h);
+    assert!(!h.app.general_settings.volume.visible, "V hides it again");
+}
+
+/// The volume is a viewport reference, never document content. These tests pin the
+/// boundary so saving, exporting, selecting and copying can never pick it up.
+#[test]
+fn volume_settings_never_enter_the_saved_document() {
+    let mut h = Harness::new();
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    let before = serde_json::to_string(&h.app.doc).unwrap();
+
+    h.app.general_settings.volume.visible = true;
+    h.app.general_settings.volume.entries[0].size_m = [7., 7., 7.];
+    h.app.general_settings.volume.hotkey = Some("V".into());
+
+    let after = serde_json::to_string(&h.app.doc).unwrap();
+    assert_eq!(
+        before, after,
+        "volume settings must not reach the document that is saved"
+    );
+    for key in ["size_m", "hotkey"] {
+        assert!(
+            !after.contains(key),
+            "saved document must not contain {key}"
+        );
+    }
+}
+
+#[test]
+fn the_volume_is_never_selectable() {
+    fn select_all(h: &mut Harness) {
+        // egui needs the matching release, like Harness::key does.
+        let modifiers = egui::Modifiers::CTRL;
+        for pressed in [true, false] {
+            h.frame(
+                vec![egui::Event::Key {
+                    key: Key::A,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers,
+                }],
+                modifiers,
+            );
+        }
+    }
+
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        ..Default::default()
+    };
+    // Only the volume is on screen; select all must still find nothing.
+    select_all(&mut h);
+    assert!(
+        h.app.selected.is_empty(),
+        "the volume must not be selectable: {:?}",
+        h.app.selected
+    );
+
+    // With real geometry, select all still selects only model entities.
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    select_all(&mut h);
+    assert_eq!(h.app.selected, h.app.doc.model.selectable_entities());
+    assert!(
+        h.app
+            .selected
+            .iter()
+            .all(|id| h.app.doc.model.contains_entity(id)),
+        "every selected id must be a model entity"
+    );
+}
+
+#[test]
+fn copying_with_only_the_volume_visible_captures_nothing() {
+    let mut h = Harness::new();
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        ..Default::default()
+    };
+    h.frame(vec![egui::Event::Copy], egui::Modifiers::NONE);
+    assert!(
+        h.app.clipboard.is_none(),
+        "copy must ignore the volume and stay empty with no selection"
+    );
+
+    let id = h
+        .app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    h.app.selected.insert(id);
+    h.frame(vec![egui::Event::Copy], egui::Modifiers::NONE);
+    let clipboard = h.app.clipboard.as_ref().expect("the selected edge is copied");
+    assert_eq!(clipboard.model.edges.len(), 1);
+    assert_eq!(
+        clipboard.model.vertices.len(),
+        2,
+        "only the selected edge's vertices travel, no volume geometry"
+    );
+}
+
+#[test]
+fn exports_contain_only_model_geometry() {
+    let mut h = Harness::new();
+    h.app
+        .doc
+        .model
+        .add_edge(DVec3::ZERO, DVec3::X * 2.)
+        .unwrap();
+    let hidden = crate::interchange::export_obj(&h.app.doc.model).unwrap();
+
+    h.app.general_settings.volume = printer_volume::Settings {
+        visible: true,
+        entries: vec![printer_volume::Entry { size_m: [3., 3., 3.], ..Default::default() }],
+        ..Default::default()
+    };
+    let shown = crate::interchange::export_obj(&h.app.doc.model).unwrap();
+
+    assert_eq!(
+        hidden, shown,
+        "showing the volume must not change exported geometry"
+    );
+    let vertices = shown.lines().filter(|line| line.starts_with("v ")).count();
+    assert_eq!(vertices, 2, "only the model's own two vertices are exported");
+}
