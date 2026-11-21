@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Estimate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.stage { text-decoration: none; }
+  a.btn { text-decoration: none; color: inherit; }
+  .body.estimate { grid-template-columns: 268px 1fr 332px; }
+
+  /* Left: category navigator */
+  .nav { flex: 1; overflow: auto; padding: 0 8px 8px; }
+  .cat { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; padding: 9px 8px; border-radius: 8px; cursor: pointer; }
+  .cat:hover { background: var(--hover); }
+  .cat.on { background: var(--accent-soft); }
+  .cat .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .cat .nm { min-width: 0; }
+  .cat .nm small { display: block; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .cat .amt { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .nav-total { border-top: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 6px; }
+  .nav-total .row { display: flex; justify-content: space-between; color: var(--muted); }
+  .nav-total .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .nav-total .row.big { font-size: 15px; color: var(--ink); }
+  .nav-total .row.big b { font-size: 17px; }
+
+  /* Centre */
+  main.est { background: var(--bg); display: flex; flex-direction: column; }
+  .centre-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .centre-bar .seg { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 3px; display: flex; gap: 2px; }
+  .centre-bar .seg button { height: 28px; padding: 0 14px; border-radius: 6px; color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .centre-bar .seg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+  .centre-bar .facts { display: flex; gap: 18px; color: var(--muted); font-size: 12.5px; }
+  .centre-bar .facts b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .scroll { flex: 1; overflow: auto; padding: 22px 28px 60px; scroll-behavior: smooth; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+  .kpi label { display: block; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .kpi b { display: block; font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi small { color: var(--muted); }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 18px; }
+  .panel h4 { margin: 0 0 10px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; }
+  .stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--bg); }
+  .stack i { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  .legend b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .drivers { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .drivers li { display: flex; gap: 10px; align-items: baseline; line-height: 1.45; }
+  .drivers li .pct { flex: none; width: 42px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent); }
+
+  section.block { margin-bottom: 22px; scroll-margin-top: 12px; }
+  section.block > header.bh { all: unset; display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 8px; }
+  section.block > header.bh h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  section.block > header.bh h3 i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  section.block > header.bh span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  section.block > header.bh span b { color: var(--ink); font-weight: 600; }
+  section.block.flash table { box-shadow: 0 0 0 3px var(--accent-soft); }
+  .est table { table-layout: fixed; }
+  .est th { background: var(--bg); padding: 8px 12px; }
+  .est td { padding: 6px 12px; }
+  .est td small { display: block; color: var(--faint); font-size: 11px; }
+  .est td.num, .est th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .cell-in { width: 100%; max-width: 86px; margin-left: auto; display: block; text-align: right; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; background: var(--bg); font-variant-numeric: tabular-nums; outline: none; }
+  .cell-in:hover { border-color: var(--line-strong); }
+  .cell-in:focus { border-color: var(--ink); background: var(--panel); }
+  .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--bg); color: var(--muted); margin-left: 6px; white-space: nowrap; }
+
+  /* Quote preview: paper in both themes */
+  .desk { display: none; }
+  .desk.show { display: block; }
+  .paper { width: 760px; margin: 0 auto; background: #fffefb; color: #23272e; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 18px 48px rgba(30,25,15,.18); padding: 40px 48px 36px; font-size: 12.5px; }
+  .paper .ph { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1.5px solid #23272e; }
+  .paper .ph .lg { width: 26px; height: 26px; border-radius: 7px; background: #d63b32; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .paper .ph .brandname { font-weight: 700; font-size: 16px; letter-spacing: .01em; }
+  .paper .ph .rt { margin-left: 16px; line-height: 1.25; }
+  .paper .ph .rt small { display: block; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: #6f747b; }
+  .paper .ph .rt b { font-size: 12.5px; }
+  .paper .ph .gen { margin-left: auto; text-align: right; font-size: 10.5px; color: #6f747b; line-height: 1.4; }
+  .paper .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 22px 0 18px; }
+  .paper .meta label { display: block; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a8f96; margin-bottom: 3px; }
+  .paper .meta .v { line-height: 1.45; }
+  .paper .piece { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: center; padding: 14px 0 16px; border-top: 1px solid #e6e2da; border-bottom: 1px solid #e6e2da; }
+  .paper .piece svg { width: 220px; height: 150px; display: block; }
+  .paper .piece h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+  .paper .piece p { margin: 0; line-height: 1.55; color: #3d424a; }
+  .paper table.q { width: 100%; border: 0; border-radius: 0; background: none; margin-top: 16px; table-layout: auto; }
+  .paper table.q th { background: none; color: #8a8f96; font-size: 9.5px; letter-spacing: .12em; border-bottom: 1px solid #23272e; padding: 6px 4px; }
+  .paper table.q td { border-bottom: 1px solid #ece8e1; padding: 8px 4px; vertical-align: top; color: #23272e; }
+  .paper table.q td small { display: block; color: #8a8f96; font-size: 11px; margin-top: 2px; }
+  .paper table.q td.num, .paper table.q th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .paper .totals { margin: 14px 0 0 auto; width: 280px; }
+  .paper .totals div { display: flex; justify-content: space-between; padding: 4px 4px; font-variant-numeric: tabular-nums; }
+  .paper .totals div.grand { border-top: 1.5px solid #23272e; margin-top: 6px; padding-top: 8px; font-size: 16px; font-weight: 700; }
+  .paper .terms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 22px; padding-top: 14px; border-top: 1px solid #e6e2da; }
+  .paper .terms label { display: block; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a8f96; margin-bottom: 3px; }
+  .paper .notes { margin-top: 16px; color: #3d424a; line-height: 1.55; }
+  .paper .sign { display: flex; justify-content: space-between; margin-top: 30px; color: #8a8f96; font-size: 11px; }
+  .paper .sign span { border-top: 1px solid #b9b4ab; padding-top: 6px; width: 42%; }
+  .attach { width: 760px; margin: 14px auto 0; color: var(--muted); font-size: 12px; display: flex; gap: 8px; align-items: center; }
+
+  /* Right panel */
+  .num-field { display: grid; grid-template-columns: 1fr 108px; align-items: center; gap: 8px; margin-top: 8px; }
+  .num-field label { color: var(--muted); }
+  .unit-in { display: flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; height: 32px; background: var(--panel); }
+  .unit-in:focus-within { border-color: var(--ink); }
+  .unit-in input { width: 100%; border: 0; outline: none; background: none; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .unit-in span { color: var(--faint); margin-left: 4px; font-size: 12px; white-space: nowrap; }
+  .text-in { width: 100%; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--panel); outline: none; }
+  .text-in:focus { border-color: var(--ink); }
+  select.text-in { padding: 0 6px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--ink); cursor: pointer; }
+  .check input { accent-color: var(--accent); width: 15px; height: 15px; }
+  .stat.total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+  .stat.total span, .stat.total b { color: var(--ink); font-size: 15px; font-weight: 600; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
+
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13px; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <div class="project"><b>Hall bench</b><span id="subtitle">Estimate · quote Q-2026-014</span></div>
+      <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage done" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage done" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage active" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <a class="btn" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
+      <button class="btn" data-toast="pdf"><i data-icon="download" data-size="16"></i>Export PDF</button>
+      <button class="btn primary" data-toast="send"><i data-icon="share" data-size="16"></i>Send quote</button>
+    </div>
+  </header>
+
+  <div class="body estimate">
+    <aside class="left">
+      <div class="aside-head"><h2>Breakdown</h2><span class="count" id="hoursHead"></span></div>
+      <div class="nav" id="nav"></div>
+      <div class="nav-total" id="navTotal"></div>
+    </aside>
+
+    <main class="est">
+      <div class="centre-bar">
+        <div class="seg" id="mode">
+          <button class="on" data-mode="breakdown"><i data-icon="list" data-size="15"></i>Breakdown</button>
+          <button data-mode="quote"><i data-icon="sheet" data-size="15"></i>Quote</button>
+        </div>
+        <div class="facts" id="facts"></div>
+      </div>
+      <div class="scroll" id="scroll">
+        <div id="breakdown"></div>
+        <div class="desk" id="desk"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right">
+      <div class="card">
+        <h3>Pricing</h3>
+        <div class="num-field"><label for="rate">Labour rate</label><div class="unit-in"><input id="rate" type="number" min="0" step="1" /><span class="cur"></span><span>/h</span></div></div>
+        <div class="num-field"><label for="wasteWood">Hardwood waste</label><div class="unit-in"><input id="wasteWood" type="number" min="0" max="80" step="1" /><span>%</span></div></div>
+        <div class="num-field"><label for="wasteSheet">Sheet waste</label><div class="unit-in"><input id="wasteSheet" type="number" min="0" max="80" step="1" /><span>%</span></div></div>
+        <div class="num-field"><label for="margin">Margin</label><div class="unit-in"><input id="margin" type="number" min="0" max="300" step="1" /><span>%</span></div></div>
+        <div class="num-field"><label for="vat">VAT</label><div class="unit-in"><input id="vat" type="number" min="0" max="40" step="0.5" /><span>%</span></div></div>
+        <div class="num-field"><label for="currency">Currency</label>
+          <select id="currency" class="text-in"><option value="EUR">€ Euro</option><option value="USD">$ US dollar</option><option value="GBP">£ Pound</option></select></div>
+        <div class="field"><label>Round price</label><div class="segs" id="rounding"><button data-r="1">1</button><button data-r="5">5</button><button data-r="10" class="on">10</button><button data-r="50">50</button></div></div>
+      </div>
+      <div class="card">
+        <h3>Quote</h3>
+        <div class="field" style="margin-top:0"><label>Line items</label><div class="segs" id="detail"><button data-d="itemised" class="on">Itemised</button><button data-d="single">Single price</button></div></div>
+        <label class="check"><input type="checkbox" id="showImage" checked />Include a render of the piece</label>
+        <label class="check"><input type="checkbox" id="attachDrawings" checked />Attach shop drawings</label>
+        <div class="field"><label for="client">Client</label><input class="text-in" id="client" value="Marta Ruiz" /></div>
+        <div class="field"><label for="clientMail">Email</label><input class="text-in" id="clientMail" value="marta@example.com" /></div>
+        <div class="field"><label for="valid">Valid for</label><div class="unit-in"><input id="valid" type="number" min="1" step="1" value="30" /><span>days</span></div></div>
+      </div>
+      <div class="card" id="summary"></div>
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/drawings-extras.js"></script>
+<script>
+  const { PARTS, size, BenchView } = BenchModel;
+  const { JOINTS } = Drawings;
+
+  // ------------------------------------------------------------ model facts
+  // Quantities come from the bench, as the app would derive them from the model.
+  const MATERIALS = {
+    oak: { name: "White oak", unit: "bf", price: 9.5, thick: [20, 27, 34, 45], color: "#cfa771" },
+    walnut: { name: "Black walnut", unit: "bf", price: 16.0, thick: [20, 25, 32], color: "#7b5338" },
+    plywood: { name: "Birch plywood", unit: "m²", price: 38, thick: [12, 15, 18], color: "#e6d3a8" },
+  };
+  const mm = (cm) => Math.round(cm * 10);
+  const stockThickness = (p) => {
+    const m = MATERIALS[p.material];
+    const need = mm(size(p).thickness) + (m.unit === "bf" ? 2 : 0);
+    return m.thick.find((t) => t >= need) || m.thick[m.thick.length - 1];
+  };
+  // Raw (pre-waste) quantity per material: board feet for hardwood, m² for sheets.
+  const rawQty = {};
+  for (const p of PARTS) {
+    const s = size(p);
+    const m = MATERIALS[p.material];
+    const q = m.unit === "bf" ? (s.length * 10 * s.width * 10 * stockThickness(p)) / 2359737 : (s.length * 10 * s.width * 10) / 1e6;
+    rawQty[p.material] = (rawQty[p.material] || 0) + q;
+  }
+  const areaM2 = PARTS.reduce((a, p) => a + 2 * (size(p).x * size(p).y + size(p).x * size(p).z + size(p).y * size(p).z) / 1e4, 0);
+  const tenons = JOINTS.length; // 12 mortise & tenon joints
+  const hardwoodParts = PARTS.filter((p) => MATERIALS[p.material].unit === "bf").length;
+  const sheetParts = PARTS.length - hardwoodParts;
+  const topPerimeter = (2 * (900 + 350)) / 1000; // m, from the top's footprint
+  const fasteners = 2 * Math.floor(770 / 250) + 2; // figure-8 every 250 mm on the long aprons, one per short apron
+
+  // ------------------------------------------------------------ categories
+  // Each row: label, source note, quantity, unit, minutes per unit, money per unit (consumables or materials).
+  const CATS = [
+    { key: "materials", name: "Materials", color: "#cfa771", rows: Object.keys(MATERIALS).map((k) => ({
+        id: "mat-" + k, label: MATERIALS[k].name, src: "Cutting layout · incl. waste", material: k,
+        qty: 0, unit: MATERIALS[k].unit, min: 0, money: MATERIALS[k].price, qtyAuto: true })) },
+    { key: "cutting", name: "Cutting & milling", color: "#8fa7b8", rows: [
+        { id: "mill", label: "Rough cut, joint and plane", src: `${hardwoodParts} hardwood parts`, qty: hardwoodParts, unit: "parts", min: 9, money: 0 },
+        { id: "sheet", label: "Cut sheet panels", src: `${sheetParts} plywood part`, qty: sheetParts, unit: "parts", min: 8, money: 0 },
+        { id: "glueup", label: "Edge-glue top panel", src: "Walnut, 3 boards", qty: 1, unit: "panels", min: 50, money: 1.5 },
+      ] },
+    { key: "joinery", name: "Joinery", color: "#c46a4a", rows: [
+        { id: "mt", label: "Mortise & tenon", src: "Aprons and stretchers to legs", qty: tenons, unit: "joints", min: 22, money: 0 },
+        { id: "groove", label: "Groove for shelf", src: "Stretchers, 18 × 8", qty: 2, unit: "grooves", min: 10, money: 0 },
+        { id: "fig8", label: "Figure-8 recesses", src: "Aprons, every 250 mm", qty: fasteners, unit: "recesses", min: 4, money: 0 },
+      ] },
+    { key: "router", name: "Router", color: "#9a86c2", rows: [
+        { id: "round", label: "Round-over, top edge", src: "R6 bit · top perimeter", qty: +topPerimeter.toFixed(2), unit: "m", min: 5, money: 0.4 },
+        { id: "chamfer", label: "Chamfer leg feet", src: "45° bit · 4 legs", qty: 4, unit: "legs", min: 2, money: 0 },
+      ] },
+    { key: "sanding", name: "Sanding", color: "#d6b35c", rows: [120, 180, 240].map((g, i) => ({
+        id: "sand" + g, label: `Grit ${g}`, src: "All visible faces", qty: +areaM2.toFixed(2), unit: "m²", min: [14, 10, 8][i], money: [0.9, 0.9, 1.1][i] })) },
+    { key: "finishing", name: "Finishing", color: "#6f9c78", rows: [
+        { id: "oil1", label: "Hardwax oil, coat 1", src: "Matte · 8 h drying", qty: +areaM2.toFixed(2), unit: "m²", min: 9, money: 3.2, drying: 8 },
+        { id: "oil2", label: "Hardwax oil, coat 2", src: "Matte · 24 h curing", qty: +areaM2.toFixed(2), unit: "m²", min: 7, money: 2.6, drying: 24 },
+      ] },
+    { key: "assembly", name: "Assembly", color: "#5f86b5", rows: [
+        { id: "dry", label: "Dry fit and adjust", src: "Base frame", qty: 1, unit: "fits", min: 35, money: 0 },
+        { id: "glue", label: "Glue-up, base frame", src: "Two ends, then long rails", qty: 2, unit: "stages", min: 25, money: 2.5 },
+        { id: "top", label: "Attach top and shelf", src: "Figure-8 and screws", qty: 1, unit: "assemblies", min: 20, money: 0 },
+      ] },
+    { key: "extras", name: "Extras", color: "#a3a7ad", rows: [
+        { id: "hw", label: "Figure-8 fasteners", src: "Steel, with screws", qty: fasteners, unit: "pcs", min: 0, money: 0.85 },
+        { id: "screws", label: "Shelf screws", src: "4 × 30", qty: 4, unit: "pcs", min: 0, money: 0.12 },
+        { id: "pack", label: "Packing and delivery prep", src: "Blankets, corner guards", qty: 1, unit: "job", min: 30, money: 12 },
+      ] },
+  ];
+
+  const S = {
+    rate: 45, wasteWood: 15, wasteSheet: 10, margin: 35, vat: 21, currency: "EUR", rounding: 10,
+    detail: "itemised", showImage: true, attachDrawings: true, mode: "breakdown", active: "materials",
+  };
+
+  // ------------------------------------------------------------ calculation
+  function materialQty(row) {
+    const m = MATERIALS[row.material];
+    const waste = m.unit === "bf" ? S.wasteWood : S.wasteSheet;
+    return rawQty[row.material] * (1 + waste / 100);
+  }
+  function rowMinutes(row) { return row.qty * row.min; }
+  function rowMoney(row) { return row.qty * row.money; }
+  function rowCost(row) { return (rowMinutes(row) / 60) * S.rate + rowMoney(row); }
+  function compute() {
+    for (const r of CATS[0].rows) if (r.qtyAuto) r.qty = +materialQty(r).toFixed(2);
+    const cats = CATS.map((c) => {
+      const minutes = c.rows.reduce((a, r) => a + rowMinutes(r), 0);
+      const money = c.rows.reduce((a, r) => a + rowMoney(r), 0);
+      return { ...c, minutes, money, cost: (minutes / 60) * S.rate + money };
+    });
+    const minutes = cats.reduce((a, c) => a + c.minutes, 0);
+    const materials = cats.reduce((a, c) => a + c.money, 0);
+    const labour = (minutes / 60) * S.rate;
+    const cost = labour + materials;
+    const rawPrice = cost * (1 + S.margin / 100);
+    const price = Math.max(S.rounding, Math.round(rawPrice / S.rounding) * S.rounding);
+    const vat = price * (S.vat / 100);
+    const drying = CATS.flatMap((c) => c.rows).reduce((a, r) => a + (r.drying || 0), 0);
+    return { cats, minutes, materials, labour, cost, price, vat, total: price + vat, margin: price - cost, drying };
+  }
+
+  // ------------------------------------------------------------ formatting
+  const money = (v, digits = 0) => new Intl.NumberFormat("en-IE", { style: "currency", currency: S.currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(v);
+  const curSymbol = () => ({ EUR: "€", USD: "$", GBP: "£" })[S.currency];
+  const hours = (min) => {
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return h ? `${h} h${m ? " " + String(m).padStart(2, "0") : ""}` : `${m} min`;
+  };
+  const qtyText = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
+
+  // ------------------------------------------------------------ rendering
+  function renderNav(R) {
+    document.getElementById("nav").innerHTML = R.cats.map((c) => `
+      <div class="cat ${c.key === S.active ? "on" : ""}" data-cat="${c.key}">
+        <span class="dot" style="background:${c.color}"></span>
+        <span class="nm">${c.name}<small>${c.minutes ? hours(c.minutes) : "No labour"}${c.money ? " · " + money(c.money) + " " + (c.key === "materials" ? "stock" : "supplies") : ""}</small></span>
+        <span class="amt">${money(c.cost)}</span>
+      </div>`).join("");
+    document.querySelectorAll(".cat").forEach((n) => (n.onclick = () => goToCategory(n.dataset.cat)));
+    document.getElementById("hoursHead").textContent = hours(R.minutes);
+    document.getElementById("navTotal").innerHTML = `
+      <div class="row"><span>Labour</span><b>${hours(R.minutes)} · ${money(R.labour)}</b></div>
+      <div class="row"><span>Materials & supplies</span><b>${money(R.materials)}</b></div>
+      <div class="row"><span>Cost</span><b>${money(R.cost)}</b></div>
+      <div class="row big"><span>Price excl. VAT</span><b>${money(R.price)}</b></div>`;
+  }
+
+  function renderFacts(R) {
+    document.getElementById("facts").innerHTML = `
+      <span>Labour <b>${hours(R.minutes)}</b></span>
+      <span>Cost <b>${money(R.cost)}</b></span>
+      <span>Price <b>${money(R.price)}</b></span>
+      <span>Total incl. VAT <b>${money(R.total)}</b></span>`;
+  }
+
+  function drivers(R) {
+    const labourRows = CATS.flatMap((c) => c.rows.map((r) => ({ c, r, min: rowMinutes(r) }))).filter((x) => x.min > 0).sort((a, b) => b.min - a.min);
+    const top = labourRows[0];
+    const sanding = R.cats.find((c) => c.key === "sanding");
+    const finishing = R.cats.find((c) => c.key === "finishing");
+    const mat = R.cats.find((c) => c.key === "materials");
+    const walnut = CATS[0].rows.find((r) => r.material === "walnut");
+    const pct = (v, of) => Math.round((v / of) * 100);
+    const items = [
+      [pct(top.min, R.minutes), `The ${qtyText(top.r.qty)} ${top.r.label.toLowerCase()} ${top.r.unit === "joints" ? "joints are" : "are"} the largest share of the labour (${hours(top.min)}).`],
+      [pct(sanding.minutes + finishing.minutes, R.minutes), `Sanding and finishing ${qtyText(+areaM2.toFixed(2))} m² of surface take ${hours(sanding.minutes + finishing.minutes)}; one fewer grit would save ${hours(CATS.find((c) => c.key === "sanding").rows[1].qty * CATS.find((c) => c.key === "sanding").rows[1].min)}.`],
+      [pct(rowMoney(walnut), mat.money), `The walnut top is ${pct(rowMoney(walnut), mat.money)} % of the material cost; an oak top would save about ${money(rowMoney(walnut) - walnut.qty * MATERIALS.oak.price)}.`],
+    ];
+    return items.map(([p, t]) => `<li><span class="pct">${p} %</span><span>${t}</span></li>`).join("");
+  }
+
+  function renderBreakdown(R) {
+    const labourCats = R.cats.filter((c) => c.minutes > 0);
+    const host = document.getElementById("breakdown");
+    host.innerHTML = `
+      <div class="kpis">
+        <div class="kpi"><label>Labour</label><b>${hours(R.minutes)}</b><small>${money(R.labour)} at ${money(S.rate)}/h</small></div>
+        <div class="kpi"><label>Materials & supplies</label><b>${money(R.materials)}</b><small>${Math.round((R.materials / R.cost) * 100)} % of the cost</small></div>
+        <div class="kpi"><label>Price excl. VAT</label><b>${money(R.price)}</b><small>Margin ${money(R.margin)}</small></div>
+        <div class="kpi"><label>Lead time</label><b>${leadDays(R)} days</b><small>${Math.ceil(R.minutes / 60 / 6)} shop days + ${Math.ceil(R.drying / 24)} drying</small></div>
+      </div>
+      <div class="panel">
+        <h4>Time by stage<span>${hours(R.minutes)}</span></h4>
+        <div class="stack">${labourCats.map((c) => `<i title="${c.name} · ${hours(c.minutes)}" style="width:${(c.minutes / R.minutes) * 100}%;background:${c.color}"></i>`).join("")}</div>
+        <div class="legend">${labourCats.map((c) => `<span><i style="background:${c.color}"></i>${c.name} <b>${hours(c.minutes)}</b></span>`).join("")}</div>
+        <h4 style="margin-top:16px">What drives the price</h4>
+        <ul class="drivers">${drivers(R)}</ul>
+      </div>
+      ${R.cats.map((c) => `
+        <section class="block" id="cat-${c.key}">
+          <header class="bh"><h3><i style="background:${c.color}"></i>${c.name}</h3><span>${c.minutes ? hours(c.minutes) + " · " : ""}<b>${money(c.cost)}</b></span></header>
+          <table>
+            <colgroup><col style="width:34%"><col style="width:14%"><col style="width:16%"><col style="width:14%"><col style="width:10%"><col style="width:12%"></colgroup>
+            <thead><tr><th>Operation</th><th class="num">Qty</th><th class="num">${c.key === "materials" ? "Price / unit" : "Min / unit"}</th><th class="num">${c.key === "materials" ? "" : "Supplies / unit"}</th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+            <tbody>${c.rows.map((r) => `
+              <tr>
+                <td>${r.label}${r.qtyAuto ? '<span class="tag">from model</span>' : ""}<small>${r.src}</small></td>
+                <td class="num">${r.qtyAuto ? `${qtyText(r.qty)} ${r.unit}` : `<input class="cell-in" data-row="${r.id}" data-field="qty" value="${r.qty}" inputmode="decimal" aria-label="${r.label} quantity" /><small>${r.unit}</small>`}</td>
+                <td class="num">${c.key === "materials"
+                  ? `<input class="cell-in" data-row="${r.id}" data-field="money" value="${r.money}" inputmode="decimal" aria-label="${r.label} price" /><small>${curSymbol()} / ${r.unit}</small>`
+                  : `<input class="cell-in" data-row="${r.id}" data-field="min" value="${r.min}" inputmode="decimal" aria-label="${r.label} minutes" /><small>min / ${r.unit.replace(/s$/, "")}</small>`}</td>
+                <td class="num">${c.key === "materials" ? "" : `<input class="cell-in" data-row="${r.id}" data-field="money" value="${r.money}" inputmode="decimal" aria-label="${r.label} supplies" /><small>${curSymbol()}</small>`}</td>
+                <td class="num">${rowMinutes(r) ? hours(rowMinutes(r)) : "—"}</td>
+                <td class="num">${money(rowCost(r))}</td>
+              </tr>`).join("")}</tbody>
+          </table>
+        </section>`).join("")}`;
+    host.querySelectorAll(".cell-in").forEach((input) => {
+      input.addEventListener("change", () => {
+        const row = CATS.flatMap((c) => c.rows).find((r) => r.id === input.dataset.row);
+        const v = parseFloat(String(input.value).replace(",", "."));
+        if (Number.isFinite(v) && v >= 0) row[input.dataset.field] = v;
+        refresh({ keepFocus: input.dataset.row + input.dataset.field });
+      });
+    });
+  }
+
+  function leadDays(R) { return Math.ceil(R.minutes / 60 / 6) + Math.ceil(R.drying / 24) + 2; }
+
+  // Quote lines group the internal categories; the margin is spread proportionally.
+  const QUOTE_GROUPS = [
+    { name: "Materials", detail: "White oak base, black walnut top, birch plywood shelf", cats: ["materials"] },
+    { name: "Woodworking", detail: "Milling, mortise & tenon joinery, shelf grooves, edge profiles", cats: ["cutting", "joinery", "router", "assembly"] },
+    { name: "Sanding and finish", detail: "Sanded to 240, two coats of matte hardwax oil", cats: ["sanding", "finishing"] },
+    { name: "Hardware and delivery prep", detail: "Tabletop fasteners, screws, packing", cats: ["extras"] },
+  ];
+
+  let quoteView = null;
+  function renderQuote(R) {
+    const desk = document.getElementById("desk");
+    const today = new Date(2026, 10, 21);
+    const valid = new Date(today.getTime() + (parseInt(document.getElementById("valid").value, 10) || 30) * 86400000);
+    const fmtDate = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const factor = R.price / R.cost;
+    const lines = QUOTE_GROUPS.map((g) => ({ ...g, amount: R.cats.filter((c) => g.cats.includes(c.key)).reduce((a, c) => a + c.cost, 0) * factor }));
+    // Keep the itemised lines summing exactly to the rounded price.
+    const rounded = lines.map((l) => Math.round(l.amount));
+    rounded[1] += R.price - rounded.reduce((a, v) => a + v, 0);
+    const rows = S.detail === "itemised"
+      ? lines.map((l, i) => `<tr><td>${l.name}<small>${l.detail}</small></td><td class="num">${money(rounded[i])}</td></tr>`).join("")
+      : `<tr><td>Hall bench, made to order<small>White oak base with mortise & tenon joints, black walnut top, birch plywood shelf, hardwax oil finish</small></td><td class="num">${money(R.price)}</td></tr>`;
+    const client = document.getElementById("client").value || "Client";
+    const mail = document.getElementById("clientMail").value;
+    desk.innerHTML = `
+      <div class="paper">
+        <div class="ph"><span class="lg">B</span><span class="brandname">BenchUp</span>
+          <span class="rt"><small>Quote</small><b>Hall bench</b></span>
+          <span class="gen">Generated ${fmtDate(today)}<br>Q-2026-014</span></div>
+        <div class="meta">
+          <div><label>Prepared for</label><div class="v"><b>${escapeHtml(client)}</b>${mail ? "<br>" + escapeHtml(mail) : ""}</div></div>
+          <div><label>From</label><div class="v"><b>Your workshop</b><br>hello@yourworkshop.example</div></div>
+        </div>
+        <div class="piece" style="${S.showImage ? "" : "grid-template-columns:1fr"}">
+          ${S.showImage ? '<svg id="quoteRender"></svg>' : ""}
+          <div><h2>Hall bench</h2><p>900 × 350 × 450 mm. Solid white oak base joined with mortise and tenon, a black walnut top fixed with tabletop fasteners so it can move with the seasons, and a birch plywood shelf. Finished with two coats of matte hardwax oil.</p></div>
+        </div>
+        <table class="q"><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="totals">
+          <div><span>Subtotal</span><span>${money(R.price)}</span></div>
+          <div><span>VAT ${S.vat} %</span><span>${money(R.vat)}</span></div>
+          <div class="grand"><span>Total</span><span>${money(R.total)}</span></div>
+        </div>
+        <div class="terms">
+          <div><label>Valid until</label>${fmtDate(valid)}</div>
+          <div><label>Lead time</label>About ${Math.ceil(leadDays(R) / 5)} weeks from deposit</div>
+          <div><label>Payment</label>40 % deposit, balance on delivery</div>
+        </div>
+        <div class="notes">Dimensions and materials are as shown in the attached drawings. Natural variation in grain and colour is part of solid wood. Delivery within 30 km is included.</div>
+        <div class="sign"><span>Accepted by</span><span>Date</span></div>
+      </div>
+      <div class="attach">${S.attachDrawings ? `${icon("sheet", 15)} Attached: Shop drawings, 10 sheets (PDF)` : `${icon("sheet", 15)} No drawings attached`}</div>`;
+    if (S.showImage) {
+      quoteView = new BenchView(document.getElementById("quoteRender"), {
+        interactive: false, dims: false, fill: 0.86, view: { azimuth: 58, elevation: 24 },
+        theme: { colors: { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" }, stroke: "rgba(60,45,30,.45)", strokeWidth: 0.6, grid: null, shadow: "rgba(60,50,40,.18)", selectedStroke: "transparent", hoverStroke: "rgba(60,45,30,.45)" },
+      });
+    }
+  }
+
+  function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+  function renderSummary(R) {
+    document.getElementById("summary").innerHTML = `
+      <h3>Totals</h3>
+      <div class="stat"><span>Labour</span><b>${hours(R.minutes)} · ${money(R.labour)}</b></div>
+      <div class="stat"><span>Materials & supplies</span><b>${money(R.materials)}</b></div>
+      <div class="stat"><span>Cost</span><b>${money(R.cost)}</b></div>
+      <div class="stat"><span>Margin</span><b>${money(R.margin)} · ${Math.round((R.margin / R.price) * 100)} % of price</b></div>
+      <div class="stat"><span>Price excl. VAT</span><b>${money(R.price)}</b></div>
+      <div class="stat"><span>VAT ${S.vat} %</span><b>${money(R.vat)}</b></div>
+      <div class="stat total"><span>Total</span><b>${money(R.total)}</b></div>
+      <div class="note">Earns ${money((R.price - R.materials) / (R.minutes / 60))} per hour of work after materials, against a labour rate of ${money(S.rate)}.</div>`;
+    document.querySelectorAll(".cur").forEach((n) => (n.textContent = curSymbol()));
+  }
+
+  function refresh(opts = {}) {
+    const R = compute();
+    renderNav(R);
+    renderFacts(R);
+    renderSummary(R);
+    if (S.mode === "breakdown") {
+      const scroll = document.getElementById("scroll");
+      const top = scroll.scrollTop;
+      renderBreakdown(R);
+      scroll.style.scrollBehavior = "auto";
+      scroll.scrollTop = top;
+      scroll.style.scrollBehavior = "";
+      if (opts.keepFocus) {
+        const next = [...document.querySelectorAll(".cell-in")];
+        const i = next.findIndex((n) => n.dataset.row + n.dataset.field === opts.keepFocus);
+        if (i >= 0 && next[i + 1] && opts.advance) next[i + 1].focus();
+      }
+    } else {
+      renderQuote(R);
+    }
+  }
+
+  function goToCategory(key) {
+    S.active = key;
+    if (S.mode !== "breakdown") setMode("breakdown");
+    refresh();
+    const target = document.getElementById("cat-" + key);
+    if (target) {
+      target.scrollIntoView({ block: "start" });
+      target.classList.add("flash");
+      setTimeout(() => target.classList.remove("flash"), 900);
+    }
+  }
+
+  function setMode(mode) {
+    S.mode = mode;
+    document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+    document.getElementById("breakdown").style.display = mode === "breakdown" ? "" : "none";
+    document.getElementById("desk").classList.toggle("show", mode === "quote");
+    document.getElementById("scroll").scrollTop = 0;
+    refresh();
+  }
+
+  // ------------------------------------------------------------ wiring
+  const bindNumber = (id, key) => {
+    const input = document.getElementById(id);
+    input.value = S[key];
+    input.addEventListener("input", () => {
+      const v = parseFloat(input.value);
+      if (Number.isFinite(v) && v >= 0) { S[key] = v; refresh(); }
+    });
+  };
+  bindNumber("rate", "rate");
+  bindNumber("wasteWood", "wasteWood");
+  bindNumber("wasteSheet", "wasteSheet");
+  bindNumber("margin", "margin");
+  bindNumber("vat", "vat");
+  document.getElementById("currency").onchange = (e) => { S.currency = e.target.value; refresh(); };
+  document.querySelectorAll("#rounding button").forEach((b) => (b.onclick = () => {
+    S.rounding = +b.dataset.r;
+    document.querySelectorAll("#rounding button").forEach((x) => x.classList.toggle("on", x === b));
+    refresh();
+  }));
+  document.querySelectorAll("#detail button").forEach((b) => (b.onclick = () => {
+    S.detail = b.dataset.d;
+    document.querySelectorAll("#detail button").forEach((x) => x.classList.toggle("on", x === b));
+    if (S.mode !== "quote") setMode("quote"); else refresh();
+  }));
+  document.getElementById("showImage").onchange = (e) => { S.showImage = e.target.checked; refresh(); };
+  document.getElementById("attachDrawings").onchange = (e) => { S.attachDrawings = e.target.checked; refresh(); };
+  ["client", "clientMail", "valid"].forEach((id) => document.getElementById(id).addEventListener("input", () => refresh()));
+  document.querySelectorAll("#mode button").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+
+  // Enter in a table cell commits and moves to the next editable cell.
+  document.getElementById("breakdown").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.target.classList.contains("cell-in")) return;
+    e.preventDefault();
+    const input = e.target;
+    const row = CATS.flatMap((c) => c.rows).find((r) => r.id === input.dataset.row);
+    const v = parseFloat(String(input.value).replace(",", "."));
+    if (Number.isFinite(v) && v >= 0) row[input.dataset.field] = v;
+    refresh({ keepFocus: input.dataset.row + input.dataset.field, advance: true });
+  });
+
+  const toast = document.getElementById("toast");
+  let toastTimer = null;
+  document.querySelectorAll("[data-toast]").forEach((b) => (b.onclick = () => {
+    const R = compute();
+    toast.textContent = b.dataset.toast === "pdf"
+      ? `Quote Q-2026-014 exported as PDF · ${money(R.total)} incl. VAT`
+      : `Quote sent to ${document.getElementById("client").value || "the client"} · ${money(R.total)} incl. VAT`;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+  }));
+
+  // The quote render is paper in both themes; re-render so it picks up its own size.
+  window.addEventListener("themechange", () => { if (quoteView) quoteView.render(); });
+
+  hydrateIcons();
+  if (location.hash === "#quote") setMode("quote"); else refresh();
+</script>
+</body>
+</html>
