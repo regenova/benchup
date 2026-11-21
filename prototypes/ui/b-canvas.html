@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype B · Canvas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --glass: rgba(30, 32, 37, 0.82);
+    --glass-strong: rgba(36, 38, 44, 0.96);
+    --edge: rgba(255, 255, 255, 0.08);
+    --edge-strong: rgba(255, 255, 255, 0.14);
+    --ink: #eceef1;
+    --muted: #9aa0aa;
+    --faint: #6c727c;
+    --accent: #ff7a59;
+    --accent-ink: #1b0f0b;
+    --hover: rgba(255, 255, 255, 0.06);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #131417; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+  .ic { display: block; flex: none; }
+
+  .stage { position: fixed; inset: 0; background: radial-gradient(90% 80% at 50% 40%, #2a2d33 0%, #17181b 70%, #121315 100%); }
+  svg.vp { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  .island { position: absolute; background: var(--glass); backdrop-filter: blur(16px) saturate(1.2); border: 1px solid var(--edge); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+
+  .top-left { left: 12px; top: 12px; display: flex; align-items: center; gap: 4px; padding: 6px; }
+  .mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; }
+  .pill { height: 30px; padding: 0 10px; border-radius: 8px; display: flex; align-items: center; gap: 6px; }
+  .pill:hover { background: var(--hover); }
+  .crumb { color: var(--muted); display: flex; align-items: center; gap: 4px; padding-right: 8px; }
+  .crumb b { color: var(--ink); font-weight: 500; }
+  .vsep { width: 1px; height: 18px; background: var(--edge-strong); margin: 0 4px; }
+  .saved { width: 6px; height: 6px; border-radius: 50%; background: #5bd18b; box-shadow: 0 0 0 3px rgba(91,209,139,.15); margin: 0 10px 0 4px; }
+
+  .top-right { right: 12px; top: 12px; display: flex; align-items: center; gap: 4px; padding: 6px; }
+  .ibtn { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
+  .ibtn:hover { background: var(--hover); color: var(--ink); }
+  .ibtn.on { color: var(--ink); background: rgba(255,255,255,.1); }
+  .cta { height: 30px; padding: 0 12px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #8ab4ff, #6d7cff); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #10131c; margin: 0 4px; }
+
+  /* Parts drawer */
+  .drawer { left: 12px; top: 66px; width: 236px; padding: 8px; max-height: calc(100vh - 170px); overflow: auto; }
+  .drawer-h { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 8px; color: var(--muted); font-size: 12px; }
+  .tree-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 8px; cursor: pointer; color: #cfd3d9; }
+  .tree-row:hover { background: var(--hover); }
+  .tree-row.sel { background: rgba(255,122,89,.16); color: #fff; }
+  .tree-row.asm { color: var(--ink); font-weight: 500; }
+  .tree-row .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .tree-row .grow { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree-row .x { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tree-row .eye { color: var(--faint); opacity: 0; }
+  .tree-row:hover .eye { opacity: 1; }
+  .indent { padding-left: 26px; }
+
+  /* Dock */
+  .dock { left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px; border-radius: 16px; }
+  .dbtn { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; color: #c3c8cf; }
+  .dbtn:hover { background: var(--hover); color: #fff; }
+  .dbtn.on { background: var(--accent); color: var(--accent-ink); }
+  .dbtn .tip { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%) translateY(4px); white-space: nowrap; background: var(--glass-strong); border: 1px solid var(--edge); padding: 5px 8px; border-radius: 7px; font-size: 12px; color: var(--ink); opacity: 0; pointer-events: none; transition: opacity .12s, transform .12s; }
+  .dbtn .tip kbd { color: var(--muted); font: 11px ui-monospace, Menlo, monospace; margin-left: 6px; }
+  .dbtn:hover .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .dbtn .caret { position: absolute; right: 3px; bottom: 3px; width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; transform: rotate(-45deg); opacity: .6; }
+  .dsep { width: 1px; height: 22px; background: var(--edge-strong); margin: 0 5px; }
+  .kbtn { height: 40px; padding: 0 10px 0 12px; border-radius: 10px; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .kbtn:hover { background: var(--hover); color: var(--ink); }
+  .kbtn kbd { font: 11px ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 5px; background: rgba(255,255,255,.08); color: #c3c8cf; }
+
+  /* Contextual HUD anchored to the selection */
+  .hud { position: absolute; transform: translate(-50%, calc(-100% - 14px)); padding: 10px; border-radius: 14px; width: 300px; transition: opacity .15s; }
+  .hud::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; background: var(--glass); border-right: 1px solid var(--edge); border-bottom: 1px solid var(--edge); transform: translateX(-50%) rotate(45deg); }
+  .hud.hidden { opacity: 0; pointer-events: none; }
+  .hud-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 2px; }
+  .hud-h b { font-weight: 600; }
+  .hud-h span { color: var(--muted); font-size: 12px; }
+  .hud-dims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .hd { background: rgba(255,255,255,.05); border: 1px solid transparent; border-radius: 9px; padding: 5px 8px; }
+  .hd:focus-within { border-color: var(--accent); background: rgba(255,122,89,.08); }
+  .hd label { display: block; font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .hd input { width: 100%; border: 0; outline: none; background: none; padding: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hud-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .mats { display: flex; gap: 6px; }
+  .matdot { width: 22px; height: 22px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); cursor: pointer; }
+  .matdot.on { box-shadow: 0 0 0 2px #17181b, 0 0 0 4px var(--accent); }
+  .hud-actions { display: flex; gap: 2px; }
+
+  /* Cursor-anchored numeric input replaces the bottom measurement box */
+  .cursor-chip { position: absolute; pointer-events: none; display: none; padding: 5px 8px; border-radius: 8px; background: var(--glass-strong); border: 1px solid var(--edge); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .cursor-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .status { left: 12px; bottom: 16px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 11px; color: var(--muted); font-size: 12px; }
+  .status b { color: var(--ink); font-weight: 500; }
+  .views { right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 2px; padding: 5px; }
+  .views button { height: 28px; padding: 0 10px; border-radius: 7px; color: var(--muted); font-size: 12px; text-align: left; }
+  .views button:hover { background: var(--hover); color: var(--ink); }
+  .views button.on { color: var(--ink); background: rgba(255,255,255,.1); }
+
+  /* Command palette */
+  .scrim { position: fixed; inset: 0; background: rgba(8,9,11,.45); display: none; align-items: flex-start; justify-content: center; padding-top: 14vh; }
+  .scrim.open { display: flex; }
+  .palette { width: 560px; background: #24262c; border: 1px solid var(--edge-strong); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.5); overflow: hidden; }
+  .palette .q { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--edge); color: var(--muted); }
+  .palette .q input { flex: 1; background: none; border: 0; outline: none; font-size: 16px; color: var(--ink); }
+  .palette .list { max-height: 360px; overflow: auto; padding: 6px; }
+  .palette .sec { padding: 8px 10px 4px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .cmd { display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 38px; border-radius: 9px; color: #d6d9de; cursor: pointer; }
+  .cmd .grow { flex: 1; }
+  .cmd kbd { font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .cmd.on, .cmd:hover { background: rgba(255,255,255,.07); color: #fff; }
+  .palette .foot { display: flex; gap: 14px; padding: 9px 16px; border-top: 1px solid var(--edge); color: var(--faint); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <svg class="vp" id="vp"></svg>
+
+  <div class="island top-left">
+    <div class="mark">B</div>
+    <button class="pill"><b>Hall bench</b><i data-icon="chevronDown" data-size="14"></i></button>
+    <span class="vsep"></span>
+    <span class="crumb">Bench <i data-icon="chevronRight" data-size="12"></i><b id="crumb">Base frame</b></span>
+    <span class="saved" title="All changes saved"></span>
+  </div>
+
+  <div class="island top-right">
+    <button class="ibtn" title="Undo"><i data-icon="undo" data-size="16"></i></button>
+    <button class="ibtn" title="Redo"><i data-icon="redo" data-size="16"></i></button>
+    <span class="vsep"></span>
+    <button class="ibtn on" title="Parts" id="toggleParts"><i data-icon="layers" data-size="16"></i></button>
+    <button class="ibtn" title="Light"><i data-icon="sun" data-size="16"></i></button>
+    <button class="ibtn" title="Walk through"><i data-icon="walk" data-size="16"></i></button>
+    <span class="vsep"></span>
+    <span class="avatar">JM</span>
+    <button class="cta"><i data-icon="share" data-size="15"></i>Share</button>
+  </div>
+
+  <div class="island drawer" id="drawer">
+    <div class="drawer-h"><span>Parts</span><button class="ibtn" style="width:24px;height:24px"><i data-icon="plus" data-size="14"></i></button></div>
+    <div id="tree"></div>
+  </div>
+
+  <div class="island hud hidden" id="hud"></div>
+  <div class="cursor-chip" id="chip"></div>
+
+  <div class="island status"><span>Snap <b>Endpoint</b></span><span>Units <b>mm</b></span><span id="zoom">100 %</span></div>
+  <div class="island views" id="views">
+    <button class="on" data-v="persp">Perspective</button>
+    <button data-v="front">Front</button>
+    <button data-v="side">Side</button>
+    <button data-v="top">Top</button>
+  </div>
+
+  <div class="island dock" id="dock"></div>
+
+  <div class="scrim" id="scrim">
+    <div class="palette">
+      <div class="q"><i data-icon="search" data-size="18"></i><input id="q" placeholder="Search tools, parts and actions" /><kbd style="font:11px ui-monospace,Menlo,monospace">esc</kbd></div>
+      <div class="list" id="cmds"></div>
+      <div class="foot"><span>↑↓ navigate</span><span>↵ run</span><span>Type a number to resize the selection</span></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script>
+  const { PARTS, MATERIALS, size, fmtDims, mm, BenchView } = BenchModel;
+  const COLORS = { oak: "#c79c63", walnut: "#6e4a32", plywood: "#dcc79a" };
+
+  const TOOLS = [
+    ["select", "Select", "V"], ["orbit", "Orbit", "O"], "|",
+    ["board", "Board", "B"], ["panel", "Panel", "P"], ["draw", "Sketch", "S"], "|",
+    ["pushpull", "Extrude", "E"], ["move", "Move", "M"], ["rotate", "Rotate", "R"], ["mirror", "Mirror", "⇧M"], ["array", "Repeat", "A"], "|",
+    ["joint", "Joint", "J", true], ["measure", "Measure", "T"], ["section", "Section", "X"],
+  ];
+  let tool = "select";
+  let selected = "apron-f";
+
+  const ASSEMBLIES = [
+    { name: "Top", ids: ["top"] },
+    { name: "Base frame", ids: ["leg-fl", "leg-fr", "leg-bl", "leg-br", "apron-f", "apron-b", "apron-l", "apron-r"] },
+    { name: "Shelf unit", ids: ["shelf", "str-f", "str-b"] },
+  ];
+
+  const hud = document.getElementById("hud");
+  const view = new BenchView(document.getElementById("vp"), {
+    theme: {
+      colors: COLORS,
+      stroke: "rgba(0,0,0,0.55)",
+      strokeWidth: 0.7,
+      ambient: 0.55,
+      diffuse: 0.5,
+      selectedStroke: "#ff7a59",
+      selectedWidth: 2,
+      hoverStroke: "rgba(255,122,89,.65)",
+      grid: { minor: "rgba(255,255,255,.035)", major: "rgba(255,255,255,.075)" },
+      shadow: "rgba(0,0,0,.55)",
+    },
+    dims: false,
+    selectedId: selected,
+    view: { azimuth: 52, elevation: 22, pan: [0, 20] },
+    fill: 0.72,
+    onSelect: (id) => select(id, false),
+    onRender: (v) => placeHud(v),
+  });
+
+  function placeHud(v) {
+    if (!selected) { hud.classList.add("hidden"); return; }
+    const box = v.partTopScreen(selected);
+    if (!box) return;
+    const top = Math.max(box.top, 220);
+    hud.style.left = Math.min(Math.max(box.x, 170), innerWidth - 170) + "px";
+    hud.style.top = top + "px";
+    hud.classList.remove("hidden");
+    document.getElementById("zoom").textContent = Math.round(v.view.zoom * 100) + " %";
+  }
+
+  function renderHud() {
+    const p = PARTS.find((q) => q.id === selected);
+    if (!p) { hud.classList.add("hidden"); return; }
+    const s = size(p);
+    const twins = PARTS.filter((q) => q.name === p.name).length;
+    hud.innerHTML = `
+      <div class="hud-h"><b>${p.name}</b><span>${twins > 1 ? `×${twins} · ` : ""}${MATERIALS[p.material].name}</span></div>
+      <div class="hud-dims">
+        <div class="hd"><label>L</label><input value="${mm(s.length)}" /></div>
+        <div class="hd"><label>W</label><input value="${mm(s.width)}" /></div>
+        <div class="hd"><label>T</label><input value="${mm(s.thickness)}" /></div>
+      </div>
+      <div class="hud-row">
+        <div class="mats">${Object.keys(COLORS).map((k) => `<span class="matdot ${k === p.material ? "on" : ""}" title="${MATERIALS[k].name}" style="background:${COLORS[k]}"></span>`).join("")}</div>
+        <div class="hud-actions">
+          <button class="ibtn" title="Add joint">${icon("joint", 16)}</button>
+          <button class="ibtn" title="Duplicate">${icon("copy", 16)}</button>
+          <button class="ibtn" title="Hide">${icon("hide", 16)}</button>
+          <button class="ibtn" title="More">${icon("more", 16)}</button>
+        </div>
+      </div>`;
+    placeHud(view);
+  }
+
+  function renderTree() {
+    const host = document.getElementById("tree");
+    host.innerHTML = ASSEMBLIES.map((a) => {
+      if (a.ids.length === 1) {
+        const p = PARTS.find((q) => q.id === a.ids[0]);
+        return row(p, false);
+      }
+      return `<div class="tree-row asm">${icon("chevronDown", 14)}<span class="grow">${a.name}</span><span class="x">${a.ids.length}</span></div>` +
+        a.ids.map((id) => row(PARTS.find((q) => q.id === id), true)).join("");
+    }).join("");
+    host.querySelectorAll("[data-id]").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+    function row(p, indent) {
+      return `<div class="tree-row ${indent ? "indent" : ""} ${p.id === selected ? "sel" : ""}" data-id="${p.id}">
+        <span class="sw" style="background:${COLORS[p.material]}"></span><span class="grow">${p.name}</span>
+        <span class="eye">${icon("eye", 14)}</span><span class="x">${mm(size(p).length)}</span></div>`;
+    }
+  }
+
+  function renderDock() {
+    const dock = document.getElementById("dock");
+    dock.innerHTML = TOOLS.map((t) => t === "|" ? '<span class="dsep"></span>' :
+      `<button class="dbtn ${t[0] === tool ? "on" : ""}" data-tool="${t[0]}">${icon(t[0], 19)}${t[3] ? '<span class="caret"></span>' : ""}<span class="tip">${t[1]}<kbd>${t[2]}</kbd></span></button>`).join("") +
+      `<span class="dsep"></span><button class="kbtn" id="openPalette">${icon("search", 16)}<kbd>⌘K</kbd></button>`;
+    dock.querySelectorAll(".dbtn").forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
+    document.getElementById("openPalette").onclick = openPalette;
+  }
+
+  function setTool(t) {
+    tool = t;
+    renderDock();
+  }
+
+  function select(id, updateView = true) {
+    selected = id;
+    if (updateView) view.setSelected(id);
+    const asm = ASSEMBLIES.find((a) => a.ids.includes(id));
+    document.getElementById("crumb").textContent = asm ? asm.name : "—";
+    renderTree();
+    renderHud();
+  }
+
+  // Cursor chip: numeric entry lives next to the pointer, not in a status bar.
+  const chip = document.getElementById("chip");
+  document.getElementById("vp").addEventListener("pointermove", (e) => {
+    const drawing = ["board", "panel", "draw", "pushpull", "move", "measure"].includes(tool);
+    chip.style.display = drawing ? "block" : "none";
+    if (!drawing) return;
+    chip.style.left = e.clientX + 18 + "px";
+    chip.style.top = e.clientY + 18 + "px";
+    const msg = {
+      board: "Click the first corner · or type <b>450</b>",
+      panel: "Click a face to place a panel",
+      draw: "Click to start a line",
+      pushpull: "Pick a face · type a distance",
+      move: "Pick a base point",
+      measure: "Click two points · <b>0</b> mm",
+    };
+    chip.innerHTML = msg[tool];
+  });
+  document.getElementById("vp").addEventListener("pointerleave", () => (chip.style.display = "none"));
+
+  const VIEWS = { persp: { azimuth: 52, elevation: 22 }, front: { azimuth: 90, elevation: 0.5 }, side: { azimuth: 0.5, elevation: 0.5 }, top: { azimuth: 90, elevation: 89.5 } };
+  document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b));
+    view.animateTo(VIEWS[b.dataset.v]);
+  }));
+  document.getElementById("toggleParts").onclick = (e) => {
+    const d = document.getElementById("drawer");
+    const open = d.style.display === "none";
+    d.style.display = open ? "" : "none";
+    e.currentTarget.classList.toggle("on", open);
+  };
+
+  // Command palette
+  const COMMANDS = [
+    ["Tools", "board", "Board", "B"], ["Tools", "panel", "Panel", "P"], ["Tools", "pushpull", "Extrude", "E"], ["Tools", "mirror", "Mirror", "⇧M"],
+    ["Joinery", "tenon", "Mortise and tenon between selection", "J T"], ["Joinery", "dovetail", "Dovetail corner", "J D"], ["Joinery", "dowel", "Dowel joint", "J W"],
+    ["Parts", "list", "Go to Top", ""], ["Parts", "list", "Go to Lower shelf", ""],
+    ["Project", "cutlist", "Open cut list", "⌘L"], ["Project", "download", "Export cutting plan as PDF", "⌘⇧E"], ["Project", "grain", "Show grain direction", "G"],
+  ];
+  let cursor = 0;
+  function renderCommands() {
+    const q = document.getElementById("q").value.toLowerCase();
+    const list = COMMANDS.filter((c) => c[2].toLowerCase().includes(q) || c[0].toLowerCase().includes(q));
+    cursor = Math.min(cursor, Math.max(0, list.length - 1));
+    let last = "";
+    document.getElementById("cmds").innerHTML = list.map((c, i) => {
+      const head = c[0] !== last ? `<div class="sec">${(last = c[0])}</div>` : "";
+      return head + `<div class="cmd ${i === cursor ? "on" : ""}" data-i="${i}">${icon(c[1], 17)}<span class="grow">${c[2]}</span><kbd>${c[3]}</kbd></div>`;
+    }).join("") || `<div class="sec">No matches</div>`;
+    document.querySelectorAll(".cmd").forEach((n) => (n.onclick = closePalette));
+    return list;
+  }
+  function openPalette() {
+    document.getElementById("scrim").classList.add("open");
+    const q = document.getElementById("q");
+    q.value = "";
+    cursor = 0;
+    renderCommands();
+    setTimeout(() => q.focus(), 0);
+  }
+  function closePalette() { document.getElementById("scrim").classList.remove("open"); }
+  document.getElementById("q").addEventListener("input", () => { cursor = 0; renderCommands(); });
+  document.getElementById("scrim").addEventListener("click", (e) => { if (e.target.id === "scrim") closePalette(); });
+  document.addEventListener("keydown", (e) => {
+    const open = document.getElementById("scrim").classList.contains("open");
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); open ? closePalette() : openPalette(); return; }
+    if (open) {
+      if (e.key === "Escape") closePalette();
+      if (e.key === "ArrowDown") { cursor++; renderCommands(); e.preventDefault(); }
+      if (e.key === "ArrowUp") { cursor = Math.max(0, cursor - 1); renderCommands(); e.preventDefault(); }
+      if (e.key === "Enter") closePalette();
+      return;
+    }
+    if (e.target.tagName === "INPUT") return;
+    const t = TOOLS.find((x) => x !== "|" && x[2].toLowerCase() === e.key.toLowerCase());
+    if (t) setTool(t[0]);
+    if (e.key === "Escape") select(null);
+  });
+
+  hydrateIcons();
+  renderDock();
+  select(selected, false);
+  if (location.hash === "#palette") openPalette();
+</script>
+</body>
+</html>
