@@ -1,5 +1,24 @@
 [
   {
+    "version": "0.7.5",
+    "date": "2026-11-21",
+    "title": "French translations and more reliable releases",
+    "sections": [
+      {
+        "title": "Languages",
+        "changes": [
+          "Choose French as the application language on desktop and in the browser."
+        ]
+      },
+      {
+        "title": "Release reliability",
+        "changes": [
+          "Release builds and website deployments now automatically retry confirmed GitHub runner acquisition failures."
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.7.4",
     "date": "2026-11-17",
     "title": "Follow Me, precise imperial dimensions, and live AI agents",
