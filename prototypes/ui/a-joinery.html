@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Joinery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  .body { grid-template-columns: 284px 1fr 372px; }
+  a.stage, a.btn { text-decoration: none; color: inherit; }
+  a.btn.primary { color: #fff; }
+
+  /* Left: joints list */
+  .jlist { overflow: auto; flex: 1; padding: 0 8px 8px; }
+  .jrow { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+  .jrow:hover { background: var(--hover); }
+  .jrow.sel { background: var(--accent-soft); }
+  .jrow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jrow small { display: block; color: var(--muted); font-size: 11.5px; }
+  .jrow .tag { font-size: 10.5px; }
+  .st { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .st.ok { background: #e4f1e8; color: #3e7a52; }
+  .st.warn { background: #fdf0d9; color: #a3660a; }
+  .st.none { background: var(--bg); color: var(--faint); border: 1px dashed var(--line-strong); }
+  .contacts { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
+  .contacts-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink); }
+  .contacts-toggle:hover { background: var(--hover); }
+  .contacts-toggle .count-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #fdf0d9; color: #a3660a; font-weight: 600; }
+  .contact { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 6px 8px; }
+  .contact small { display: block; color: var(--muted); font-size: 11.5px; }
+  .contact .add { height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); }
+  .contact .add:hover { color: var(--ink); background: var(--hover); }
+
+  /* Viewport overlays */
+  .jointchip { background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; font-size: 12px; color: var(--muted); }
+  .jointchip b { color: var(--ink); font-weight: 600; }
+  .inset { position: absolute; left: 16px; top: 68px; width: 228px; height: 168px; background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px rgba(30,30,30,.08); }
+  .inset svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .inset .lbl { position: absolute; left: 10px; top: 8px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; pointer-events: none; }
+  .preview-chip { position: absolute; right: 16px; top: 58px; display: none; background: #fdf0d9; color: #8a560a; border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 500; }
+  .preview-chip.show { display: block; }
+  .tool.off { opacity: .38; cursor: not-allowed; }
+  .tool.off:hover { background: none; color: var(--muted); }
+
+  /* Right: editor */
+  .types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .type { border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px 4px 7px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.15; min-height: 62px; }
+  .type:hover { background: var(--hover); color: var(--ink); }
+  .type.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .type.off { opacity: .4; cursor: not-allowed; }
+  .type.off:hover { background: none; color: var(--muted); }
+  .type-note { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .dims.two { grid-template-columns: repeat(2, 1fr); }
+  .dims + .dims { margin-top: 8px; }
+  .dim.ro { background: var(--bg); }
+  .dim.ro input { color: var(--muted); }
+  .field { grid-template-columns: 104px 1fr; }
+  .check { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); line-height: 1.4; }
+  .check:first-of-type { border-top: 0; padding-top: 0; }
+  .check .ico { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
+  .check.ok .ico { background: #e4f1e8; color: #3e7a52; }
+  .check.warn .ico { background: #fdf0d9; color: #a3660a; }
+  .check.info .ico { background: #e8eef7; color: #3c5f8f; }
+  .check .fixes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .check .fix { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; background: var(--panel); }
+  .check .fix:hover { background: var(--hover); }
+  .notes { margin: 0; padding: 0; list-style: none; }
+  .notes li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 5px 0; color: var(--ink); line-height: 1.4; }
+  .notes li .ic { color: var(--muted); margin-top: 1px; }
+  .scope { display: grid; gap: 6px; }
+  .radio { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 9px; cursor: pointer; }
+  .radio .dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; flex: none; }
+  .radio.on { border-color: var(--ink); }
+  .radio.on .dot { border-color: var(--ink); }
+  .radio.on .dot::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+  .radio small { color: var(--muted); display: block; }
+  .editor-actions { display: flex; gap: 8px; padding: 16px; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); }
+  .editor-actions .btn { flex: 1; justify-content: center; }
+  .btn[disabled] { opacity: .45; cursor: default; }
+  .toast { position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
+      <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage active" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="left">
+      <div class="aside-head"><h2>Joints<span class="count" id="jcount"></span></h2><button class="iconbtn" title="Add joint"><i data-icon="plus" data-size="16"></i></button></div>
+      <div class="search"><i data-icon="search" data-size="15"></i><input placeholder="Find a joint or part" id="jsearch" /></div>
+      <div class="jlist" id="jlist"></div>
+      <div class="contacts" id="contacts"></div>
+    </aside>
+
+    <main id="main">
+      <svg class="vp" id="vp"></svg>
+      <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" id="look">
+          <button class="on" data-look="xray"><i data-icon="eye" data-size="15"></i>See inside</button>
+          <button data-look="solid">Solid</button>
+        </div>
+        <div class="seg"><button id="explode"><i data-icon="move" data-size="15"></i>Explode</button></div>
+      </div>
+      <div class="overlay" style="right:16px;top:16px"><div class="jointchip" id="jointchip"></div></div>
+      <div class="preview-chip" id="previewchip">Previewing changes · not applied</div>
+      <div class="inset"><svg id="inset"></svg><div class="lbl">Location</div></div>
+      <div class="toolstrip">
+        <div class="hint" id="hint"></div>
+        <div class="tools" id="tools"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right"></aside>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script>
+  const { PARTS, BenchView, mm } = BenchModel;
+  const byId = Object.fromEntries(PARTS.map((p) => [p.id, p]));
+  const COLORS = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8", peg: "#5f3d26", steel: "#8d949b", loose: "#e2c48f", tenon: "#e9bd7c" };
+  const LOC = { fl: "front left", fr: "front right", bl: "back left", br: "back right" };
+
+  // ---------- Joint data derived from the sample bench ----------
+  const touching = (A, B) => [0, 1, 2].every((k) => A.min[k] <= B.max[k] + 1e-6 && B.min[k] <= A.max[k] + 1e-6);
+  const DEFAULTS = {
+    mt: { t: 6, L: 30, st: 10, sb: 10, haunch: false, hd: 10, clr: "0.2", pegged: false, extra: 2, ends: "square" },
+    dowels: { n: 2, d: 8, da: 30, db: 30, edge: 15 },
+    domino: { size: "6x40", n: 1, da: 20, db: 20 },
+    pocket: { n: 2, len: 32, edge: 15 },
+    figure8: { spacing: 250, recess: 3 },
+    buttons: { spacing: 200, gap: 3 },
+    groove: { d: 8, setback: 6, clr: "0.2" },
+  };
+  const TYPES = {
+    mt: { name: "Mortise & tenon", short: "Mortise & tenon", icon: "tenon", list: "Mortise & tenon" },
+    dowels: { name: "Dowels", short: "Dowels", icon: "dowel", list: "Dowels" },
+    domino: { name: "Loose tenon", short: "Loose tenon", icon: "groove", list: "Loose tenons" },
+    dovetail: { name: "Dovetail", short: "Dovetail", icon: "dovetail" },
+    halflap: { name: "Half-lap", short: "Half-lap", icon: "halflap" },
+    finger: { name: "Finger joint", short: "Finger", icon: "finger" },
+    pocket: { name: "Pocket screws", short: "Pocket screws", icon: "screw", list: "Pocket screws" },
+    figure8: { name: "Figure-8 fasteners", short: "Figure-8", icon: "screw", list: "Figure-8 fasteners" },
+    buttons: { name: "Wooden buttons", short: "Buttons", icon: "joint", list: "Wooden buttons" },
+    groove: { name: "Groove", short: "Groove", icon: "groove", list: "Grooves" },
+  };
+  const KIND_TYPES = {
+    apron: { offer: ["mt", "dowels", "domino", "pocket", "dovetail", "halflap", "finger"], why: "Dovetails, half-laps and finger joints need two boards meeting at their ends; a rail entering the side of a leg needs a tenon, dowels or screws." },
+    stretcher: { offer: ["mt", "dowels", "domino", "pocket", "dovetail", "halflap", "finger"], why: "Dovetails, half-laps and finger joints need two boards meeting at their ends; a stretcher entering the side of a leg needs a tenon, dowels or screws." },
+    top: { offer: ["figure8", "buttons"], why: "" },
+    shelf: { offer: ["groove"], why: "" },
+  };
+  const GROUP_LABEL = { apron: "apron-to-leg", stretcher: "stretcher-to-leg", top: "top fastener", shelf: "shelf" };
+
+  const joints = [];
+  const contacts = [];
+  for (let i = 0; i < PARTS.length; i++)
+    for (let k = i + 1; k < PARTS.length; k++) {
+      const a = PARTS[i], b = PARTS[k];
+      if (!touching(a, b)) continue;
+      const kinds = [a.kind, b.kind].sort().join("+");
+      const pick = (kind) => PARTS.find((p) => (p === a || p === b) && p.kind === kind);
+      if (kinds === "Aprons+Legs" || kinds === "Legs+Stretchers") {
+        const member = kinds === "Aprons+Legs" ? pick("Aprons") : pick("Stretchers");
+        const leg = pick("Legs");
+        joints.push({ kind: kinds === "Aprons+Legs" ? "apron" : "stretcher", a: member.id, b: leg.id, loc: LOC[leg.id.slice(4)], type: "mt" });
+      } else if (kinds === "Aprons+Panels" && (a.id === "top" || b.id === "top")) {
+        const apron = pick("Aprons");
+        joints.push({ kind: "top", a: apron.id, b: "top", loc: apron.id === "apron-f" ? "front" : apron.id === "apron-b" ? "back" : apron.id === "apron-l" ? "left" : "right", type: "figure8" });
+      } else if (kinds === "Panels+Stretchers") {
+        const s = pick("Stretchers");
+        joints.push({ kind: "shelf", a: "shelf", b: s.id, loc: s.id === "str-f" ? "front" : "back", type: "groove" });
+      } else if (kinds === "Legs+Panels") {
+        const leg = pick("Legs");
+        const panel = a.kind === "Panels" ? a : b;
+        contacts.push({ a: panel.id, b: leg.id, loc: LOC[leg.id.slice(4)] });
+      }
+    }
+  const ORDER = { apron: 0, stretcher: 1, top: 2, shelf: 3 };
+  const LOC_ORDER = ["front right", "front left", "back right", "back left", "front", "back", "left", "right"];
+  joints.sort((x, y) => ORDER[x.kind] - ORDER[y.kind] || LOC_ORDER.indexOf(x.loc) - LOC_ORDER.indexOf(y.loc) || x.a.localeCompare(y.a));
+  joints.forEach((j, i) => { j.id = "j" + i; j.params = structuredClone(DEFAULTS[j.type]); j.custom = false; });
+
+  let selected = joints.find((j) => j.a === "apron-f" && j.b === "leg-fr").id;
+  let draft = null; // { type, byType: {type: params} }
+  let scope = "all";
+  let look = "xray";
+  let explode = 0, explodeTarget = 0;
+  let contactsOpen = false;
+  let filter = "";
+
+  const sel = () => joints.find((j) => j.id === selected);
+  const nameOf = (id) => byId[id].name;
+  const group = (j) => joints.filter((q) => q.kind === j.kind && !q.custom);
+  function startDraft() {
+    const j = sel();
+    draft = { type: j.type, byType: { [j.type]: structuredClone(j.params) } };
+  }
+  const dp = () => draft.byType[draft.type] || (draft.byType[draft.type] = structuredClone(DEFAULTS[draft.type]));
+  const dirty = () => {
+    const j = sel();
+    return draft.type !== j.type || JSON.stringify(dp()) !== JSON.stringify(j.params);
+  };
+
+  // ---------- Checks and machining notes ----------
+  const memberH = (kind) => (kind === "stretcher" ? 40 : 85);
+  const CHISELS = [6, 8, 10, 12, 13, 16];
+  const DOMINO = { "5x30": { t: 5, w: 30, len: 30 }, "6x40": { t: 6, w: 40, len: 40 }, "8x50": { t: 8, w: 50, len: 50 }, "10x50": { t: 10, w: 50, len: 50 } };
+  function frac(r) {
+    const options = [[1 / 4, "1/4"], [1 / 3, "1/3"], [2 / 5, "2/5"], [1 / 2, "1/2"]];
+    return options.reduce((best, o) => (Math.abs(o[0] - r) < Math.abs(best[0] - r) ? o : best))[1];
+  }
+  const meetLimit = (t) => Math.floor(25 - t / 2);
+  function checks(kind, type, p) {
+    const out = [];
+    const ok = (text) => out.push({ level: "ok", text });
+    const warn = (text, fixes) => out.push({ level: "warn", text, fixes });
+    const info = (text) => out.push({ level: "info", text });
+    if (type === "mt") {
+      const h = memberH(kind), w = h - p.st - p.sb, r = p.t / 20;
+      if (r >= 0.25 && r <= 0.5) ok(`Tenon is ${p.t} mm, about ${frac(r)} of the 20 mm ${kind === "stretcher" ? "stretcher" : "apron"}.`);
+      else warn(r < 0.25 ? `Tenon is only ${p.t} mm thick; aim for 6–10 mm in 20 mm stock.` : `Tenon is ${p.t} mm thick; the cheeks left on the leg side become fragile.`, [["Set 6 mm", { t: 6 }], ["Set 8 mm", { t: 8 }]]);
+      const outer = 20 - p.t / 2, inner = 25 - p.t / 2;
+      if (Math.min(outer, inner) >= 8) ok(`Mortise walls ${outer.toFixed(1).replace(".0", "")} mm and ${inner.toFixed(1).replace(".0", "")} mm.`);
+      else warn(`Mortise wall is only ${Math.min(outer, inner).toFixed(1)} mm; the leg may split.`);
+      const far = 45 - p.L - p.extra;
+      if (far >= 6) ok(`Mortise stops ${far} mm short of the far face of the leg.`);
+      else warn(`Mortise stops ${far} mm from the far face and may break through.`, [["Shorten to 30 mm", { L: 30 }]]);
+      if (kind === "apron") {
+        const limit = meetLimit(p.t);
+        if (p.L > limit && p.ends === "square") warn(`Tenons from the long and short aprons meet inside the leg: mitre their ends or shorten them to ${limit} mm.`, [["Mitre ends", { ends: "mitred" }], [`Shorten to ${limit} mm`, { L: limit }]]);
+        else if (p.L > limit) ok("Tenon ends are mitred, so both tenons keep their full length.");
+        else ok(`Tenons stop before meeting the short apron’s tenon (limit ${limit} mm).`);
+      }
+      if (p.st < 6 || p.sb < 6) warn("Shoulders under 6 mm leave little end grain on the apron; the joint can rack.");
+      if (w > 6 * p.t && !p.haunch) warn(`Wide tenon (${w} mm): a haunch keeps the top of the apron from twisting.`, [["Add haunch", { haunch: true }]]);
+      else if (p.haunch) ok(`Haunch ${p.hd} mm deep resists twisting at the top shoulder.`);
+      info(p.clr === "tight" ? "Tight fit: dry-fit first, glue will swell the tenon." : p.clr === "loose" ? "Loose fit (0.4 mm): easy assembly, rely on glue and the peg." : "0.2 mm glue line: slides in by hand pressure.");
+      if (p.pegged) info("Draw-bore the peg hole 1 mm toward the shoulder to pull the joint tight.");
+    } else if (type === "dowels") {
+      if (p.d <= 10) ok(`Ø${p.d} mm dowels suit 20 mm stock (max half its thickness).`); else warn(`Ø${p.d} mm is more than half the 20 mm stock.`, [["Use Ø8", { d: 8 }]]);
+      if (p.edge >= 1.5 * p.d) ok(`Edge distance ${p.edge} mm keeps the holes clear of the shoulders.`); else warn(`Edge distance ${p.edge} mm is under 1.5× the dowel diameter.`);
+      if (p.da >= 1.5 * p.d && p.db >= 1.5 * p.d) ok(`Embedded ${p.da} mm in the leg and ${p.db} mm in the apron.`); else warn("Embed each dowel at least 1.5× its diameter on both sides.");
+      if (kind === "apron" && p.da > meetLimit(p.d)) warn(`Dowels from the long and short aprons collide inside the leg past ${meetLimit(p.d)} mm; offset them vertically.`);
+      info("Dowels rack more than a tenon on a bench that gets pushed around.");
+    } else if (type === "domino") {
+      const s = DOMINO[p.size];
+      if (s.t <= 10) ok(`${p.size} loose tenon suits 20 mm stock.`);
+      if (p.da + p.db <= s.len) ok(`Mortises total ${p.da + p.db} mm for a ${s.len} mm tenon.`); else warn(`Mortises total ${p.da + p.db} mm but the tenon is only ${s.len} mm long.`, [[`Use ${s.len / 2} mm each`, { da: s.len / 2, db: s.len / 2 }]]);
+      if (p.n * s.w + 20 > memberH(kind)) warn(`${p.n} tenons ${s.w} mm wide do not fit in a ${memberH(kind)} mm rail.`, [["Use one", { n: 1 }]]);
+      else ok(`${p.n === 1 ? "One tenon" : `${p.n} tenons`} fit the ${memberH(kind)} mm rail.`);
+      info("Cut both mortises with the same reference face for a flush joint.");
+    } else if (type === "pocket") {
+      ok("Pocket holes face the inside, hidden from view.");
+      ok(`${p.len} mm screws reach ${Math.round(p.len * 0.55)} mm into the leg’s side grain.`);
+      info("Fast, but the weakest option for a bench that takes racking loads.");
+    } else if (type === "figure8") {
+      ok("Figure-8 fasteners let the top move across the grain.");
+      if (p.spacing <= 300) ok(`${Math.ceil(770 / p.spacing)} fasteners on each long apron at ${p.spacing} mm.`); else warn("Spacing over 300 mm lets a 25 mm walnut top cup between fasteners.", [["Set 250 mm", { spacing: 250 }]]);
+    } else if (type === "buttons") {
+      ok("Buttons in a groove let the top move across the grain.");
+      if (p.gap >= 2) ok(`${p.gap} mm gap behind each button allows seasonal movement.`); else warn("Leave at least 2 mm behind each button for movement.");
+    } else if (type === "groove") {
+      const wall = 20 - p.d;
+      if (wall >= 10) ok(`Groove ${p.d} mm deep leaves ${wall} mm of stretcher behind it.`); else warn(`Only ${wall} mm of stretcher remains behind the groove.`);
+      ok(`Groove width ${(18 + (p.clr === "tight" ? 0 : p.clr === "loose" ? 0.4 : 0.2)).toFixed(1)} mm for the 18 mm birch plywood shelf.`);
+      info("Leave the shelf unglued in the groove so the frame can move.");
+    }
+    return out;
+  }
+  const worst = (list) => (list.some((c) => c.level === "warn") ? "warn" : "ok");
+
+  function notes(kind, type, p) {
+    if (type === "mt") {
+      const chisel = CHISELS.includes(p.t) ? `Mortise chisel ${p.t} mm` : `No ${p.t} mm chisel: use ${CHISELS.reduce((b, c) => (Math.abs(c - p.t) < Math.abs(b - p.t) ? c : b))} mm and pare to fit`;
+      const depth = p.L + p.extra;
+      const list = [
+        ["measure", `${chisel}, or a Ø${Math.min(p.t, 8)} mm upcut spiral bit in ${Math.ceil(depth / 10)} passes.`],
+        ["joint", `Depth stop at ${depth} mm (tenon ${p.L} mm + ${p.extra} mm for glue).`],
+        ["draw", `Tenon cheeks ${((20 - p.t) / 2).toFixed(1).replace(".0", "")} mm each side; shoulders ${p.st} mm top, ${p.sb} mm bottom. Saw on the waste side.`],
+      ];
+      if (p.ends === "mitred" && kind === "apron") list.push(["mirror", "Mitre the tenon ends at 45° after a dry fit."]);
+      if (p.haunch) list.push(["groove", `Haunch ${p.hd} mm deep: cut the top of the mortise ${p.hd} mm before the full depth.`]);
+      if (p.pegged) list.push(["dowel", `Peg Ø8 mm, centred ${Math.round(p.L / 2)} mm from the shoulder.`]);
+      return list;
+    }
+    if (type === "dowels") return [["dowel", `Drill Ø${p.d} mm with a dowelling jig; depth stops ${p.da + 1} mm in the leg, ${p.db + 1} mm in the apron.`], ["measure", `${p.n} dowels, first ${p.edge} mm from the top edge.`]];
+    if (type === "domino") return [["groove", `Loose-tenon joiner with a ${DOMINO[p.size].t} mm cutter; depth ${p.da} mm in the leg, ${p.db} mm in the apron.`], ["measure", "Reference both mortises from the outside face."]];
+    if (type === "pocket") return [["screw", `Pocket-hole jig set for 20 mm stock; ${p.n} × ${p.len} mm coarse-thread screws.`]];
+    if (type === "figure8") return [["measure", `Forstner Ø19 mm, ${p.recess} mm deep, centred on the apron’s top edge.`], ["screw", "One 16 mm screw into the apron, one 13 mm screw into the top."]];
+    if (type === "buttons") return [["groove", "Cut a 6 × 10 mm groove 12 mm below the top edge of each apron."], ["screw", `Buttons every ${p.spacing} mm, 30 mm screws into the top.`]];
+    if (type === "groove") return [["groove", `Router table, straight bit to ${(18 + (p.clr === "loose" ? 0.4 : p.clr === "tight" ? 0 : 0.2)).toFixed(1)} mm in two passes, depth ${p.d} mm.`], ["measure", `Groove ${p.setback} mm below the top edge of the stretcher.`]];
+    return [];
+  }
+
+  // ---------- Close-up geometry (cm, like model.js) ----------
+  const B = (id, name, material, min, max) => ({ id, name, kind: "", material, min, max });
+  function closeup(j, type, p, ex) {
+    const parts = [], dashed = [], clash = [], lines = [], dims = [], labels = [];
+    const cl = p.clr === "tight" ? 0 : p.clr === "loose" ? 0.4 : 0.2;
+    if (j.kind === "apron" || j.kind === "stretcher") {
+      const zl = j.kind === "apron" ? 34 : 8, zh = j.kind === "apron" ? 42.5 : 12;
+      const e = ex * 9;
+      const z0 = Math.max(0, zl - 6), z1 = j.kind === "apron" ? 42.5 : zh + 5;
+      parts.push(B("leg", "Leg", "oak", [83.5, 28.5, z0], [88, 33, z1]));
+      parts.push(B("a", nameOf(j.a), "oak", [71 - e, 30, zl], [83.5 - e, 32, zh]));
+      labels.push(["a", nameOf(j.a)], ["leg", "Leg"]);
+      const side = j.kind === "apron";
+      if (side) { parts.push(B("b", "Short apron", "oak", [85, 17 - e, zl], [87, 28.5 - e, zh])); labels.push(["b", "Short apron"]); }
+      if (type === "mt") {
+        const zb = zl + p.sb / 10, zt = zh - p.st / 10, t = p.t / 10, L = p.L / 10;
+        const meets = side && p.L > meetLimit(p.t);
+        const mitred = meets && p.ends === "mitred";
+        const endA = mitred ? 86 - t / 2 : 83.5 + L;
+        const endB = mitred ? 31 - t / 2 : 28.5 + L;
+        parts.push(B("ta", "Tenon", "tenon", [83.5 - e, 31 - t / 2, zb], [endA - e, 31 + t / 2, zt]));
+        const depth = (p.L + p.extra) / 10;
+        dashed.push({ min: [83.5, 31 - (t + cl / 10) / 2, zb - cl / 20], max: [83.5 + depth, 31 + (t + cl / 10) / 2, zt + cl / 20] });
+        if (p.haunch) {
+          parts.push(B("ha", "Haunch", "tenon", [83.5 - e, 31 - t / 2, zt], [83.5 + p.hd / 10 - e, 31 + t / 2, zh]));
+          dashed.push({ min: [83.5, 31 - t / 2, zt], max: [83.5 + p.hd / 10, 31 + t / 2, zh] });
+        }
+        if (side) {
+          parts.push(B("tb", "Tenon", "tenon", [86 - t / 2, 28.5 - e, zb], [86 + t / 2, endB - e, zt]));
+          dashed.push({ min: [86 - (t + cl / 10) / 2, 28.5, zb], max: [86 + (t + cl / 10) / 2, 28.5 + depth, zt] });
+          if (p.haunch) parts.push(B("hb", "Haunch", "tenon", [86 - t / 2, 28.5 - e, zt], [86 + t / 2, 28.5 + p.hd / 10 - e, zh]));
+          if (meets && !mitred && e < 0.01) {
+            clash.push({ min: [86 - t / 2, 31 - t / 2, zb], max: [Math.min(83.5 + L, 86 + t / 2), Math.min(28.5 + L, 31 + t / 2), zt] });
+          }
+          if (mitred && e < 4) lines.push({ a: [86 - t / 2 - e, 31 - t / 2, zt], b: [86 + t / 2 - e * 0, 31 + t / 2 - e, zt], color: "#d63b32" });
+        }
+        if (p.pegged) {
+          const px = 83.5 + Math.min(L, 4) / 2;
+          parts.push(B("peg", "Peg", "peg", [px - 0.4, 31 + t / 2, (zb + zt) / 2 - 0.4], [px + 0.4, 33, (zb + zt) / 2 + 0.4]));
+        }
+        // Callouts follow the tenon when exploded.
+        const yF = 31 + t / 2;
+        dims.push({ a: [83.5 - e, yF, zt], b: [endA - e, yF, zt], o: [0, 0, 1.6 + (p.haunch ? zh - zt : 0)], label: `${mitred ? "≈" : ""}${p.L}` , key: "L" });
+        dims.push({ a: [endA - e, yF, zb], b: [endA - e, yF, zt], o: [0, 1.6, 0], label: `${(zt - zb) * 10 | 0}`, key: "w" });
+        dims.push({ a: [endA - e, 31 - t / 2, zb], b: [endA - e, 31 + t / 2, zb], o: [0, 0, -1.4], label: `${p.t}`, key: "t", min: 6 });
+        dims.push({ a: [83.5 - e, 32, zt], b: [83.5 - e, 32, zh], o: [-1.6, 0, 0], label: `${p.st}`, key: "st", min: 6 });
+        dims.push({ a: [83.5 - e, 32, zl], b: [83.5 - e, 32, zb], o: [-1.6, 0, 0], label: `${p.sb}`, key: "sb", min: 6 });
+      } else if (type === "dowels" || type === "domino") {
+        const isDom = type === "domino";
+        const s = isDom ? DOMINO[p.size] : null;
+        const th = isDom ? s.t / 10 : p.d / 10, wd = isDom ? s.w / 10 : p.d / 10;
+        const n = p.n, h = zh - zl;
+        const zs = isDom
+          ? Array.from({ length: n }, (_, i) => zl + (h * (i + 1)) / (n + 1))
+          : Array.from({ length: n }, (_, i) => (n === 1 ? (zl + zh) / 2 : zh - p.edge / 10 - ((h - (2 * p.edge) / 10) * i) / (n - 1)));
+        zs.forEach((zc, i) => {
+          const da = p.da / 10, db = p.db / 10;
+          const full = e > db + 0.3;
+          parts.push(B("d" + i, isDom ? "Loose tenon" : "Dowel", isDom ? "loose" : "peg",
+            [full ? 83.5 - db : 83.5, 31 - th / 2, zc - wd / 2], [83.5 + da, 31 + th / 2, zc + wd / 2]));
+          dashed.push({ min: [83.5 - db - e, 31 - th / 2, zc - wd / 2], max: [83.5 - e, 31 + th / 2, zc + wd / 2] });
+          if (side) {
+            const ofs = isDom ? 0 : 0;
+            parts.push(B("e" + i, "Dowel", isDom ? "loose" : "peg", [86 - th / 2, full ? 28.5 - db : 28.5, zc - wd / 2 + ofs], [86 + th / 2, 28.5 + Math.min(da, 2.2), zc + wd / 2 + ofs]));
+          }
+          if (i === 0) {
+            dims.push({ a: [83.5, 31 + th / 2, zc + wd / 2], b: [83.5 + da, 31 + th / 2, zc + wd / 2], o: [0, 0, 1.4], label: `${p.da}`, key: "da" });
+            if (full) dims.push({ a: [83.5 - db, 31 + th / 2, zc + wd / 2], b: [83.5, 31 + th / 2, zc + wd / 2], o: [0, 0, 1.4], label: `${p.db}`, key: "db" });
+          }
+        });
+        if (!isDom && n > 0) dims.push({ a: [83.5 - e, 32, zh - p.edge / 10], b: [83.5 - e, 32, zh], o: [-1.6, 0, 0], label: `${p.edge}`, key: "edge", min: 6 });
+        if (isDom) dims.push({ a: [83.5 + p.da / 10, 31 + th / 2, zs[0] - wd / 2], b: [83.5 + p.da / 10, 31 + th / 2, zs[0] + wd / 2], o: [0, 1.4, 0], label: `${s.w}`, key: "w" });
+      } else if (type === "pocket") {
+        const n = p.n, h = zh - zl;
+        for (let i = 0; i < n; i++) {
+          const zc = n === 1 ? (zl + zh) / 2 : zh - p.edge / 10 - ((h - (2 * p.edge) / 10) * i) / Math.max(1, n - 1);
+          dashed.push({ min: [83.5 - 5 - e, 30, zc - 0.5], max: [83.5 - 1.2 - e, 30.6, zc + 0.5] });
+          const reach = (p.len / 10) * 0.95;
+          lines.push({ a: [83.5 - 3.6 - e, 30.3, zc], b: [83.5 - 3.6 + reach - e, 30.3 + reach * 0.27, zc], color: "#4c5560", width: 2.2 });
+        }
+        labels.push(["pocket", "Pockets on the inside face"]);
+      }
+    } else if (j.kind === "top") {
+      const e = ex * 6;
+      parts.push(B("leg", "Leg", "oak", [83.5, 28.5, 30], [88, 33, 42.5]));
+      const c = 74;
+      if (type === "figure8") {
+        parts.push(B("a", nameOf(j.a), "oak", [66, 30, 34], [83.5, 32, 42.5 - p.recess / 10]));
+        parts.push(B("a2", nameOf(j.a), "oak", [66, 30, 42.5 - p.recess / 10], [c - 1, 32, 42.5]));
+        parts.push(B("a3", nameOf(j.a), "oak", [c + 1, 30, 42.5 - p.recess / 10], [83.5, 32, 42.5]));
+        parts.push(B("f8", "Figure-8", "steel", [c - 0.95, 29.2, 42.5 - p.recess / 10], [c + 0.95, 31.6, 42.5]));
+        dims.push({ a: [c - 1, 32, 42.5 - p.recess / 10], b: [c - 1, 32, 42.5], o: [0, 1.4, 0], label: `${p.recess}`, key: "recess", min: 2 });
+      } else {
+        parts.push(B("a", nameOf(j.a), "oak", [66, 30, 34], [83.5, 32, 42.5]));
+        parts.push(B("bt", "Button", "oak", [c - 1.5, 27, 41.4], [c + 1.5, 30 - p.gap / 10 + 0.3, 42.5]));
+        dashed.push({ min: [66, 30, 41.0], max: [83.5, 31, 41.6] });
+      }
+      parts.push(B("top", "Top", "walnut", [64, 24, 42.5 + e], [90, 35, 45 + e]));
+      labels.push(["a", nameOf(j.a)], ["top", "Top"]);
+    } else if (j.kind === "shelf") {
+      const e = ex * 6;
+      const zt = 12 - p.setback / 10, zb = zt - 1.8;
+      parts.push(B("s", nameOf(j.b), "oak", [44, 30, 7], [70, 32, 12]));
+      parts.push(B("shelf", "Lower shelf", "plywood", [44, 18 - e, zb], [70, 30 + p.d / 10 - e, zt]));
+      dashed.push({ min: [44, 30, zb - (p.clr === "loose" ? 0.02 : 0.01)], max: [70, 30 + p.d / 10, zt] });
+      dims.push({ a: [70, 30, zt], b: [70, 30 + p.d / 10, zt], o: [0, 0, 1.2], label: `${p.d}`, key: "d", min: 4 });
+      dims.push({ a: [70, 32, zt], b: [70, 32, 12], o: [1.4, 0, 0], label: `${p.setback}`, key: "setback", min: 4 });
+      labels.push(["s", nameOf(j.b)], ["shelf", "Lower shelf"]);
+    }
+    return { parts, dashed, clash, lines, dims, labels };
+  }
+
+  function frame(j) {
+    if (j.kind === "apron") return { center: [82.5, 26.5, 36.5], radius: 15.5, azimuth: 64, elevation: 24 };
+    if (j.kind === "stretcher") return { center: [81, 30.5, 10], radius: 11, azimuth: 64, elevation: 22 };
+    if (j.kind === "top") return { center: [76, 29.5, 40.5], radius: 15, azimuth: 58, elevation: 28 };
+    return { center: [57, 28, 10.5], radius: 12, azimuth: -55, elevation: 26 };
+  }
+
+  // ---------- Viewport ----------
+  const NS = "http://www.w3.org/2000/svg";
+  const svgEl = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+  let scene = null;
+  let frameRadius = 12;
+  const view = new BenchView(document.getElementById("vp"), {
+    parts: [],
+    dims: false,
+    theme: {
+      colors: COLORS,
+      stroke: "rgba(60,45,30,0.5)",
+      strokeWidth: 0.8,
+      selectedStroke: "#d63b32",
+      hoverStroke: "rgba(214,59,50,.6)",
+      grid: null,
+      shadow: null,
+    },
+    fill: 0.9,
+    onSelect: () => {},
+    onRender: (v) => overlay(v),
+  });
+
+  function boxEdges(min, max) {
+    const c = [];
+    for (const x of [min[0], max[0]]) for (const y of [min[1], max[1]]) for (const z of [min[2], max[2]]) c.push([x, y, z]);
+    const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    return E.map(([a, b]) => [c[a], c[b]]);
+  }
+
+  function overlay(v) {
+    if (!scene) return;
+    const svg = v.svg;
+    const g = svgEl("g", { "pointer-events": "none" }, svg);
+    for (const box of scene.dashed)
+      for (const [a, b] of boxEdges(box.min, box.max)) {
+        const A = v.project(a), Bp = v.project(b);
+        svgEl("line", { x1: A[0], y1: A[1], x2: Bp[0], y2: Bp[1], stroke: "#7a5a3a", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.85 }, g);
+      }
+    for (const box of scene.clash) {
+      const { d } = v._basis;
+      const faces = [
+        { n: [1, 0, 0], p: [[box.max[0], box.min[1], box.min[2]], [box.max[0], box.max[1], box.min[2]], [box.max[0], box.max[1], box.max[2]], [box.max[0], box.min[1], box.max[2]]] },
+        { n: [0, 1, 0], p: [[box.min[0], box.max[1], box.min[2]], [box.min[0], box.max[1], box.max[2]], [box.max[0], box.max[1], box.max[2]], [box.max[0], box.max[1], box.min[2]]] },
+        { n: [0, 0, 1], p: [[box.min[0], box.min[1], box.max[2]], [box.max[0], box.min[1], box.max[2]], [box.max[0], box.max[1], box.max[2]], [box.min[0], box.max[1], box.max[2]]] },
+      ];
+      for (const f of faces) {
+        if (f.n[0] * d[0] + f.n[1] * d[1] + f.n[2] * d[2] <= 0) continue;
+        svgEl("polygon", { points: f.p.map((q) => v.project(q).join(",")).join(" "), fill: "rgba(214,59,50,.55)", stroke: "#d63b32", "stroke-width": 1.4 }, g);
+      }
+      const c = v.project([(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, box.max[2]]);
+      chip(g, c[0], c[1] - 22, "Tenons collide", "#d63b32", "#fff");
+    }
+    for (const ln of scene.lines) {
+      const A = v.project(ln.a), Bp = v.project(ln.b);
+      svgEl("line", { x1: A[0], y1: A[1], x2: Bp[0], y2: Bp[1], stroke: ln.color, "stroke-width": ln.width || 1.6, "stroke-linecap": "round" }, g);
+    }
+    for (const dm of scene.dims) dim(v, g, dm);
+    for (const [id, text] of scene.labels) {
+      let at;
+      if (id === "pocket") { const pts = scene.dashed[0]; if (!pts) continue; at = v.project([(pts.min[0] + pts.max[0]) / 2, 30, pts.max[2] + 0.9]); }
+      else {
+        const part = scene.parts.find((q) => q.id === id);
+        if (!part) continue;
+        at = v.project([(part.min[0] + part.max[0]) / 2, (part.min[1] + part.max[1]) / 2, part.max[2]]);
+        if (id === "a") at = v.project([Math.max(part.min[0] + 2.5, part.max[0] - 7), part.max[1], part.max[2] + 0.4]);
+        if (id === "b") at = v.project([part.max[0], part.min[1] + 2.5, part.max[2]]);
+        if (id === "leg") at = v.project([part.max[0], part.max[1], part.min[2] + 1.5]);
+      }
+      chip(g, at[0], at[1] - 14, text, "rgba(255,255,255,.92)", "#3a3f45");
+    }
+  }
+
+  function chip(g, x, y, text, bg, fg) {
+    const w = text.length * 6.4 + 16;
+    svgEl("rect", { x: x - w / 2, y: y - 11, width: w, height: 22, rx: 11, fill: bg, stroke: bg.startsWith("rgba(255") ? "#e2ded7" : "none" }, g);
+    const t = svgEl("text", { x, y: y + 4, "text-anchor": "middle", fill: fg, style: "font: 500 11.5px Inter, ui-sans-serif, system-ui, sans-serif" }, g);
+    t.textContent = text;
+  }
+
+  function dim(v, g, dm) {
+    const A = v.project(dm.a), Bp = v.project(dm.b);
+    const A2 = v.project(dm.a.map((x, k) => x + dm.o[k])), B2 = v.project(dm.b.map((x, k) => x + dm.o[k]));
+    if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < (dm.min || 10)) return;
+    const st = { stroke: "#d63b32", "stroke-width": 1 };
+    svgEl("line", Object.assign({ x1: A[0], y1: A[1], x2: A2[0], y2: A2[1], "stroke-dasharray": "2 2" }, st), g);
+    svgEl("line", Object.assign({ x1: Bp[0], y1: Bp[1], x2: B2[0], y2: B2[1], "stroke-dasharray": "2 2" }, st), g);
+    svgEl("line", Object.assign({ x1: A2[0], y1: A2[1], x2: B2[0], y2: B2[1] }, st), g);
+    for (const P0 of [A2, B2]) svgEl("line", Object.assign({ x1: P0[0] - 4, y1: P0[1] + 4, x2: P0[0] + 4, y2: P0[1] - 4 }, st, { "stroke-width": 1.4 }), g);
+    const mx = (A2[0] + B2[0]) / 2, my = (A2[1] + B2[1]) / 2;
+    const w = dm.label.length * 7 + 12;
+    const focus = dm.key && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key === dm.key;
+    svgEl("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 4, fill: focus ? "#d63b32" : "rgba(255,255,255,.95)" }, g);
+    const t = svgEl("text", { x: mx, y: my + 4, "text-anchor": "middle", fill: focus ? "#fff" : "#b8302a", style: "font: 11px ui-monospace, SFMono-Regular, Menlo, monospace" }, g);
+    t.textContent = dm.label;
+  }
+
+  function renderViewport(reframe) {
+    const j = sel();
+    scene = closeup(j, draft.type, dp(), explode);
+    view.parts = scene.parts;
+    const transparent = look === "xray" ? (j.kind === "top" ? ["top"] : j.kind === "shelf" ? ["s"] : ["leg"]) : [];
+    view.theme.dimmed = transparent.length ? new Set(scene.parts.map((q) => q.id).filter((id) => !transparent.includes(id))) : null;
+    if (reframe) {
+      const f = frame(j);
+      view.center = f.center;
+      frameRadius = f.radius;
+      view.view.azimuth = f.azimuth;
+      view.view.elevation = f.elevation;
+      view.view.zoom = 1;
+    }
+    // Pull the camera back while exploded so the separated parts stay in view.
+    view.radius = frameRadius * (1 + 0.3 * explode);
+    view.render();
+    document.getElementById("previewchip").classList.toggle("show", dirty());
+    document.getElementById("jointchip").innerHTML = `<b>${jointTitle(j)}</b> · ${j.loc}`;
+  }
+
+  // Location inset: the whole bench with the joint's parts highlighted.
+  const inset = new BenchView(document.getElementById("inset"), {
+    dims: false,
+    interactive: false,
+    fill: 0.86,
+    view: { azimuth: 58, elevation: 26 },
+    theme: { colors: COLORS, stroke: "rgba(60,45,30,0.35)", strokeWidth: 0.5, grid: null, shadow: null, selectedStroke: "#d63b32", selectedWidth: 1.4 },
+    onSelect: (id) => {
+      const j = joints.find((q) => q.a === id || q.b === id);
+      if (j) selectJoint(j.id);
+    },
+    onRender: (v) => {
+      const j = joints.find((q) => q.id === selected);
+      if (!j) return;
+      const A = byId[j.a], Bq = byId[j.b];
+      const c = [0, 1, 2].map((k) => (Math.max(A.min[k], Bq.min[k]) + Math.min(A.max[k], Bq.max[k])) / 2);
+      const p = v.project(c);
+      const g = svgEl("g", { "pointer-events": "none" }, v.svg);
+      svgEl("circle", { cx: p[0], cy: p[1], r: 11, fill: "rgba(214,59,50,.14)", stroke: "#d63b32", "stroke-width": 1.6 }, g);
+      svgEl("circle", { cx: p[0], cy: p[1], r: 2.4, fill: "#d63b32" }, g);
+    },
+  });
+  function renderInset() {
+    const j = sel();
+    inset.theme.dimmed = new Set([j.a, j.b]);
+    inset.selectedId = j.a;
+    inset.render();
+  }
+
+  // ---------- Left list ----------
+  const jointTitle = (j) => `${nameOf(j.a)} → ${nameOf(j.b)}`;
+  function renderList() {
+    const host = document.getElementById("jlist");
+    const q = filter.toLowerCase();
+    const shown = joints.filter((j) => !q || jointTitle(j).toLowerCase().includes(q) || j.loc.includes(q) || TYPES[j.type].name.toLowerCase().includes(q));
+    const groups = [];
+    for (const j of shown) {
+      const key = j.type;
+      let g = groups.find((x) => x.key === key);
+      if (!g) groups.push((g = { key, items: [] }));
+      g.items.push(j);
+    }
+    document.getElementById("jcount").textContent = joints.length;
+    host.innerHTML = groups.map((g) => {
+      const warnCount = g.items.filter((j) => worst(checks(j.kind, j.type, j.params)) === "warn").length;
+      return `<div class="group-h">${TYPES[g.key].list}<span class="count">${g.items.length}</span>${warnCount ? `<span style="margin-left:auto;color:#a3660a;text-transform:none;letter-spacing:0">${warnCount} to review</span>` : ""}</div>` +
+        g.items.map((j) => {
+          const s = worst(checks(j.kind, j.type, j.params));
+          return `<div class="jrow ${j.id === selected ? "sel" : ""}" data-id="${j.id}">
+            <span class="st ${s}">${s === "ok" ? "✓" : "!"}</span>
+            <div class="nm">${jointTitle(j)}<small>${j.loc}${j.custom ? " · custom" : ""}</small></div>
+            ${j.id === selected && dirty() ? '<span class="tag" style="background:#fdf0d9;color:#8a560a">edited</span>' : ""}</div>`;
+        }).join("");
+    }).join("") || `<div class="empty">No joints match “${filter}”.</div>`;
+    host.querySelectorAll(".jrow").forEach((r) => (r.onclick = () => selectJoint(r.dataset.id)));
+    const c = document.getElementById("contacts");
+    c.innerHTML = `<button class="contacts-toggle" id="ctoggle"><span>Contacts without a joint</span><span style="display:flex;gap:8px;align-items:center"><span class="count-pill">${contacts.length}</span>${icon(contactsOpen ? "chevronDown" : "chevronRight", 14)}</span></button>` +
+      (contactsOpen ? contacts.map((k) => `<div class="contact"><span class="st none">·</span><div>${nameOf(k.a)} ↔ ${nameOf(k.b)}<small>${k.loc} · ${k.a === "top" ? "end grain under the top" : "shelf corner around the leg"}</small></div><button class="add">${k.a === "top" ? "Leave" : "Notch"}</button></div>`).join("") : "");
+    document.getElementById("ctoggle").onclick = () => { contactsOpen = !contactsOpen; renderList(); };
+  }
+
+  // ---------- Right editor ----------
+  function field(key, label, value, unit = "mm", ro = false) {
+    return `<div class="dim ${ro ? "ro" : ""}"><label>${label}</label><div><input data-key="${key}" value="${value}" ${ro ? "readonly" : ""} inputmode="decimal" /><span>${unit}</span></div></div>`;
+  }
+  function segs(key, options, value) {
+    return `<div class="segs">${options.map(([v, l]) => `<button data-seg="${key}" data-val="${v}" class="${String(value) === String(v) ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  }
+  function params(j, type, p) {
+    if (type === "mt") {
+      const h = memberH(j.kind);
+      return `<div class="dims">${field("t", "Thickness", p.t)}${field("w", "Width", h - p.st - p.sb)}${field("L", "Length", p.L)}</div>
+        <div class="dims">${field("st", "Top shoulder", p.st)}${field("sb", "Bottom shoulder", p.sb)}${field("cheek", "Cheeks", ((20 - p.t) / 2).toFixed(1).replace(".0", ""), "mm", true)}</div>
+        <div class="field"><label>Fit</label>${segs("clr", [["tight", "Tight"], ["0.2", "0.2 mm"], ["loose", "Loose"]], p.clr)}</div>
+        ${j.kind === "apron" ? `<div class="field"><label>Tenon ends</label>${segs("ends", [["square", "Square"], ["mitred", "Mitred"]], p.ends)}</div>` : ""}
+        <div class="field"><label>Haunch</label>${segs("haunch", [["false", "None"], ["true", "Haunched"]], p.haunch)}</div>
+        ${p.haunch ? `<div class="dims two" style="margin-top:8px">${field("hd", "Haunch depth", p.hd)}<div></div></div>` : ""}
+        <div class="field"><label>Peg</label>${segs("pegged", [["false", "No"], ["true", "Pegged Ø8"]], p.pegged)}</div>
+        <div class="dims two" style="margin-top:10px">${field("extra", "Mortise extra depth", p.extra)}${field("depth", "Mortise depth", p.L + p.extra, "mm", true)}</div>`;
+    }
+    if (type === "dowels") return `<div class="dims">${field("d", "Diameter", p.d)}${field("n", "Count", p.n, "")}${field("edge", "From top", p.edge)}</div><div class="dims two">${field("da", "Depth in leg", p.da)}${field("db", "Depth in apron", p.db)}</div>`;
+    if (type === "domino") return `<div class="field" style="margin-top:0"><label>Size</label>${segs("size", Object.keys(DOMINO).map((k) => [k, k.replace("x", "×")]), p.size)}</div><div class="dims" style="margin-top:10px">${field("n", "Count", p.n, "")}${field("da", "Depth in leg", p.da)}${field("db", "Depth in apron", p.db)}</div>`;
+    if (type === "pocket") return `<div class="dims">${field("n", "Screws", p.n, "")}${field("len", "Screw length", p.len)}${field("edge", "From top", p.edge)}</div><div class="field"><label>Pockets</label><div style="color:var(--muted)">Inside face, hidden</div></div>`;
+    if (type === "figure8") return `<div class="dims two">${field("spacing", "Spacing", p.spacing)}${field("recess", "Recess depth", p.recess)}</div>`;
+    if (type === "buttons") return `<div class="dims two">${field("spacing", "Spacing", p.spacing)}${field("gap", "Movement gap", p.gap)}</div>`;
+    if (type === "groove") return `<div class="dims">${field("d", "Depth", p.d)}${field("setback", "From top", p.setback)}${field("gw", "Width", (18 + (p.clr === "tight" ? 0 : p.clr === "loose" ? 0.4 : 0.2)).toFixed(1), "mm", true)}</div><div class="field"><label>Fit</label>${segs("clr", [["tight", "Tight"], ["0.2", "0.2 mm"], ["loose", "Loose"]], p.clr)}</div>`;
+    return "";
+  }
+
+  function renderChecks() {
+    const j = sel();
+    const list = checks(j.kind, draft.type, dp());
+    const host = document.getElementById("checks");
+    if (!host) return;
+    const warns = list.filter((c) => c.level === "warn").length;
+    document.getElementById("checkcount").textContent = warns ? `${warns} to review` : "All clear";
+    document.getElementById("checkcount").style.color = warns ? "#a3660a" : "#3e7a52";
+    host.innerHTML = list.map((c, i) => `<div class="check ${c.level}"><span class="ico">${c.level === "ok" ? "✓" : c.level === "warn" ? "!" : "i"}</span>
+      <div>${c.text}${c.fixes ? `<div class="fixes">${c.fixes.map((f, k) => `<button class="fix" data-check="${i}" data-fix="${k}">${f[0]}</button>`).join("")}</div>` : ""}</div></div>`).join("");
+    host.querySelectorAll(".fix").forEach((b) => (b.onclick = () => {
+      Object.assign(dp(), list[+b.dataset.check].fixes[+b.dataset.fix][1]);
+      renderEditor();
+      renderViewport();
+      renderList();
+    }));
+    document.getElementById("notes").innerHTML = notes(j.kind, draft.type, dp()).map(([ic, text]) => `<li>${icon(ic, 16)}<span>${text}</span></li>`).join("");
+    const applyBtn = document.getElementById("apply"), revertBtn = document.getElementById("revert");
+    if (applyBtn) { applyBtn.disabled = !dirty(); revertBtn.disabled = !dirty(); }
+  }
+
+  function renderEditor() {
+    const j = sel();
+    const offer = KIND_TYPES[j.kind];
+    const grp = group(j);
+    const identical = j.custom ? 1 : grp.length;
+    const type = draft.type;
+    const host = document.getElementById("right");
+    const scrollTop = host.scrollTop;
+    host.innerHTML = `
+      <div class="card">
+        <div style="font-size:18px;font-weight:600">${jointTitle(j)}</div>
+        <div class="sub"><span class="tag">${TYPES[j.type].name}</span><span>${j.loc}${identical > 1 ? ` · 1 of ${identical} identical` : j.custom ? " · custom" : ""}</span></div>
+      </div>
+      <div class="card">
+        <h3>Joint type</h3>
+        <div class="types">${offer.offer.map((t) => {
+          const off = ["dovetail", "halflap", "finger"].includes(t);
+          return `<button class="type ${t === type ? "on" : ""} ${off ? "off" : ""}" data-type="${t}" title="${off ? offer.why : TYPES[t].name}">${icon(TYPES[t].icon, 20)}<span>${TYPES[t].short}</span></button>`;
+        }).join("")}</div>
+        ${offer.offer.some((t) => ["dovetail", "halflap", "finger"].includes(t)) ? `<div class="type-note">Dimmed types do not suit this connection. ${offer.why.split(";")[0]}.</div>` : ""}
+      </div>
+      <div class="card"><h3>${TYPES[type].name}<span style="text-transform:none;letter-spacing:0;font-weight:500">mm</span></h3>${params(j, type, dp())}</div>
+      <div class="card"><h3>Checks<span id="checkcount" style="text-transform:none;letter-spacing:0;font-weight:500"></span></h3><div id="checks"></div></div>
+      <div class="card"><h3>Machining</h3><ul class="notes" id="notes"></ul></div>
+      <div class="card"><h3>Apply to</h3><div class="scope">
+        <div class="radio ${scope === "all" ? "on" : ""}" data-scope="all"><span class="dot"></span><div>All ${identical > 1 ? identical : ""} identical joints<small>${identical > 1 ? `Every ${GROUP_LABEL[j.kind]} joint in the bench` : "This joint has custom settings"}</small></div></div>
+        <div class="radio ${scope === "one" ? "on" : ""}" data-scope="one"><span class="dot"></span><div>Only this joint<small>${j.loc}; it becomes a custom joint</small></div></div>
+      </div></div>
+      <div class="editor-actions"><button class="btn primary" id="apply">${icon("check", 15)}Apply</button><button class="btn" id="revert">Revert</button></div>`;
+    host.scrollTop = scrollTop;
+    host.querySelectorAll(".type").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
+    host.querySelectorAll("input[data-key]:not([readonly])").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const v = parseFloat(inp.value.replace(",", "."));
+        if (!Number.isFinite(v) || v < 0) return;
+        const p = dp(), k = inp.dataset.key;
+        if (k === "w") p.sb = Math.max(0, memberH(j.kind) - p.st - v);
+        else p[k] = k === "n" ? Math.max(1, Math.min(4, Math.round(v))) : v;
+        const set = (key, val) => { const el = host.querySelector(`input[data-key="${key}"]`); if (el && el !== inp) el.value = val; };
+        if (draft.type === "mt") {
+          set("w", memberH(j.kind) - p.st - p.sb);
+          set("sb", p.sb);
+          set("cheek", ((20 - p.t) / 2).toFixed(1).replace(".0", ""));
+          set("depth", p.L + p.extra);
+        }
+        renderChecks();
+        renderViewport();
+        renderList();
+      });
+      inp.addEventListener("focus", () => view.render());
+      inp.addEventListener("blur", () => setTimeout(() => view.render(), 0));
+    });
+    host.querySelectorAll("[data-seg]").forEach((b) => (b.onclick = () => {
+      const v = b.dataset.val;
+      dp()[b.dataset.seg] = v === "true" ? true : v === "false" ? false : v;
+      renderEditor();
+      renderViewport();
+      renderList();
+    }));
+    host.querySelectorAll("[data-scope]").forEach((r) => (r.onclick = () => { scope = r.dataset.scope; renderEditor(); }));
+    document.getElementById("apply").onclick = apply;
+    document.getElementById("revert").onclick = () => { startDraft(); renderAll(false); toast("Changes reverted"); };
+    renderChecks();
+  }
+
+  function setType(t) {
+    if (["dovetail", "halflap", "finger"].includes(t)) { toast(`${TYPES[t].name} does not suit a ${GROUP_LABEL[sel().kind]} connection`); return; }
+    if (!KIND_TYPES[sel().kind].offer.includes(t)) { toast(`${TYPES[t].name} is not available for this joint`); return; }
+    draft.type = t;
+    dp();
+    renderEditor();
+    renderViewport();
+    renderTools();
+    renderList();
+  }
+
+  function apply() {
+    const j = sel();
+    const targets = scope === "all" && !j.custom ? group(j) : [j];
+    for (const q of targets) { q.type = draft.type; q.params = structuredClone(dp()); }
+    if (scope === "one" && !j.custom && group(j).length > 1) j.custom = true;
+    startDraft();
+    renderAll(false);
+    toast(targets.length > 1 ? `Applied to ${targets.length} joints` : "Applied to this joint");
+  }
+
+  // ---------- Tool strip ----------
+  const STRIP = [["select", "Select"], "|", ["tenon", "Mortise", "mt"], ["dowel", "Dowels", "dowels"], ["dovetail", "Dovetail", "dovetail"], ["halflap", "Half-lap", "halflap"], ["finger", "Finger", "finger"], ["groove", "Groove", "groove"], ["screw", "Screws", "screws"]];
+  function stripType(key) {
+    const j = sel();
+    if (key === "screws") return j.kind === "top" ? "figure8" : "pocket";
+    if (key === "mt" && draft.type === "domino") return "domino";
+    return key;
+  }
+  function renderTools() {
+    const j = sel();
+    const offer = KIND_TYPES[j.kind].offer;
+    document.getElementById("tools").innerHTML = STRIP.map((t) => {
+      if (t === "|") return '<span class="tool-sep"></span>';
+      const type = t[2] ? stripType(t[2]) : null;
+      const on = type ? type === draft.type || (t[2] === "mt" && draft.type === "domino") || (t[2] === "screws" && ["figure8", "buttons", "pocket"].includes(draft.type)) : false;
+      const off = type && (!offer.includes(type) || ["dovetail", "halflap", "finger"].includes(type));
+      return `<button class="tool ${on ? "on" : ""} ${off ? "off" : ""}" data-key="${t[2] || ""}" title="${off ? "Not available for this joint" : t[1]}">${icon(t[0], 20)}<span>${t[1]}</span></button>`;
+    }).join("");
+    document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => { if (b.dataset.key) setType(stripType(b.dataset.key)); }));
+    hint(j);
+  }
+  let toastTimer = null;
+  function hint(j) {
+    document.getElementById("hint").innerHTML = j.kind === "apron" || j.kind === "stretcher"
+      ? "Drag to orbit · <kbd>E</kbd> explode · <kbd>Tab</kbd> next parameter"
+      : "Drag to orbit · <kbd>E</kbd> explode";
+  }
+  function toast(text) {
+    const h = document.getElementById("hint");
+    h.textContent = text;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => hint(sel()), 2200);
+  }
+
+  // ---------- Selection, explode, look ----------
+  function selectJoint(id) {
+    if (id === selected) return;
+    selected = id;
+    startDraft();
+    scope = "all";
+    renderAll(true);
+  }
+  function renderAll(reframe) {
+    renderList();
+    renderEditor();
+    renderTools();
+    renderViewport(reframe);
+    renderInset();
+  }
+  function animateExplode() {
+    // Background tabs pause animation frames; jump straight to the end state there.
+    if (document.hidden) { explode = explodeTarget; renderViewport(); return; }
+    const step = () => {
+      const d = explodeTarget - explode;
+      if (Math.abs(d) < 0.01) { explode = explodeTarget; renderViewport(); return; }
+      explode += d * 0.22;
+      renderViewport();
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function toggleExplode() {
+    explodeTarget = explodeTarget ? 0 : 1;
+    document.getElementById("explode").classList.toggle("on", !!explodeTarget);
+    animateExplode();
+  }
+  document.getElementById("explode").onclick = toggleExplode;
+  document.querySelectorAll("#look button").forEach((b) => (b.onclick = () => {
+    look = b.dataset.look;
+    document.querySelectorAll("#look button").forEach((x) => x.classList.toggle("on", x === b));
+    renderViewport();
+  }));
+  document.getElementById("jsearch").addEventListener("input", (e) => { filter = e.target.value; renderList(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key.toLowerCase() === "e") toggleExplode();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const i = joints.findIndex((j) => j.id === selected);
+      const next = joints[(i + (e.key === "ArrowDown" ? 1 : joints.length - 1)) % joints.length];
+      selectJoint(next.id);
+      e.preventDefault();
+    }
+  });
+
+  hydrateIcons();
+  startDraft();
+  renderAll(true);
+  if (location.hash === "#explode") toggleExplode();
+</script>
+</body>
+</html>
