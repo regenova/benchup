@@ -4,10 +4,13 @@
 <meta charset="utf-8" />
 <title>BenchUp prototype A · Materials</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
 <link rel="stylesheet" href="shared/workshop.css" />
 <style>
   a.stage, a.btn { text-decoration: none; color: inherit; }
-  a.btn.primary { color: #fff; }
+  a.btn.primary { color: var(--primary-ink); }
+  :root { --none-a: #ece9e3; --none-b: #f8f7f4; --legend-bg: rgba(255,255,255,.9); }
+  :root[data-theme="dark"] { --none-a: #3a3830; --none-b: #2c2a24; --legend-bg: rgba(34,33,28,.9); }
   .body { grid-template-columns: 268px 1fr 344px; }
 
   /* Left: parts grouped by material */
@@ -16,23 +19,23 @@
   .link:hover { background: var(--accent-soft); }
   .link:disabled { color: var(--faint); background: none; cursor: default; }
   .mgroup { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; padding: 12px 8px 4px; }
-  .mgroup .sw { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); background-image: repeating-linear-gradient(100deg, rgba(0,0,0,.07) 0 2px, transparent 2px 6px); }
+  .mgroup .sw { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--swatch-edge); background-image: repeating-linear-gradient(100deg, rgba(0,0,0,.07) 0 2px, transparent 2px 6px); }
   .mgroup b { font-size: 12px; font-weight: 600; }
   .mgroup span { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .mgroup.unassigned b { color: var(--accent); }
-  .sw.none { background: repeating-linear-gradient(45deg, #ece9e3 0 3px, #f8f7f4 3px 6px) !important; }
+  .sw.none { background: repeating-linear-gradient(45deg, var(--none-a) 0 3px, var(--none-b) 3px 6px) !important; }
   .row { grid-template-columns: 1fr auto; padding-left: 32px; }
   .row .tick { display: none; }
-  .legend { position: absolute; left: 16px; bottom: 18px; background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; font-size: 12px; }
+  .legend { position: absolute; left: 16px; bottom: 18px; background: var(--legend-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; font-size: 12px; }
   .legend div { display: flex; align-items: center; gap: 8px; }
-  .legend i { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--swatch-edge); }
 
   /* Right panel */
   .card h3 .act { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); cursor: pointer; }
   .mat { grid-template-columns: 36px 1fr auto; }
   .mat .meta { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .mat .meta b { display: block; color: var(--ink); font-weight: 600; }
-  .brush { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; margin-left: 6px; vertical-align: 1px; }
+  .brush { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--on-accent); margin-left: 6px; vertical-align: 1px; }
   .catalog { margin-top: 8px; max-height: 168px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; }
   .cat { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); }
   .cat:first-child { border-top: 0; }
@@ -45,12 +48,12 @@
   select.native { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); padding: 0 8px; background: var(--panel); width: 100%; }
   .grits { display: flex; gap: 4px; flex-wrap: wrap; }
   .grit { height: 26px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .grit.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .grit.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
   .note { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.45; }
   .total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
   .bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; display: flex; margin: 6px 0 8px; }
   .bar i { display: block; height: 100%; }
-  .stat .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .stat .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: 0; box-shadow: inset 0 0 0 1px var(--swatch-edge); }
   .warn { color: var(--accent); }
   .tool .ic { pointer-events: none; }
 </style>
@@ -69,9 +72,11 @@
       <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
       <a class="stage active" href="a-materials.html"><span class="n">3</span>Materials</a>
       <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
       <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
@@ -146,7 +151,8 @@
     { key: "oakply", name: "Oak-veneered plywood", kind: "Sheet 2500 × 1250", thick: [18], price: 62, unit: "m²", color: "#d4ad78" },
   ];
   const PART_COLORS = { "Leg": "#c98f62", "Long apron": "#8ea8c6", "Short apron": "#9fc293", "Stretcher": "#d9b45f", "Lower shelf": "#c79bc9", "Top": "#e08c6f" };
-  const UNASSIGNED = "#d9d5ce";
+  // Unpainted parts read as neutral on either stage.
+  let UNASSIGNED = benchTheme.pick("#d9d5ce", "#7a756a");
   const FINISHES = ["Hardwax oil, matte", "Hardwax oil, satin", "Water-based lacquer", "Shellac, French polish", "Danish oil", "No finish"];
   const GRITS = [80, 120, 150, 180, 240, 320];
 
@@ -196,10 +202,16 @@
           color: (part) => v.theme.colors[part.material] || UNASSIGNED,
         });
       }
-      outlineSelection(v, selected, "#d63b32");
+      outlineSelection(v, selected, benchTheme.accent());
     },
   });
   document.getElementById("vp").addEventListener("pointerdown", (e) => (shiftDown = e.shiftKey), true);
+  benchTheme.bind(view);
+  window.addEventListener("themechange", () => {
+    UNASSIGNED = benchTheme.pick("#d9d5ce", "#7a756a");
+    syncModel();
+    renderLegend();
+  });
 
   function syncModel() {
     const colors = { unassigned: UNASSIGNED };

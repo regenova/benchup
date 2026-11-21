@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · New project</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.stage, a.btn { text-decoration: none; }
+  a.stage { position: relative; }
+  a.stage.locked { opacity: .5; cursor: not-allowed; }
+  a.stage.locked:hover { color: var(--muted); }
+  a.stage.locked::after {
+    content: attr(data-hint); position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%);
+    background: var(--ink); color: var(--panel); font-size: 11.5px; font-weight: 500; padding: 5px 9px; border-radius: 7px;
+    white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 30;
+  }
+  a.stage.locked:hover::after { opacity: 1; }
+  .stage-wrap.shake { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+  .project-name { border: 0; background: none; outline: none; padding: 0; font-weight: 600; font-size: 14px; width: 190px; }
+  .project-name:focus { box-shadow: 0 1px 0 var(--ink); }
+
+  /* Empty parts panel */
+  .parts-empty { padding: 18px 14px 8px; }
+  .parts-empty .art { width: 44px; height: 44px; border-radius: 12px; background: var(--bg); display: grid; place-items: center; color: var(--faint); margin-bottom: 12px; }
+  .parts-empty b { display: block; font-weight: 600; margin-bottom: 4px; }
+  .parts-empty p { margin: 0 0 14px; color: var(--muted); line-height: 1.5; }
+  .stock-list { display: grid; gap: 6px; }
+  .stock-item { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); text-align: left; width: 100%; }
+  .stock-item:hover { border-color: var(--line-strong); background: var(--hover); }
+  .stock-item .si { width: 34px; height: 34px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; color: var(--muted); }
+  .stock-item small { display: block; color: var(--muted); font-size: 11.5px; }
+  .stock-item .add { color: var(--faint); }
+  .stock-item:hover .add { color: var(--accent); }
+
+  /* Viewport empty state */
+  .empty-state { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: 480px; text-align: center; padding: 26px 28px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 44px rgba(0,0,0,.08); }
+  .empty-state.hidden { display: none; }
+  .empty-state .art { margin: 0 auto 14px; width: 120px; height: 64px; }
+  .empty-state h2 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
+  .empty-state p { margin: 0 0 18px; color: var(--muted); line-height: 1.5; }
+  .empty-state .row-acts { display: flex; gap: 8px; justify-content: center; position: relative; }
+  .empty-state .btn { height: 36px; padding: 0 14px; }
+  .keys { margin-top: 16px; display: flex; gap: 14px; justify-content: center; color: var(--faint); font-size: 12px; flex-wrap: wrap; }
+  .keys kbd { font: 11px ui-monospace, Menlo, monospace; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-strong); color: var(--muted); margin-right: 4px; background: var(--bg); }
+
+  .popover { position: absolute; z-index: 25; width: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.16); text-align: left; display: none; }
+  .popover.open { display: block; }
+  .popover .ph { padding: 6px 8px 8px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .popover .stock-item { border-color: transparent; }
+  .popover .stock-item:hover { border-color: transparent; }
+
+  /* Right panel */
+  .checklist { display: grid; gap: 2px; }
+  .check { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; padding: 8px 0; }
+  .check .tick { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 600; }
+  .check.done .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .check.next .tick { border-color: var(--ink); color: var(--ink); }
+  .check b { display: block; font-weight: 500; }
+  .check small { color: var(--muted); }
+  .check.done b { color: var(--muted); text-decoration: line-through; }
+  select.native { appearance: none; -webkit-appearance: none; border: 0; background: none; outline: none; flex: 1; padding: 0; cursor: pointer; }
+  .select { position: relative; }
+  .select:focus-within { border-color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
+      <div class="project"><input class="project-name" id="projectName" value="Untitled project" aria-label="Project name" /><span id="projectSub">New project · saved on this device</span></div>
+      <button class="iconbtn" id="undoBtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages stage-wrap" id="stages">
+      <a class="stage active" href="a-empty.html"><span class="n">1</span>Design</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <a class="btn primary" href="a-shop-drawings.html" id="drawingsBtn"><i data-icon="print" data-size="16"></i>Shop drawings</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="left">
+      <div class="aside-head"><h2>Parts<span class="count" id="partCount">0</span></h2><button class="iconbtn" title="Add part" id="addPartBtn"><i data-icon="plus" data-size="16"></i></button></div>
+      <div class="search"><i data-icon="search" data-size="15"></i><input placeholder="Find a part" id="partSearch" /></div>
+      <div class="parts" id="parts"></div>
+      <div class="stockbar">
+        <div class="lbl">Add from stock</div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <svg class="vp" id="vp"></svg>
+      <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" id="views">
+          <button class="on" data-v="persp"><i data-icon="cube" data-size="15"></i>3D</button>
+          <button data-v="front">Front</button>
+          <button data-v="side">Side</button>
+          <button data-v="top">Top</button>
+        </div>
+      </div>
+
+      <div class="empty-state" id="emptyState">
+        <svg class="art" viewBox="0 0 120 64" aria-hidden="true">
+          <path d="M10 44 L60 20 L110 44 L60 64 Z" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-dasharray="3 3" />
+          <path d="M30 40 L74 22 L92 30 L48 48 Z" fill="#cfa771" />
+          <path d="M30 40 L48 48 L48 52 L30 44 Z" fill="#a8824f" />
+          <path d="M48 48 L92 30 L92 34 L48 52 Z" fill="#bb9460" />
+        </svg>
+        <h2>Your bench is clear</h2>
+        <p>Start with a board from your stock, or draw the outline of a part and give it a thickness.</p>
+        <div class="row-acts">
+          <button class="btn primary" id="addStockBtn"><i data-icon="plus" data-size="16"></i>Add a board from stock</button>
+          <button class="btn" id="drawBtn"><i data-icon="draw" data-size="16"></i>Draw a part</button>
+          <div class="popover" id="stockPop" style="left:50%;top:44px;transform:translateX(-50%)"><div class="ph">Choose stock</div><div id="popList"></div></div>
+        </div>
+        <div class="keys"><span><kbd>B</kbd>Board from stock</span><span><kbd>S</kbd>Sketch</span><span><kbd>⌘I</kbd>Import</span><span><kbd>⌘K</kbd>Commands</span></div>
+      </div>
+
+      <div class="toolstrip">
+        <div class="hint" id="hint"></div>
+        <div class="tools" id="tools"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right"></aside>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/start-extras.js"></script>
+<script>
+  const { BenchView, MATERIALS, size, mm } = BenchModel;
+  const X = StartExtras;
+  const WOOD = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8", maple: "#e9d2a6" };
+  const MATERIAL_NAMES = { oak: "White oak", walnut: "Black walnut", maple: "Hard maple", plywood: "Birch plywood" };
+
+  // Stock sizes in millimetres: [length, width, thickness]. Sheets use their width as depth.
+  const STOCK = [
+    { id: "board", name: "Board 90 × 20", help: "600 long, lies flat", icon: "board", group: "Boards", label: "Board", size: [600, 90, 20], upright: false },
+    { id: "square", name: "Square 45 × 45", help: "450 long, stands as a leg", icon: "square", group: "Squares", label: "Square", size: [450, 45, 45], upright: true },
+    { id: "sheet", name: "Sheet 18 mm", help: "600 × 400 panel", icon: "sheet", group: "Sheets", label: "Panel", size: [600, 400, 18], upright: false, sheet: true },
+  ];
+
+  const state = {
+    parts: [],
+    selected: null,
+    cursorX: 0,
+    tool: "select",
+    units: X.units.get(),
+    material: "oak",
+    thickness: 20,
+    grain: "length",
+  };
+
+  const view = new BenchView(document.getElementById("vp"), {
+    parts: state.parts,
+    theme: {
+      colors: WOOD,
+      stroke: "rgba(60,45,30,0.45)",
+      strokeWidth: 0.7,
+      selectedStroke: "#d63b32",
+      hoverStroke: "rgba(214,59,50,.6)",
+      dimColor: "#d63b32",
+      dimText: "#b8302a",
+      grid: { minor: "rgba(40,40,40,.06)", major: "rgba(40,40,40,.12)" },
+      // BenchView's contact shadow is drawn for the sample bench footprint, so it stays off here.
+      shadow: null,
+    },
+    view: { azimuth: 62, elevation: 26, pan: [0, -20] },
+    fill: 0.7,
+    onSelect: (id) => select(id, false),
+  });
+  if (window.benchTheme) benchTheme.bind(view, { shadow: null });
+  X.fit(view, { center: [30, 15, 0], radius: 70, minRadius: 45 });
+
+  const fmt = (valueMm) => X.length(valueMm, state.units);
+  const unitLabel = () => (state.units === "in" ? "in" : "mm");
+
+  function addStock(stockId) {
+    const stock = STOCK.find((s) => s.id === stockId);
+    const [l, w, t] = stock.size.map((v) => v / 10);
+    const n = state.parts.filter((p) => p.stock === stockId).length + 1;
+    const x0 = state.cursorX;
+    const material = stock.sheet ? "plywood" : state.material;
+    const part = stock.upright
+      ? { min: [x0, 0, 0], max: [x0 + w, t, l] }
+      : { min: [x0, 0, 0], max: [x0 + l, w, t] };
+    Object.assign(part, { id: `${stockId}-${n}-${Date.now()}`, name: `${stock.label} ${n}`, kind: stock.group, material, stock: stockId });
+    state.cursorX = part.max[0] + 10;
+    state.parts.push(part);
+    closePopover();
+    select(part.id);
+    X.fit(view, { minRadius: 45 });
+    render();
+  }
+
+  function removeLast() {
+    const part = state.parts.pop();
+    if (!part) return;
+    state.cursorX = state.parts.length ? Math.max(...state.parts.map((p) => p.max[0])) + 10 : 0;
+    if (state.selected === part.id) state.selected = null;
+    view.setSelected(state.selected);
+    X.fit(view, state.parts.length ? { minRadius: 45 } : { center: [30, 15, 0], radius: 70 });
+    render();
+  }
+
+  function select(id, updateView = true) {
+    state.selected = id;
+    if (updateView) view.setSelected(id);
+    render();
+  }
+
+  function renderParts() {
+    const host = document.getElementById("parts");
+    document.getElementById("partCount").textContent = state.parts.length;
+    if (!state.parts.length) {
+      host.innerHTML = `<div class="parts-empty">
+        <div class="art">${icon("layers", 22)}</div>
+        <b>No parts yet</b>
+        <p>Every board, panel and dowel of your project appears here, with its finished size. Start with a piece of stock:</p>
+        <div class="stock-list">${STOCK.map(stockItem).join("")}</div>
+      </div>`;
+      host.querySelectorAll(".stock-item").forEach((b) => (b.onclick = () => addStock(b.dataset.stock)));
+      return;
+    }
+    const groups = [...new Set(state.parts.map((p) => p.kind))];
+    host.innerHTML = groups.map((g) => {
+      const items = state.parts.filter((p) => p.kind === g);
+      return `<div class="group-h">${g}<span class="count">${items.length}</span></div>` +
+        items.map((p) => {
+          const s = size(p);
+          return `<div class="row ${p.id === state.selected ? "sel" : ""}" data-id="${p.id}">
+            <span class="sw" style="background:${WOOD[p.material]}"></span><span class="nm">${p.name}</span>
+            <span class="dm">${fmt(s.length * 10)} × ${fmt(s.width * 10)} × ${fmt(s.thickness * 10)}</span></div>`;
+        }).join("");
+    }).join("");
+    host.querySelectorAll(".row").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+  }
+
+  function stockItem(s) {
+    const dims = s.sheet ? `${fmt(s.size[0])} × ${fmt(s.size[1])}` : `${fmt(s.size[1])} × ${fmt(s.size[2])}`;
+    return `<button class="stock-item" data-stock="${s.id}"><span class="si">${X.icon(s.icon, 18)}</span>
+      <span>${s.id === "sheet" ? `Sheet ${fmt(s.size[2])} ${unitLabel()}` : `${s.label === "Board" ? "Board" : "Square"} ${dims}`}<small>${s.help}</small></span>
+      <span class="add">${icon("plus", 16)}</span></button>`;
+  }
+
+  function renderChips() {
+    const chips = STOCK.map((s) => `<button class="chip" data-stock="${s.id}">${icon("plus", 13)}${s.id === "sheet" ? `Sheet ${fmt(s.size[2])} ${unitLabel()}` : `${s.label} ${fmt(s.size[1])} × ${fmt(s.size[2])}`}</button>`).join("") +
+      `<button class="chip" data-stock="dowel">${icon("plus", 13)}Dowel Ø${fmt(10)}</button>`;
+    document.getElementById("chips").innerHTML = chips;
+    document.querySelectorAll("#chips .chip").forEach((c) => (c.onclick = () => {
+      if (c.dataset.stock === "dowel") X.toast("Dowels join two parts: add them from the Joinery stage.");
+      else addStock(c.dataset.stock);
+    }));
+    document.getElementById("popList").innerHTML = STOCK.map(stockItem).join("");
+    document.querySelectorAll("#popList .stock-item").forEach((b) => (b.onclick = () => addStock(b.dataset.stock)));
+  }
+
+  const TOOLS = [["select", "Select"], ["board", "Board"], ["panel", "Panel"], ["draw", "Sketch"], "|", ["pushpull", "Extrude"], ["move", "Move"], ["rotate", "Rotate"], ["mirror", "Mirror"], ["array", "Repeat"], "|", ["measure", "Measure"], ["section", "Section"]];
+  function renderTools() {
+    const empty = !state.parts.length;
+    const hints = {
+      select: empty ? "Nothing to select yet · Press <kbd>B</kbd> to add a board from stock" : "Click a part to edit its size · <kbd>Shift</kbd> adds to the selection",
+      board: "Board: click two corners, drag the thickness, or type <kbd>600</kbd><kbd>Tab</kbd><kbd>90</kbd>",
+      panel: "Panel: click two corners on the ground or on a face",
+      draw: "Sketch: click to start the outline · <kbd>Enter</kbd> closes it, then drag a thickness",
+    };
+    document.getElementById("hint").innerHTML = hints[state.tool] || "Pick a part first";
+    document.getElementById("tools").innerHTML = TOOLS.map((t) => t === "|" ? '<span class="tool-sep"></span>' :
+      `<button class="tool ${t[0] === state.tool ? "on" : ""}" data-tool="${t[0]}" ${empty && ["pushpull", "move", "rotate", "mirror", "array", "section"].includes(t[0]) ? 'style="opacity:.4" title="Add a part first"' : ""}>${icon(t[0], 20)}<span>${t[1]}</span></button>`).join("");
+    document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => {
+      if (b.style.opacity) return;
+      state.tool = b.dataset.tool;
+      renderTools();
+    }));
+  }
+
+  function renderRight() {
+    const host = document.getElementById("right");
+    const p = state.parts.find((q) => q.id === state.selected);
+    const done = [state.parts.length > 0, false, false, false];
+    const steps = [
+      ["Add parts", "From stock, by drawing, or by importing a model"],
+      ["Join them", "Mortise & tenon, dowels, dovetails…"],
+      ["Assign materials", "Species, grain direction and finish"],
+      ["Review the cut list", "Cut sizes, board layouts and costs"],
+    ];
+    const nextIndex = done.indexOf(false);
+    const partCard = p ? (() => {
+      const s = size(p);
+      return `<div class="card">
+        <h3>Selected part<span style="text-transform:none;letter-spacing:0;font-weight:500">${unitLabel()}</span></h3>
+        <input class="title-input" value="${p.name}" id="partName" />
+        <div class="sub" style="margin-bottom:12px"><span class="tag">${p.kind}</span><span>${MATERIAL_NAMES[p.material]}</span></div>
+        <div class="dims">
+          <div class="dim"><label>Length</label><div><input value="${fmt(s.length * 10)}" /></div></div>
+          <div class="dim"><label>Width</label><div><input value="${fmt(s.width * 10)}" /></div></div>
+          <div class="dim"><label>Thickness</label><div><input value="${fmt(s.thickness * 10)}" /></div></div>
+        </div>
+      </div>`;
+    })() : "";
+    host.innerHTML = partCard + `
+      <div class="card">
+        <h3>New project</h3>
+        <div class="field" style="margin-top:0"><label>Units</label>
+          <div class="segs" id="unitSegs"><button data-u="mm" class="${state.units === "mm" ? "on" : ""}">Millimetres</button><button data-u="in" class="${state.units === "in" ? "on" : ""}">Inches</button></div></div>
+        <div class="field"><label>Material</label>
+          <div class="select"><span class="sw" style="background:${WOOD[state.material]}"></span>
+            <select class="native" id="materialSel">${Object.keys(MATERIAL_NAMES).filter((k) => k !== "plywood").map((k) => `<option value="${k}" ${k === state.material ? "selected" : ""}>${MATERIAL_NAMES[k]}</option>`).join("")}</select>${icon("chevronDown", 14)}</div></div>
+        <div class="field"><label>Stock</label>
+          <div class="segs" id="thickSegs">${[18, 20, 27, 45].map((t) => `<button data-t="${t}" class="${t === state.thickness ? "on" : ""}">${fmt(t)}</button>`).join("")}</div></div>
+        <div class="field"><label>Grain</label>
+          <div class="segs" id="grainSegs"><button data-g="length" class="${state.grain === "length" ? "on" : ""}">Along length</button><button data-g="across" class="${state.grain === "across" ? "on" : ""}">Across</button></div></div>
+        <p style="margin:12px 0 0;color:var(--muted);font-size:12px;line-height:1.45">New boards use this material, stock thickness and grain. Sheets always start as birch plywood.</p>
+      </div>
+      <div class="card">
+        <h3>Next steps<span>${done.filter(Boolean).length} of 4</span></h3>
+        <div class="checklist">${steps.map((s, i) => `<div class="check ${done[i] ? "done" : i === nextIndex ? "next" : ""}">
+          <span class="tick">${done[i] ? "✓" : i + 1}</span><div><b>${s[0]}</b><small>${s[1]}</small></div></div>`).join("")}</div>
+      </div>`;
+    host.querySelectorAll("#unitSegs button").forEach((b) => (b.onclick = () => {
+      state.units = b.dataset.u;
+      X.units.set(state.units);
+      render();
+    }));
+    host.querySelectorAll("#thickSegs button").forEach((b) => (b.onclick = () => { state.thickness = Number(b.dataset.t); updateStockThickness(); render(); }));
+    host.querySelectorAll("#grainSegs button").forEach((b) => (b.onclick = () => { state.grain = b.dataset.g; render(); }));
+    host.querySelector("#materialSel").onchange = (e) => { state.material = e.target.value; render(); };
+    const nameInput = host.querySelector("#partName");
+    if (nameInput) nameInput.oninput = (e) => { p.name = e.target.value; renderParts(); };
+  }
+
+  // The board and square stock follow the default thickness; sheets keep 18 mm.
+  function updateStockThickness() {
+    STOCK[0].size[2] = state.thickness;
+  }
+
+  function renderStages() {
+    const empty = !state.parts.length;
+    document.querySelectorAll("a.stage").forEach((a, i) => {
+      if (i > 0) a.classList.toggle("locked", empty);
+    });
+    document.getElementById("projectSub").textContent = empty
+      ? "New project · saved on this device"
+      : `Saved on this device · ${state.parts.length} part${state.parts.length === 1 ? "" : "s"}`;
+    document.getElementById("emptyState").classList.toggle("hidden", !empty);
+  }
+
+  function render() {
+    renderStages();
+    renderParts();
+    renderChips();
+    renderTools();
+    renderRight();
+  }
+
+  // Locked stages explain themselves instead of navigating.
+  document.querySelectorAll("a.stage").forEach((a) => a.addEventListener("click", (e) => {
+    if (a.classList.contains("locked")) {
+      e.preventDefault();
+      const nav = document.getElementById("stages");
+      nav.classList.remove("shake");
+      void nav.offsetWidth;
+      nav.classList.add("shake");
+      X.toast("Add at least one part, then join, assign materials and review the cut list.");
+    }
+  }));
+  document.getElementById("drawingsBtn").addEventListener("click", (e) => {
+    if (!state.parts.length) {
+      e.preventDefault();
+      X.toast("Shop drawings appear once the project has parts.");
+    }
+  });
+
+  function openPopover() { document.getElementById("stockPop").classList.add("open"); }
+  function closePopover() { document.getElementById("stockPop").classList.remove("open"); }
+  document.getElementById("addStockBtn").onclick = (e) => { e.stopPropagation(); document.getElementById("stockPop").classList.toggle("open"); };
+  document.getElementById("addPartBtn").onclick = () => { if (state.parts.length) X.toast("Choose stock from the list below, or draw a part."); else openPopover(); };
+  document.getElementById("drawBtn").onclick = () => {
+    state.tool = "draw";
+    document.getElementById("emptyState").classList.add("hidden");
+    renderTools();
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#stockPop") && !e.target.closest("#addStockBtn") && !e.target.closest("#addPartBtn")) closePopover();
+  });
+  document.getElementById("undoBtn").onclick = removeLast;
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); removeLast(); return; }
+    if (e.metaKey || e.ctrlKey) return;
+    const key = e.key.toLowerCase();
+    if (key === "b") {
+      if (!state.parts.length) { document.getElementById("emptyState").classList.remove("hidden"); openPopover(); }
+      else addStock("board");
+    }
+    if (key === "s") { state.tool = "draw"; if (!state.parts.length) document.getElementById("emptyState").classList.add("hidden"); renderTools(); }
+    if (key === "escape") {
+      closePopover();
+      if (state.tool !== "select") { state.tool = "select"; renderTools(); renderStages(); }
+      else select(null);
+    }
+  });
+
+  const VIEWS = { persp: { azimuth: 62, elevation: 26 }, front: { azimuth: 90, elevation: 0.5 }, side: { azimuth: 0.5, elevation: 0.5 }, top: { azimuth: 90, elevation: 89.5 } };
+  document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b));
+    view.animateTo(VIEWS[b.dataset.v]);
+  }));
+
+  document.getElementById("projectName").addEventListener("input", (e) => (document.title = `BenchUp prototype A · ${e.target.value || "New project"}`));
+
+  hydrateIcons();
+  render();
+</script>
+</body>
+</html>

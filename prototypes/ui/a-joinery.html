@@ -4,11 +4,14 @@
 <meta charset="utf-8" />
 <title>BenchUp prototype A · Joinery</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
 <link rel="stylesheet" href="shared/workshop.css" />
 <style>
   .body { grid-template-columns: 284px 1fr 372px; }
   a.stage, a.btn { text-decoration: none; color: inherit; }
-  a.btn.primary { color: #fff; }
+  a.btn.primary { color: var(--primary-ink); }
+  :root { --chip-bg: rgba(255,255,255,.9); --warn-strong: #8a560a; }
+  :root[data-theme="dark"] { --chip-bg: rgba(34,33,28,.9); --warn-strong: #f0bf63; }
 
   /* Left: joints list */
   .jlist { overflow: auto; flex: 1; padding: 0 8px 8px; }
@@ -19,25 +22,25 @@
   .jrow small { display: block; color: var(--muted); font-size: 11.5px; }
   .jrow .tag { font-size: 10.5px; }
   .st { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
-  .st.ok { background: #e4f1e8; color: #3e7a52; }
-  .st.warn { background: #fdf0d9; color: #a3660a; }
+  .st.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .st.warn { background: var(--warn-bg); color: var(--warn-ink); }
   .st.none { background: var(--bg); color: var(--faint); border: 1px dashed var(--line-strong); }
   .contacts { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
   .contacts-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink); }
   .contacts-toggle:hover { background: var(--hover); }
-  .contacts-toggle .count-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #fdf0d9; color: #a3660a; font-weight: 600; }
+  .contacts-toggle .count-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-ink); font-weight: 600; }
   .contact { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 6px 8px; }
   .contact small { display: block; color: var(--muted); font-size: 11.5px; }
   .contact .add { height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); }
   .contact .add:hover { color: var(--ink); background: var(--hover); }
 
   /* Viewport overlays */
-  .jointchip { background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; font-size: 12px; color: var(--muted); }
+  .jointchip { background: var(--chip-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; font-size: 12px; color: var(--muted); }
   .jointchip b { color: var(--ink); font-weight: 600; }
-  .inset { position: absolute; left: 16px; top: 68px; width: 228px; height: 168px; background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px rgba(30,30,30,.08); }
+  .inset { position: absolute; left: 16px; top: 68px; width: 228px; height: 168px; background: var(--chip-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--card-shadow); }
   .inset svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .inset .lbl { position: absolute; left: 10px; top: 8px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; pointer-events: none; }
-  .preview-chip { position: absolute; right: 16px; top: 58px; display: none; background: #fdf0d9; color: #8a560a; border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 500; }
+  .preview-chip { position: absolute; right: 16px; top: 58px; display: none; background: var(--warn-bg); color: var(--warn-strong); border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 500; }
   .preview-chip.show { display: block; }
   .tool.off { opacity: .38; cursor: not-allowed; }
   .tool.off:hover { background: none; color: var(--muted); }
@@ -58,9 +61,9 @@
   .check { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); line-height: 1.4; }
   .check:first-of-type { border-top: 0; padding-top: 0; }
   .check .ico { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
-  .check.ok .ico { background: #e4f1e8; color: #3e7a52; }
-  .check.warn .ico { background: #fdf0d9; color: #a3660a; }
-  .check.info .ico { background: #e8eef7; color: #3c5f8f; }
+  .check.ok .ico { background: var(--ok-bg); color: var(--ok-ink); }
+  .check.warn .ico { background: var(--warn-bg); color: var(--warn-ink); }
+  .check.info .ico { background: var(--info-bg); color: var(--info-ink); }
   .check .fixes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
   .check .fix { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; background: var(--panel); }
   .check .fix:hover { background: var(--hover); }
@@ -94,9 +97,11 @@
       <a class="stage active" href="a-joinery.html"><span class="n">2</span>Joinery</a>
       <a class="stage" href="a-materials.html"><span class="n">3</span>Materials</a>
       <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
       <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
@@ -137,6 +142,11 @@
 <script>
   const { PARTS, BenchView, mm } = BenchModel;
   const byId = Object.fromEntries(PARTS.map((p) => [p.id, p]));
+  // Overlay colours for the close-up, which SVG attributes cannot take from CSS variables.
+  const INK = () => benchTheme.pick(
+    { accent: "#d63b32", clashFill: "rgba(214,59,50,.55)", onAccent: "#fff", chipBg: "rgba(255,255,255,.92)", chipInk: "#3a3f45", chipLine: "#e2ded7", dimBg: "rgba(255,255,255,.95)", dimInk: "#b8302a", leader: "#7a5a3a", steel: "#4c5560", ring: "rgba(214,59,50,.14)" },
+    { accent: "#ff7d61", clashFill: "rgba(255,125,97,.5)", onAccent: "#1e110d", chipBg: "rgba(34,33,28,.94)", chipInk: "#ece7dc", chipLine: "#46433a", dimBg: "rgba(30,29,24,.95)", dimInk: "#ffd5ca", leader: "#c9a57d", steel: "#b4bcc6", ring: "rgba(255,125,97,.18)" },
+  );
   const COLORS = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8", peg: "#5f3d26", steel: "#8d949b", loose: "#e2c48f", tenon: "#e9bd7c" };
   const LOC = { fl: "front left", fr: "front right", bl: "back left", br: "back right" };
 
@@ -346,7 +356,7 @@
           if (meets && !mitred && e < 0.01) {
             clash.push({ min: [86 - t / 2, 31 - t / 2, zb], max: [Math.min(83.5 + L, 86 + t / 2), Math.min(28.5 + L, 31 + t / 2), zt] });
           }
-          if (mitred && e < 4) lines.push({ a: [86 - t / 2 - e, 31 - t / 2, zt], b: [86 + t / 2 - e * 0, 31 + t / 2 - e, zt], color: "#d63b32" });
+          if (mitred && e < 4) lines.push({ a: [86 - t / 2 - e, 31 - t / 2, zt], b: [86 + t / 2 - e * 0, 31 + t / 2 - e, zt], color: INK().accent });
         }
         if (p.pegged) {
           const px = 83.5 + Math.min(L, 4) / 2;
@@ -390,7 +400,7 @@
           const zc = n === 1 ? (zl + zh) / 2 : zh - p.edge / 10 - ((h - (2 * p.edge) / 10) * i) / Math.max(1, n - 1);
           dashed.push({ min: [83.5 - 5 - e, 30, zc - 0.5], max: [83.5 - 1.2 - e, 30.6, zc + 0.5] });
           const reach = (p.len / 10) * 0.95;
-          lines.push({ a: [83.5 - 3.6 - e, 30.3, zc], b: [83.5 - 3.6 + reach - e, 30.3 + reach * 0.27, zc], color: "#4c5560", width: 2.2 });
+          lines.push({ a: [83.5 - 3.6 - e, 30.3, zc], b: [83.5 - 3.6 + reach - e, 30.3 + reach * 0.27, zc], color: INK().steel, width: 2.2 });
         }
         labels.push(["pocket", "Pockets on the inside face"]);
       }
@@ -452,6 +462,8 @@
     onSelect: () => {},
     onRender: (v) => overlay(v),
   });
+  // The close-up has no ground, so dark mode only changes edges, highlights and lighting.
+  benchTheme.bind(view, { grid: null, shadow: null, stroke: "rgba(10,8,5,.75)" });
 
   function boxEdges(min, max) {
     const c = [];
@@ -467,7 +479,7 @@
     for (const box of scene.dashed)
       for (const [a, b] of boxEdges(box.min, box.max)) {
         const A = v.project(a), Bp = v.project(b);
-        svgEl("line", { x1: A[0], y1: A[1], x2: Bp[0], y2: Bp[1], stroke: "#7a5a3a", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.85 }, g);
+        svgEl("line", { x1: A[0], y1: A[1], x2: Bp[0], y2: Bp[1], stroke: INK().leader, "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.85 }, g);
       }
     for (const box of scene.clash) {
       const { d } = v._basis;
@@ -478,10 +490,10 @@
       ];
       for (const f of faces) {
         if (f.n[0] * d[0] + f.n[1] * d[1] + f.n[2] * d[2] <= 0) continue;
-        svgEl("polygon", { points: f.p.map((q) => v.project(q).join(",")).join(" "), fill: "rgba(214,59,50,.55)", stroke: "#d63b32", "stroke-width": 1.4 }, g);
+        svgEl("polygon", { points: f.p.map((q) => v.project(q).join(",")).join(" "), fill: INK().clashFill, stroke: INK().accent, "stroke-width": 1.4 }, g);
       }
       const c = v.project([(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, box.max[2]]);
-      chip(g, c[0], c[1] - 22, "Tenons collide", "#d63b32", "#fff");
+      chip(g, c[0], c[1] - 22, "Tenons collide", INK().accent, INK().onAccent, "none");
     }
     for (const ln of scene.lines) {
       const A = v.project(ln.a), Bp = v.project(ln.b);
@@ -499,13 +511,13 @@
         if (id === "b") at = v.project([part.max[0], part.min[1] + 2.5, part.max[2]]);
         if (id === "leg") at = v.project([part.max[0], part.max[1], part.min[2] + 1.5]);
       }
-      chip(g, at[0], at[1] - 14, text, "rgba(255,255,255,.92)", "#3a3f45");
+      chip(g, at[0], at[1] - 14, text, INK().chipBg, INK().chipInk, INK().chipLine);
     }
   }
 
-  function chip(g, x, y, text, bg, fg) {
+  function chip(g, x, y, text, bg, fg, line = "none") {
     const w = text.length * 6.4 + 16;
-    svgEl("rect", { x: x - w / 2, y: y - 11, width: w, height: 22, rx: 11, fill: bg, stroke: bg.startsWith("rgba(255") ? "#e2ded7" : "none" }, g);
+    svgEl("rect", { x: x - w / 2, y: y - 11, width: w, height: 22, rx: 11, fill: bg, stroke: line }, g);
     const t = svgEl("text", { x, y: y + 4, "text-anchor": "middle", fill: fg, style: "font: 500 11.5px Inter, ui-sans-serif, system-ui, sans-serif" }, g);
     t.textContent = text;
   }
@@ -514,7 +526,7 @@
     const A = v.project(dm.a), Bp = v.project(dm.b);
     const A2 = v.project(dm.a.map((x, k) => x + dm.o[k])), B2 = v.project(dm.b.map((x, k) => x + dm.o[k]));
     if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < (dm.min || 10)) return;
-    const st = { stroke: "#d63b32", "stroke-width": 1 };
+    const st = { stroke: INK().accent, "stroke-width": 1 };
     svgEl("line", Object.assign({ x1: A[0], y1: A[1], x2: A2[0], y2: A2[1], "stroke-dasharray": "2 2" }, st), g);
     svgEl("line", Object.assign({ x1: Bp[0], y1: Bp[1], x2: B2[0], y2: B2[1], "stroke-dasharray": "2 2" }, st), g);
     svgEl("line", Object.assign({ x1: A2[0], y1: A2[1], x2: B2[0], y2: B2[1] }, st), g);
@@ -522,8 +534,8 @@
     const mx = (A2[0] + B2[0]) / 2, my = (A2[1] + B2[1]) / 2;
     const w = dm.label.length * 7 + 12;
     const focus = dm.key && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key === dm.key;
-    svgEl("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 4, fill: focus ? "#d63b32" : "rgba(255,255,255,.95)" }, g);
-    const t = svgEl("text", { x: mx, y: my + 4, "text-anchor": "middle", fill: focus ? "#fff" : "#b8302a", style: "font: 11px ui-monospace, SFMono-Regular, Menlo, monospace" }, g);
+    svgEl("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 4, fill: focus ? INK().accent : INK().dimBg }, g);
+    const t = svgEl("text", { x: mx, y: my + 4, "text-anchor": "middle", fill: focus ? INK().onAccent : INK().dimInk, style: "font: 11px ui-monospace, SFMono-Regular, Menlo, monospace" }, g);
     t.textContent = dm.label;
   }
 
@@ -566,10 +578,11 @@
       const c = [0, 1, 2].map((k) => (Math.max(A.min[k], Bq.min[k]) + Math.min(A.max[k], Bq.max[k])) / 2);
       const p = v.project(c);
       const g = svgEl("g", { "pointer-events": "none" }, v.svg);
-      svgEl("circle", { cx: p[0], cy: p[1], r: 11, fill: "rgba(214,59,50,.14)", stroke: "#d63b32", "stroke-width": 1.6 }, g);
-      svgEl("circle", { cx: p[0], cy: p[1], r: 2.4, fill: "#d63b32" }, g);
+      svgEl("circle", { cx: p[0], cy: p[1], r: 11, fill: INK().ring, stroke: INK().accent, "stroke-width": 1.6 }, g);
+      svgEl("circle", { cx: p[0], cy: p[1], r: 2.4, fill: INK().accent }, g);
     },
   });
+  benchTheme.bind(inset, { grid: null, shadow: null, stroke: "rgba(10,8,5,.6)" });
   function renderInset() {
     const j = sel();
     inset.theme.dimmed = new Set([j.a, j.b]);
@@ -593,13 +606,13 @@
     document.getElementById("jcount").textContent = joints.length;
     host.innerHTML = groups.map((g) => {
       const warnCount = g.items.filter((j) => worst(checks(j.kind, j.type, j.params)) === "warn").length;
-      return `<div class="group-h">${TYPES[g.key].list}<span class="count">${g.items.length}</span>${warnCount ? `<span style="margin-left:auto;color:#a3660a;text-transform:none;letter-spacing:0">${warnCount} to review</span>` : ""}</div>` +
+      return `<div class="group-h">${TYPES[g.key].list}<span class="count">${g.items.length}</span>${warnCount ? `<span style="margin-left:auto;color:var(--warn-ink);text-transform:none;letter-spacing:0">${warnCount} to review</span>` : ""}</div>` +
         g.items.map((j) => {
           const s = worst(checks(j.kind, j.type, j.params));
           return `<div class="jrow ${j.id === selected ? "sel" : ""}" data-id="${j.id}">
             <span class="st ${s}">${s === "ok" ? "✓" : "!"}</span>
             <div class="nm">${jointTitle(j)}<small>${j.loc}${j.custom ? " · custom" : ""}</small></div>
-            ${j.id === selected && dirty() ? '<span class="tag" style="background:#fdf0d9;color:#8a560a">edited</span>' : ""}</div>`;
+            ${j.id === selected && dirty() ? '<span class="tag" style="background:var(--warn-bg);color:var(--warn-strong)">edited</span>' : ""}</div>`;
         }).join("");
     }).join("") || `<div class="empty">No joints match “${filter}”.</div>`;
     host.querySelectorAll(".jrow").forEach((r) => (r.onclick = () => selectJoint(r.dataset.id)));
@@ -644,7 +657,7 @@
     if (!host) return;
     const warns = list.filter((c) => c.level === "warn").length;
     document.getElementById("checkcount").textContent = warns ? `${warns} to review` : "All clear";
-    document.getElementById("checkcount").style.color = warns ? "#a3660a" : "#3e7a52";
+    document.getElementById("checkcount").style.color = warns ? "var(--warn-ink)" : "var(--ok-ink)";
     host.innerHTML = list.map((c, i) => `<div class="check ${c.level}"><span class="ico">${c.level === "ok" ? "✓" : c.level === "warn" ? "!" : "i"}</span>
       <div>${c.text}${c.fixes ? `<div class="fixes">${c.fixes.map((f, k) => `<button class="fix" data-check="${i}" data-fix="${k}">${f[0]}</button>`).join("")}</div>` : ""}</div></div>`).join("");
     host.querySelectorAll(".fix").forEach((b) => (b.onclick = () => {

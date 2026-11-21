@@ -4,9 +4,13 @@
 <meta charset="utf-8" />
 <title>BenchUp prototype A · Shop drawings</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
 <link rel="stylesheet" href="shared/workshop.css" />
 <style>
   a.stage { text-decoration: none; }
+  /* Sheets stay paper-white in both themes, like a print preview on a dark desk. */
+  :root { --menu-shadow: 0 12px 30px rgba(0,0,0,.12); --page-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 40px rgba(40,30,20,.16); --notice-bg: #fdf4e6; --notice-ink: #9a5a12; --toast-bg: rgba(29,33,38,.94); --toast-ink: #f1f2f3; }
+  :root[data-theme="dark"] { --menu-shadow: var(--pop-shadow); --page-shadow: 0 1px 2px rgba(0,0,0,.5), 0 18px 48px rgba(0,0,0,.6); --notice-bg: var(--warn-bg); --notice-ink: var(--warn-ink); --toast-bg: rgba(58,55,47,.97); --toast-ink: #ece7dc; }
   .back { height: 32px; padding: 0 10px 0 6px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; }
   .back:hover { background: var(--hover); color: var(--ink); }
   .back .ic { transform: rotate(180deg); }
@@ -22,7 +26,7 @@
   .sheet-item.dragging { opacity: .4; }
   .sheet-item.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
   .grip { color: var(--faint); cursor: grab; padding-top: 4px; font-size: 12px; line-height: 1; letter-spacing: -1px; user-select: none; }
-  .thumb { background: #fffdf9; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; line-height: 0; }
+  .thumb { background: var(--paper); border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; line-height: 0; }
   .sheet-item.sel .thumb { border-color: var(--accent); }
   .thumb svg { width: 100%; height: auto; display: block; }
   .meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
@@ -36,14 +40,14 @@
   .switch input:checked + span::after { transform: translateX(12px); }
   .nav-foot { border-top: 1px solid var(--line); padding: 10px 12px; position: relative; }
   .nav-foot .btn { width: 100%; justify-content: center; }
-  .menu { position: absolute; left: 12px; right: 12px; bottom: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.12); padding: 4px; display: none; z-index: 5; }
+  .menu { position: absolute; left: 12px; right: 12px; bottom: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--menu-shadow); padding: 4px; display: none; z-index: 5; }
   .menu.open { display: block; }
   .menu button { width: 100%; text-align: left; padding: 8px 10px; border-radius: 7px; display: flex; flex-direction: column; gap: 1px; }
   .menu button:hover { background: var(--hover); }
   .menu small { color: var(--muted); }
 
   /* Viewer */
-  .viewer { display: grid; grid-template-rows: 48px 1fr; min-width: 0; min-height: 0; background: #e9e7e2; }
+  .viewer { display: grid; grid-template-rows: 48px 1fr; min-width: 0; min-height: 0; background: var(--desk); }
   .vbar { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .pager { display: flex; align-items: center; gap: 4px; }
   .pager .label { min-width: 210px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -52,10 +56,10 @@
   .zoom .pct { width: 52px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
   .zbtn { height: 30px; min-width: 30px; padding: 0 9px; border-radius: 7px; color: var(--muted); display: grid; place-items: center; }
   .zbtn:hover { background: var(--hover); color: var(--ink); }
-  .zbtn.on { background: var(--ink); color: #fff; }
+  .zbtn.on { background: var(--primary); color: var(--primary-ink); }
   .desk { overflow: auto; position: relative; }
   .desk-inner { min-width: 100%; min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 28px; box-sizing: border-box; }
-  .page { background: #fffdf9; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 40px rgba(40,30,20,.16); flex: none; margin: auto; }
+  .page { background: var(--paper); box-shadow: var(--page-shadow); flex: none; margin: auto; }
   .page svg { display: block; width: 100%; height: 100%; }
   svg.sheet text { font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; }
   svg.sheet .num { font-variant-numeric: tabular-nums; }
@@ -65,12 +69,12 @@
   .check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
   .views { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
   .text-input { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); padding: 0 10px; outline: none; width: 100%; background: var(--panel); }
-  .text-input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(29,33,38,.08); }
+  .text-input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring); }
   .segs.wrap { flex-wrap: wrap; }
-  .warn { margin-top: 10px; color: #9a5a12; background: #fdf4e6; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.4; display: none; }
+  .warn { margin-top: 10px; color: var(--notice-ink); background: var(--notice-bg); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.4; display: none; }
   .warn.show { display: block; }
   .set-summary { color: var(--muted); font-size: 12px; margin-top: 8px; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); background: rgba(29,33,38,.94); color: #f1f2f3; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; font-size: 12.5px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); background: var(--toast-bg); color: var(--toast-ink); padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; font-size: 12.5px; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast .ic { color: #7fd29b; }
 </style>
@@ -88,9 +92,11 @@
       <a class="stage" href="a-joinery.html"><span class="n">2</span>Joinery</a>
       <a class="stage" href="a-materials.html"><span class="n">3</span>Materials</a>
       <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
       <button class="btn primary" id="export"><i data-icon="download" data-size="16"></i>Export PDF</button>
     </div>

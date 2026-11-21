@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <title>BenchUp prototype A · Workshop flow</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
 <link rel="stylesheet" href="shared/workshop.css" />
 </head>
 <body>
@@ -20,9 +21,11 @@
       <button class="stage" data-stage="joinery"><span class="n">2</span>Joinery</button>
       <button class="stage" data-stage="materials"><span class="n">3</span>Materials</button>
       <button class="stage" data-stage="cutlist"><span class="n">4</span>Cut list</button>
+      <button class="stage" data-stage="estimate"><span class="n">5</span>Estimate</button>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
       <a class="btn primary" href="a-shop-drawings.html" style="text-decoration:none"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
@@ -131,6 +134,9 @@
     view: { azimuth: 62, elevation: 24, pan: [0, -30] },
     onSelect: (id) => select(id, false),
   });
+  benchTheme.bind(view);
+  // The cut list draws SVG with the accent colour, so redraw it too.
+  window.addEventListener("themechange", () => { if (stage === "cutlist") renderCutlist(); });
 
   function select(id, updateView = true) {
     selected = id;
@@ -286,7 +292,7 @@
         const k = 1000 / 2400; // shared scale so boards compare honestly
         return `<div class="board"><div class="bh"><span>${MATERIALS[b.mat].name} · board ${i + 1}</span><span>${b.L} × ${b.W}</span></div>
           <svg viewBox="0 0 1000 ${b.W * k + 2}"><rect x="1" y="1" width="${b.L * k - 2}" height="${b.W * k}" rx="3" fill="${COLORS[b.mat]}" opacity=".25" stroke="${COLORS[b.mat]}"/>
-          ${b.items.map((it) => `<rect x="${1 + it.x * k}" y="${1 + it.y * k}" width="${it.l * k}" height="${it.w * k}" fill="${COLORS[b.mat]}" stroke="${it.p.id === selected ? "#d63b32" : "rgba(0,0,0,.35)"}" stroke-width="${it.p.id === selected ? 2 : 0.8}"/>
+          ${b.items.map((it) => `<rect x="${1 + it.x * k}" y="${1 + it.y * k}" width="${it.l * k}" height="${it.w * k}" fill="${COLORS[b.mat]}" stroke="${it.p.id === selected ? benchTheme.accent() : "rgba(0,0,0,.35)"}" stroke-width="${it.p.id === selected ? 2 : 0.8}"/>
             ${it.w * k > 9 && it.l * k > 50 ? `<text x="${1 + it.x * k + 6}" y="${1 + it.y * k + Math.min(it.w * k, 14) - 3}" font-size="${Math.min(10, it.w * k - 2)}" fill="#2a1f14" font-family="system-ui">${it.p.name} ${Math.round(it.l)}</text>` : ""}`).join("")}
           </svg></div>`; }).join("")}</div>`;
     host.querySelectorAll("tbody tr").forEach((r) => (r.onclick = () => select(r.dataset.id)));
@@ -299,7 +305,7 @@
     document.querySelectorAll(".stage").forEach((b) => {
       const i = order.indexOf(b.dataset.stage);
       b.classList.toggle("active", b.dataset.stage === s);
-      b.classList.toggle("done", i < order.indexOf(s));
+      b.classList.toggle("done", i >= 0 && i < order.indexOf(s));
     });
     document.getElementById("cutlist").classList.toggle("show", s === "cutlist");
     if (s === "cutlist") renderCutlist();
@@ -309,7 +315,7 @@
   }
 
   // Joinery and Materials have their own full screens; Design and Cut list stay on this page.
-  const STAGE_PAGES = { joinery: "a-joinery.html", materials: "a-materials.html" };
+  const STAGE_PAGES = { joinery: "a-joinery.html", materials: "a-materials.html", estimate: "a-estimate.html" };
   document.querySelectorAll(".stage").forEach((b) => (b.onclick = () => {
     const page = STAGE_PAGES[b.dataset.stage];
     if (page) location.href = page;
