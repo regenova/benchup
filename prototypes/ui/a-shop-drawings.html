@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Shop drawings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.stage { text-decoration: none; }
+  .back { height: 32px; padding: 0 10px 0 6px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; }
+  .back:hover { background: var(--hover); color: var(--ink); }
+  .back .ic { transform: rotate(180deg); }
+
+  .body.drawings { grid-template-columns: 252px 1fr 316px; }
+
+  /* Sheet navigator */
+  .nav-list { overflow: auto; flex: 1; padding: 4px 10px 10px; }
+  .sheet-item { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 8px 6px; border-radius: 10px; cursor: pointer; align-items: start; }
+  .sheet-item:hover { background: var(--hover); }
+  .sheet-item.sel { background: var(--accent-soft); }
+  .sheet-item.off .thumb, .sheet-item.off .meta b { opacity: .38; }
+  .sheet-item.dragging { opacity: .4; }
+  .sheet-item.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+  .grip { color: var(--faint); cursor: grab; padding-top: 4px; font-size: 12px; line-height: 1; letter-spacing: -1px; user-select: none; }
+  .thumb { background: #fffdf9; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; line-height: 0; }
+  .sheet-item.sel .thumb { border-color: var(--accent); }
+  .thumb svg { width: 100%; height: auto; display: block; }
+  .meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+  .meta b { font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta .no { color: var(--faint); font-variant-numeric: tabular-nums; margin-right: 6px; font-weight: 500; }
+  .switch { position: relative; width: 28px; height: 16px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line-strong); transition: background .15s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(12px); }
+  .nav-foot { border-top: 1px solid var(--line); padding: 10px 12px; position: relative; }
+  .nav-foot .btn { width: 100%; justify-content: center; }
+  .menu { position: absolute; left: 12px; right: 12px; bottom: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.12); padding: 4px; display: none; z-index: 5; }
+  .menu.open { display: block; }
+  .menu button { width: 100%; text-align: left; padding: 8px 10px; border-radius: 7px; display: flex; flex-direction: column; gap: 1px; }
+  .menu button:hover { background: var(--hover); }
+  .menu small { color: var(--muted); }
+
+  /* Viewer */
+  .viewer { display: grid; grid-template-rows: 48px 1fr; min-width: 0; min-height: 0; background: #e9e7e2; }
+  .vbar { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .pager { display: flex; align-items: center; gap: 4px; }
+  .pager .label { min-width: 210px; text-align: center; font-variant-numeric: tabular-nums; }
+  .pager .label span { color: var(--muted); }
+  .zoom { display: flex; align-items: center; gap: 2px; }
+  .zoom .pct { width: 52px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .zbtn { height: 30px; min-width: 30px; padding: 0 9px; border-radius: 7px; color: var(--muted); display: grid; place-items: center; }
+  .zbtn:hover { background: var(--hover); color: var(--ink); }
+  .zbtn.on { background: var(--ink); color: #fff; }
+  .desk { overflow: auto; position: relative; }
+  .desk-inner { min-width: 100%; min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 28px; box-sizing: border-box; }
+  .page { background: #fffdf9; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 40px rgba(40,30,20,.16); flex: none; margin: auto; }
+  .page svg { display: block; width: 100%; height: 100%; }
+  svg.sheet text { font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  svg.sheet .num { font-variant-numeric: tabular-nums; }
+
+  /* Settings */
+  .check { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  .check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+  .views { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .text-input { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); padding: 0 10px; outline: none; width: 100%; background: var(--panel); }
+  .text-input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(29,33,38,.08); }
+  .segs.wrap { flex-wrap: wrap; }
+  .warn { margin-top: 10px; color: #9a5a12; background: #fdf4e6; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.4; display: none; }
+  .warn.show { display: block; }
+  .set-summary { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); background: rgba(29,33,38,.94); color: #f1f2f3; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; font-size: 12.5px; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast .ic { color: #7fd29b; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <div class="project"><b>Hall bench</b><span>Shop drawings · <span id="hdrCount">10 sheets</span></span></div>
+      <a class="back" href="a-workshop-flow.html"><i data-icon="chevronRight" data-size="16"></i>Back to model</a>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <button class="btn primary" id="export"><i data-icon="download" data-size="16"></i>Export PDF</button>
+    </div>
+  </header>
+
+  <div class="body drawings">
+    <aside class="left">
+      <div class="aside-head"><h2>Sheets<span class="count" id="navCount"></span></h2></div>
+      <div class="nav-list" id="nav"></div>
+      <div class="nav-foot">
+        <div class="menu" id="addMenu">
+          <button data-add="detail"><span>Joint detail</span><small>Exploded leg, apron and tenons</small></button>
+          <button data-add="notes"><span>Notes</span><small>Assembly sequence and finishing</small></button>
+        </div>
+        <button class="btn" id="addSheet"><i data-icon="plus" data-size="15"></i>Add sheet</button>
+      </div>
+    </aside>
+
+    <section class="viewer">
+      <div class="vbar">
+        <div class="pager">
+          <button class="zbtn" id="prev" title="Previous sheet (←)"><i data-icon="chevronRight" data-size="16" ></i></button>
+          <div class="label" id="pageLabel"></div>
+          <button class="zbtn" id="next" title="Next sheet (→)"><i data-icon="chevronRight" data-size="16"></i></button>
+        </div>
+        <div class="zoom">
+          <button class="zbtn" id="zFit">Fit</button>
+          <button class="zbtn" id="z100">100 %</button>
+          <button class="zbtn" id="zOut" title="Zoom out">−</button>
+          <div class="pct" id="zPct"></div>
+          <button class="zbtn" id="zIn" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="desk" id="desk"><div class="desk-inner"><div class="page" id="page"></div></div></div>
+    </section>
+
+    <aside class="right" id="settings"></aside>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/drawings-extras.js"></script>
+<script>
+  const { PARTS, MATERIALS, size } = BenchModel;
+  const D = Drawings;
+  const { el, fmt } = D;
+
+  // ------------------------------------------------------------ data
+  const PAPER = { A4: [297, 210], A3: [420, 297], Letter: [279.4, 215.9], Tabloid: [431.8, 279.4] };
+  const SCALES = { "1:1": 10, "1:2": 5, "1:5": 2, "1:10": 1, "1:20": 0.5 }; // paper mm per model cm
+  const DATE = "21 Nov 2026";
+  const ITEMS = [
+    { no: 1, name: "Leg", rep: "leg-fl" },
+    { no: 2, name: "Long apron", rep: "apron-f" },
+    { no: 3, name: "Short apron", rep: "apron-l" },
+    { no: 4, name: "Stretcher", rep: "str-f" },
+    { no: 5, name: "Lower shelf", rep: "shelf" },
+    { no: 6, name: "Top", rep: "top" },
+  ].map((it) => ({ ...it, part: PARTS.find((p) => p.id === it.rep), ids: PARTS.filter((p) => p.name === it.name).map((p) => p.id) }));
+  const itemOfId = (id) => ITEMS.find((it) => it.ids.includes(id));
+
+  const partSheet = (it) => ({ id: "part-" + it.rep, kind: "part", item: it.no, title: it.name, include: true, scale: "fit", hidden: true, dims: "chain", joinery: true, views: { face: true, edge: true, end: true, iso: true } });
+  const state = {
+    sheets: [
+      { id: "assembly", kind: "assembly", title: "Assembly", include: true, scale: "fit", hidden: true, dims: "chain", joinery: true, views: { plan: true, front: true, side: true, iso: true } },
+      { id: "exploded", kind: "exploded", title: "Exploded view", include: true, scale: "fit", hidden: false, dims: "chain", joinery: true, views: { iso: true } },
+      ...ITEMS.map(partSheet),
+      { id: "cutlist", kind: "cutlist", title: "Cut list", include: true },
+      { id: "diagrams", kind: "diagrams", title: "Cutting diagrams", include: true },
+    ],
+    current: 0,
+    zoom: "fit",
+    paper: "A3",
+    orientation: "landscape",
+    units: "mm",
+    designer: "",
+    client: "",
+    revision: "A",
+    added: 0,
+  };
+  const cur = () => state.sheets[state.current];
+  const included = () => state.sheets.filter((s) => s.include);
+  const paperSize = () => {
+    const [a, b] = PAPER[state.paper];
+    return state.orientation === "landscape" ? [Math.max(a, b), Math.min(a, b)] : [Math.min(a, b), Math.max(a, b)];
+  };
+  const L = (cm) => fmt(cm * 10, state.units);
+  const U = () => (state.units === "mm" ? "mm" : "inches");
+
+  // ------------------------------------------------------------ shared sheet chrome
+  const M = 12;
+  function header(g, W, sheet) {
+    const top = M;
+    el("rect", { x: M, y: top, width: 8, height: 8, rx: 2, fill: D.ACCENT }, g);
+    el("text", { x: M + 4, y: top + 5.9, "font-size": 5, "font-weight": 700, fill: "#fff", "text-anchor": "middle" }, g, "B");
+    el("text", { x: M + 11, y: top + 6, "font-size": 5.2, "font-weight": 700, fill: D.INK }, g, "BenchUp");
+    el("text", { x: M + 46, y: top + 3.4, "font-size": 2.5, fill: "#7b8190", "letter-spacing": 0.3 }, g, "SHOP DRAWINGS");
+    el("text", { x: M + 46, y: top + 7.6, "font-size": 3.6, "font-weight": 600, fill: D.INK }, g, `Hall bench · ${sheet.title}`);
+    const n = included().indexOf(sheet) + 1;
+    el("text", { x: W - M, y: top + 3.4, "font-size": 2.5, fill: "#7b8190", "text-anchor": "end" }, g, `Generated ${DATE}`);
+    el("text", { x: W - M, y: top + 7.6, "font-size": 3.2, fill: D.INK, "text-anchor": "end", class: "num" }, g, sheet.include ? `Sheet ${n} of ${included().length}` : "Not included in export");
+    el("line", { x1: M, y1: top + 11, x2: W - M, y2: top + 11, stroke: D.INK, "stroke-width": 0.35 }, g);
+    return top + 16; // body_top
+  }
+  function titleBlock(g, W, H, sheet, scaleLabel, width = 112) {
+    const h = 30, x = W - M - width, y = H - M - h;
+    el("rect", { x, y, width, height: h, fill: "#fffdf9", stroke: D.INK, "stroke-width": 0.3 }, g);
+    const n = included().indexOf(sheet) + 1;
+    const cells = [
+      ["Project", "Hall bench"], ["Drawing", sheet.title],
+      ["Scale", scaleLabel || "—"], ["Units", U()],
+      ["Designer", state.designer || "—"], ["Client", state.client || "—"],
+      ["Revision", state.revision || "—"], ["Sheet", sheet.include ? `${n} / ${included().length}` : "—"],
+    ];
+    const cw = width / 2, ch = h / 4;
+    cells.forEach(([k, v], i) => {
+      const cx = x + (i % 2) * cw, cy = y + Math.floor(i / 2) * ch;
+      if (i % 2) el("line", { x1: cx, y1: cy, x2: cx, y2: cy + ch, stroke: D.INK, "stroke-width": 0.15 }, g);
+      if (i >= 2 && i % 2 === 0) el("line", { x1: x, y1: cy, x2: x + width, y2: cy, stroke: D.INK, "stroke-width": 0.15 }, g);
+      el("text", { x: cx + 1.6, y: cy + 2.6, "font-size": 1.8, fill: "#7b8190", "letter-spacing": 0.2 }, g, k.toUpperCase());
+      const t = el("text", { x: cx + 1.6, y: cy + 6.1, "font-size": 2.7, fill: D.INK, class: "num" }, g, v);
+      t.textContent = v.length > 30 ? v.slice(0, 29) + "…" : v;
+    });
+    return { x, y, w: width, h };
+  }
+  function viewLabel(g, x, y, text, scale) {
+    el("text", { x, y, "font-size": 2.6, "font-weight": 600, fill: D.INK, "letter-spacing": 0.4 }, g, text.toUpperCase());
+    if (scale) el("text", { x: x + text.length * 2.15 + 3, y, "font-size": 2.4, fill: "#7b8190" }, g, scale);
+  }
+  function table(g, x, y, w, cols, rows, opts = {}) {
+    const rh = opts.rowHeight || 5.6, fs = opts.size || 2.6;
+    const total = cols.reduce((a, c) => a + c.w, 0);
+    let cx = x;
+    const xs = cols.map((c) => { const r = cx; cx += (c.w / total) * w; return r; });
+    el("line", { x1: x, y1: y, x2: x + w, y2: y, stroke: D.INK, "stroke-width": 0.3 }, g);
+    cols.forEach((c, i) => {
+      const tx = c.align === "end" ? xs[i] + (c.w / total) * w - 1.4 : xs[i] + 1.4;
+      el("text", { x: tx, y: y + rh * 0.64, "font-size": fs * 0.78, fill: "#7b8190", "letter-spacing": 0.25, "text-anchor": c.align === "end" ? "end" : "start", "font-weight": 600 }, g, c.label.toUpperCase());
+    });
+    el("line", { x1: x, y1: y + rh, x2: x + w, y2: y + rh, stroke: D.INK, "stroke-width": 0.25 }, g);
+    rows.forEach((r, j) => {
+      const ry = y + rh * (j + 1);
+      cols.forEach((c, i) => {
+        const tx = c.align === "end" ? xs[i] + (c.w / total) * w - 1.4 : xs[i] + 1.4;
+        const t = el("text", { x: tx, y: ry + rh * 0.66, "font-size": fs, fill: D.INK, "text-anchor": c.align === "end" ? "end" : "start", class: "num" }, g, String(r[i]));
+        if (c.bold) t.setAttribute("font-weight", 600);
+      });
+      el("line", { x1: x, y1: ry + rh, x2: x + w, y2: ry + rh, stroke: D.INK, "stroke-width": j === rows.length - 1 ? 0.3 : 0.1 }, g);
+    });
+    return y + rh * (rows.length + 1);
+  }
+  function chooseScale(sheet, fitScale) {
+    if (sheet.scale && sheet.scale !== "fit") return { s: SCALES[sheet.scale], label: sheet.scale, fits: SCALES[sheet.scale] <= fitScale + 1e-9 };
+    const pick = Object.entries(SCALES).find(([, s]) => s <= fitScale);
+    if (pick) return { s: pick[1], label: pick[0], fits: true };
+    // Nothing standard fits a small sheet: use the exact reduction that does.
+    const n = Math.ceil(10 / Math.max(fitScale, 0.01));
+    return { s: 10 / n, label: `1:${n}`, fits: true };
+  }
+  const bomRows = () => ITEMS.map((it) => {
+    const s = size(it.part);
+    const tenons = D.tenonsOf(it.rep).length ? 4 : 0; // 2 × 20 mm
+    return [it.no, it.name, it.ids.length, `${L(s.length + tenons)} × ${L(s.width)} × ${L(s.thickness)}`, MATERIALS[it.part.material].name];
+  });
+  const BOM_COLS = [{ label: "Item", w: 8 }, { label: "Part", w: 22 }, { label: "Qty", w: 8, align: "end" }, { label: "Size L × W × T", w: 34 }, { label: "Material", w: 24 }];
+
+  // ------------------------------------------------------------ sheets
+  function drawAssembly(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const tb = { w: 112 };
+    const portrait = H > W;
+    const leftW = portrait ? W - 2 * M : (W - 2 * M) * (sheet.views.iso ? 0.6 : 1);
+    const v = sheet.views;
+    const ext = { front: D.viewExtent(PARTS, "front"), side: D.viewExtent(PARTS, "side"), plan: D.viewExtent(PARTS, "plan") };
+    const G = 26, pad = 16;
+    const wCm = (v.front || v.plan ? ext.front.w : 0) + (v.side ? ext.side.w : 0);
+    const hCm = (v.plan ? ext.plan.h : 0) + (v.front || v.side ? ext.front.h : 0);
+    const gapsW = v.side && (v.front || v.plan) ? G : 0;
+    const gapsH = v.plan && (v.front || v.side) ? G : 0;
+    const availH = portrait ? (H - M - top) * 0.48 : H - M - top - 8 - (sheet.views.iso ? 0 : 34);
+    const fit = Math.min((leftW - 2 * pad - gapsW) / Math.max(wCm, 1), (availH - 2 * pad - gapsH) / Math.max(hCm, 1));
+    const sc = chooseScale(sheet, fit);
+    const s = sc.s;
+    const blockH = hCm * s + gapsH;
+    const ox = M + pad + 6, oy = top + pad + Math.max(0, (availH - 2 * pad - blockH) / 2 - 6);
+    const planH = v.plan ? ext.plan.h * s : 0;
+    const frontY = oy + (v.plan ? planH + G : 0);
+    const dims = sheet.dims;
+    if (v.plan) {
+      const r = D.orthoBoxes(g, PARTS, "plan", ox, oy, s, { hidden: sheet.hidden });
+      viewLabel(g, ox, oy + r.h + 7, "Plan", sc.label);
+      D.dimV(g, r.Y(0), r.Y(35), ox + r.w, ox + r.w + 8, L(35));
+      D.dimH(g, r.X(2), r.X(88), oy, oy - 7, `${L(86)} over legs`);
+    }
+    if (v.front) {
+      const r = D.orthoBoxes(g, PARTS, "front", ox, frontY, s, { hidden: sheet.hidden });
+      viewLabel(g, ox, frontY + r.h + 16 + (dims === "baseline" ? 5 : 0), "Front", sc.label);
+      D.dimH(g, r.X(0), r.X(90), frontY + r.h, frontY + r.h + 8, L(90));
+      D.dimV(g, r.Y(0), r.Y(45), ox, ox - 8, L(45));
+      D.dimRun(g, [0, 12, 13.8, 34, 42.5].map((c) => ({ paper: r.Y(c), value: c * 10 })), false, ox + r.w, ox + r.w + 8, state.units, dims, 5);
+    }
+    if (v.side) {
+      const sx = ox + (v.front || v.plan ? ext.front.w * s + G : 0);
+      const r = D.orthoBoxes(g, PARTS, "side", sx, frontY, s, { hidden: sheet.hidden });
+      viewLabel(g, sx, frontY + r.h + 16, "Right side", sc.label);
+      D.dimH(g, r.X(0), r.X(35), frontY + r.h, frontY + r.h + 8, L(35));
+      D.dimH(g, r.X(2), r.X(33), frontY, frontY - 6, L(31));
+    }
+    let tbBox;
+    if (v.iso) {
+      const rx = portrait ? M + 6 : M + leftW + 6, rw = W - M - rx - (portrait ? 6 : 0);
+      const isoTop = portrait ? top + availH + 4 : top;
+      // In portrait the BOM (7 rows) must end above the title block.
+      const isoH = portrait ? Math.min((H - M - top) * 0.24, H - M - 30 - 8 - 5.6 * 7 - 8 - isoTop) : (H - M - top) * 0.5;
+      viewLabel(g, rx, isoTop + 4, "Isometric", "NTS");
+      const iso = D.isoBoxes(g, PARTS, { x: rx, y: isoTop + 6, w: rw, h: isoH - 8 });
+      // Item balloons on the iso view
+      for (const it of ITEMS) {
+        const b = iso.moved.find((m) => m.id === it.rep);
+        const c = iso.P([0, 1, 2].map((k) => (b.min[k] + b.max[k]) / 2));
+        const off = { 1: [-14, 10], 2: [10, 14], 3: [-16, -6], 4: [12, 12], 5: [16, 4], 6: [0, -14] }[it.no];
+        D.balloon(g, [c[0] + off[0], c[1] + off[1]], c, String(it.no));
+      }
+      const ty = isoTop + isoH + 4;
+      viewLabel(g, rx, ty, "Bill of materials", null);
+      table(g, rx, ty + 3, rw, BOM_COLS, bomRows());
+      if (!portrait) notes(g, rx, ty + 3 + 5.6 * 7 + 7, rw, sheet);
+      tbBox = titleBlock(g, W, H, sheet, sc.label, portrait ? 112 : Math.min(rw, 120));
+    } else {
+      table(g, M + 6, H - M - 30 - 5.6 * 7 - 6, 200, BOM_COLS, bomRows());
+      tbBox = titleBlock(g, W, H, sheet, sc.label);
+    }
+    el("text", { x: M + 6, y: H - M - 1, "font-size": 2.2, fill: "#7b8190" }, g, portrait ? `Third-angle · ${U()}` : `Third-angle projection · Dimensions in ${U()} · ${sheet.hidden ? "Hidden edges dashed" : "Hidden edges omitted"}`);
+    return sc;
+  }
+
+  function notes(g, x, y, w, sheet) {
+    viewLabel(g, x, y, "Notes", null);
+    const lines = [
+      "1. Aprons and stretchers have 10 mm tenons, 20 mm long, with 0.2 mm clearance.",
+      "2. Shelf rests on the stretchers; fix with four 4 × 30 screws from below.",
+      "3. Top attached with figure-8 fasteners, every 250 mm, to allow movement.",
+      "4. Break all edges 1 mm. Hardwax oil, two coats.",
+    ];
+    lines.forEach((t, i) => el("text", { x, y: y + 5 + i * 4.2, "font-size": 2.5, fill: D.INK }, g, t));
+  }
+
+  function drawExploded(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const OFF = {
+      top: [0, 0, 24], shelf: [0, 0, 9],
+      "leg-bl": [-16, 0, 0], "leg-fl": [-16, 0, 0], "leg-br": [16, 0, 0], "leg-fr": [16, 0, 0],
+      "apron-l": [-8, 0, 0], "apron-r": [8, 0, 0], "apron-f": [0, 12, 0], "apron-b": [0, -12, 0],
+      "str-f": [0, 12, 0], "str-b": [0, -12, 0],
+    };
+    const boxes = [];
+    for (const p of PARTS) {
+      boxes.push({ ...p, offset: OFF[p.id] });
+      for (const t of D.tenonsOf(p.id)) boxes.push({ id: p.id + "-t", min: t.min, max: t.max, offset: OFF[p.id] });
+    }
+    const portrait = H > W;
+    const rw = portrait ? W - 2 * M - 8 : 128;
+    const area = portrait
+      ? { x: M + 4, y: top + 6, w: W - 2 * M - 8, h: (H - M - top) * 0.5 }
+      : { x: M + 4, y: top + 6, w: W - 2 * M - rw - 14, h: H - M - top - 14 };
+    viewLabel(g, M + 4, top + 4, "Exploded isometric", "NTS");
+    const iso = D.isoBoxes(g, boxes, area, { fill: 0.86 });
+    for (const it of ITEMS) {
+      const b = iso.moved.find((m) => m.id === it.rep);
+      const c = iso.P([0, 1, 2].map((k) => (b.min[k] + b.max[k]) / 2));
+      const off = { 1: [-16, 12], 2: [14, 16], 3: [-18, -8], 4: [16, 14], 5: [20, -4], 6: [0, -16] }[it.no];
+      D.balloon(g, [c[0] + off[0], c[1] + off[1]], c, String(it.no));
+    }
+    const rx = portrait ? M + 4 : W - M - rw;
+    const by = portrait ? top + area.h + 12 : top + 4;
+    viewLabel(g, rx, by, "Bill of materials", null);
+    const after = table(g, rx, by + 3, rw, BOM_COLS, bomRows());
+    viewLabel(g, rx, after + 10, "Assembly sequence", null);
+    ["Glue short aprons and stretchers into leg pairs.", "Join the two end frames with long aprons.", "Check diagonals; clamp until cured.", "Drop in the shelf and screw from below.", "Fit the top with figure-8 fasteners."]
+      .forEach((t, i) => el("text", { x: rx, y: after + 15 + i * 4.4, "font-size": 2.5, fill: D.INK }, g, `${i + 1}. ${t}`));
+    titleBlock(g, W, H, sheet, "NTS", portrait ? 112 : rw);
+    return { label: "NTS", fits: true };
+  }
+
+  // Part drawing in the part's own axes: length horizontal.
+  function drawPart(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const it = ITEMS.find((i) => i.no === sheet.item);
+    const P = it.part;
+    const tenons = sheet.joinery ? D.tenonsOf(P.id) : [];
+    const mortises = sheet.joinery ? D.mortisesOf(P.id) : [];
+    const ext = { min: P.min.slice(), max: P.max.slice() };
+    for (const t of tenons) for (let k = 0; k < 3; k++) { ext.min[k] = Math.min(ext.min[k], t.min[k]); ext.max[k] = Math.max(ext.max[k], t.max[k]); }
+    const d = [0, 1, 2].map((k) => P.max[k] - P.min[k]);
+    const axes = [0, 1, 2].sort((a, b) => d[b] - d[a] || a - b);
+    const [LA, WA, TA] = axes;
+    const opens = (m, a, sign) => (sign > 0 ? m.max[a] >= P.max[a] - 1e-6 : m.min[a] <= P.min[a] + 1e-6);
+    const signFor = (a) => (mortises.some((m) => opens(m, a, -1)) ? -1 : 1);
+    const span = (a) => ext.max[a] - ext.min[a];
+    const v = sheet.views;
+    const portrait = H > W;
+    const rw = portrait ? W - 2 * M - 12 : 96;
+    const areaW = portrait ? W - 2 * M : W - 2 * M - rw - 10;
+    const areaH = portrait ? (H - M - top) * 0.42 : H - M - top - 10;
+    const G = 22, pad = 14;
+    const wCm = span(LA) + (v.end ? span(TA) : 0);
+    const hCm = (v.face ? span(WA) : 0) + (v.edge ? span(TA) : 0);
+    const fit = Math.min((areaW - 2 * pad - (v.end ? G : 0)) / wCm, (areaH - 2 * pad - (v.face && v.edge ? G : 0) - 10) / Math.max(hCm, 1));
+    const sc = chooseScale(sheet, fit);
+    const s = sc.s;
+    const ox = M + pad + 8;
+    let oy = top + pad + 6;
+    const units = state.units;
+
+    // h/v: model axes for paper x/y; look: axis and sign the viewer looks along.
+    function view(h, vAxis, look, sign, x0, y0) {
+      const X = (c) => x0 + (c - ext.min[h]) * s;
+      const Y = (c) => y0 + (ext.max[vAxis] - c) * s;
+      const rect = (b, attrs) => el("rect", { x: X(b.min[h]), y: Y(b.max[vAxis]), width: (b.max[h] - b.min[h]) * s, height: (b.max[vAxis] - b.min[vAxis]) * s, ...attrs }, g);
+      rect(P, { fill: "#fffdf9", stroke: D.INK, "stroke-width": 0.35 });
+      for (const t of tenons) rect(t, { fill: "#fffdf9", stroke: D.INK, "stroke-width": 0.35 });
+      for (const m of mortises) {
+        if (opens(m, look, sign)) rect(m, { fill: "#f1ece3", stroke: D.INK, "stroke-width": 0.3 });
+        else if (sheet.hidden) rect(m, { fill: "none", stroke: D.INK, "stroke-width": 0.22, "stroke-dasharray": "1.4 0.9" });
+      }
+      // Grain direction arrow on the face view
+      return { X, Y, w: span(h) * s, h: span(vAxis) * s };
+    }
+
+    const runAlong = (r, axis, at, ref, horizontal, feats) => {
+      const pts = [ext.min[axis], ext.max[axis], P.min[axis], P.max[axis]];
+      for (const f of feats) pts.push(f.min[axis], f.max[axis]);
+      const map = horizontal ? r.X : r.Y;
+      D.dimRun(g, pts.map((c) => ({ paper: map(c), value: c * 10 })), horizontal, ref, at, units, sheet.dims, 5);
+    };
+
+    let faceR = null;
+    if (v.face) {
+      const sign = signFor(TA);
+      faceR = view(LA, WA, TA, sign, ox, oy);
+      viewLabel(g, ox, oy + faceR.h + 18 + (sheet.dims === "baseline" ? 6 : 0), "Face", sc.label);
+      D.dimH(g, faceR.X(ext.min[LA]), faceR.X(ext.max[LA]), oy + faceR.h, oy + faceR.h + 8, L(span(LA)));
+      if (tenons.length) D.dimH(g, faceR.X(P.min[LA]), faceR.X(P.max[LA]), oy + faceR.h, oy + faceR.h + 13, `${L(d[LA])} shoulder`);
+      D.dimV(g, faceR.Y(ext.min[WA]), faceR.Y(ext.max[WA]), ox, ox - 8, L(span(WA)));
+      if (mortises.length || tenons.length) {
+        runAlong(faceR, LA, oy - 7, oy, true, [...mortises, ...tenons]);
+        const visible = [...tenons, ...mortises.filter((m) => opens(m, TA, sign))];
+        if (visible.length) {
+          const pts = [ext.min[WA], ext.max[WA], visible[0].min[WA], visible[0].max[WA]];
+          D.dimRun(g, pts.map((c) => ({ paper: faceR.Y(c), value: c * 10 })), false, ox + faceR.w, ox + faceR.w + 8, units, sheet.dims, 5);
+        }
+      }
+      if (it.name === "Leg") el("text", { x: ox + faceR.w, y: oy + faceR.h + 3.6, "font-size": 2.2, fill: "#7b8190", "text-anchor": "end" }, g, "TOP END");
+      // grain arrow
+      const gy = oy + faceR.h / 2, gx = ox + faceR.w / 2;
+      el("path", { d: `M${gx - 12},${gy} L${gx + 12},${gy} M${gx + 9},${gy - 1.6} L${gx + 12},${gy} L${gx + 9},${gy + 1.6}`, stroke: "#b9a88c", "stroke-width": 0.3, fill: "none" }, g);
+      el("text", { x: gx, y: gy - 1.6, "font-size": 2, fill: "#a8977a", "text-anchor": "middle" }, g, "GRAIN");
+      oy += faceR.h + G + (sheet.dims === "baseline" ? 6 : 0);
+    }
+    if (v.edge) {
+      const sign = signFor(WA);
+      const r = view(LA, TA, WA, sign, ox, oy);
+      viewLabel(g, ox, oy + r.h + 18, "Edge", sc.label);
+      D.dimV(g, r.Y(ext.min[TA]), r.Y(ext.max[TA]), ox, ox - 8, L(span(TA)));
+      if (!v.face) D.dimH(g, r.X(ext.min[LA]), r.X(ext.max[LA]), oy + r.h, oy + r.h + 8, L(span(LA)));
+      const visible = [...tenons, ...mortises.filter((m) => opens(m, WA, sign))];
+      if (visible.length) {
+        const pts = [ext.min[TA], ext.max[TA], visible[0].min[TA], visible[0].max[TA]];
+        D.dimRun(g, pts.map((c) => ({ paper: r.Y(c), value: c * 10 })), false, ox + r.w, ox + r.w + 8, units, sheet.dims, 5);
+      }
+    }
+    if (v.end) {
+      const ex = ox + span(LA) * s + G;
+      const ey = top + pad + 6;
+      const r = view(TA, WA, LA, 1, ex, ey);
+      viewLabel(g, ex, ey + r.h + 18, "End", sc.label);
+      D.dimH(g, r.X(ext.min[TA]), r.X(ext.max[TA]), ey + r.h, ey + r.h + 8, L(span(TA)));
+      if (mortises.length) {
+        const m = mortises.find((q) => !opens(q, TA, 1) && !opens(q, TA, -1)) || mortises[0];
+        D.dimH(g, r.X(ext.min[TA]), r.X(m.min[TA]), ey, ey - 6, L(m.min[TA] - ext.min[TA]));
+      }
+    }
+
+    // Part notes under the views
+    const partNotes = {
+      Leg: ["Mortises go on the two inside faces; mark them A and B before cutting.", "Make two mirrored pairs: front-left/back-right and front-right/back-left.", "Cut mortises 0.2 mm wider than the tenons; chop from both ends towards the centre."],
+      "Long apron": ["Cut the tenons after thicknessing all aprons together.", "Haunch-free tenons; shoulders 10 mm top and 15 mm bottom."],
+      "Short apron": ["Same tenon setup as the long aprons; cut both in one session."],
+      Stretcher: ["Tenons centred on the thickness, 7.5 mm shoulders top and bottom."],
+      "Lower shelf": ["Screwed to the stretchers from below, four 4 × 30 screws."],
+      Top: ["Glue up from three boards, alternating growth rings.", "Elongate the figure-8 recesses across the grain direction."],
+    }[it.name] || [];
+    if (partNotes.length) {
+      const ny = H - M - 34 - partNotes.length * 4.4;
+      viewLabel(g, M + 6, ny, "Notes", null);
+      partNotes.forEach((t, i) => el("text", { x: M + 6, y: ny + 5 + i * 4.4, "font-size": 2.5, fill: D.INK }, g, `${i + 1}. ${t}`));
+    }
+
+    // Right column: part facts, features, small iso, title block
+    const rx = portrait ? M + 6 : W - M - rw;
+    let y = portrait ? top + areaH + 8 : top + 4;
+    el("text", { x: rx, y: y + 6, "font-size": 6, "font-weight": 700, fill: D.INK }, g, it.name);
+    el("circle", { cx: rx + rw - 5, cy: y + 4, r: 4.2, fill: "#fffdf9", stroke: D.ACCENT, "stroke-width": 0.35 }, g);
+    el("text", { x: rx + rw - 5, y: y + 5.4, "font-size": 3.8, fill: D.ACCENT, "text-anchor": "middle", "font-weight": 600 }, g, String(it.no));
+    y += 12;
+    const s3 = size(P);
+    const facts = [
+      ["Quantity", `${it.ids.length}${it.name === "Leg" ? " (2 mirrored pairs)" : ""}`],
+      ["Material", MATERIALS[P.material].name],
+      ["Finished", `${L(s3.length)} × ${L(s3.width)} × ${L(s3.thickness)}`],
+      ["Cut length", tenons.length ? `${L(s3.length + 4)} incl. tenons` : L(s3.length + 2) + " (+20 trim)"],
+      ["Grain", "Along length"],
+    ];
+    for (const [k, val] of facts) {
+      el("text", { x: rx, y, "font-size": 2.4, fill: "#7b8190" }, g, k);
+      el("text", { x: rx + 26, y, "font-size": 2.7, fill: D.INK, class: "num" }, g, val);
+      y += 5;
+    }
+    if (sheet.joinery && (mortises.length || tenons.length)) {
+      y += 4;
+      viewLabel(g, rx, y, "Joinery", null);
+      const rows = [];
+      mortises.forEach((m, i) => {
+        const from = PARTS.find((p) => p.id === m.from);
+        const sz = [0, 1, 2].map((k) => m.max[k] - m.min[k]).sort((a, b) => b - a);
+        // Mortise: thickness × length, with the tenon length as depth.
+        rows.push([`M${i + 1}`, `Mortise ${L(sz[2])} × ${L(sz[0])}`, `${L(sz[1])} deep`, from.name.toLowerCase()]);
+      });
+      tenons.forEach((t, i) => {
+        const sz = [0, 1, 2].map((k) => t.max[k] - t.min[k]).sort((a, b) => b - a);
+        rows.push([`T${i + 1}`, `Tenon ${L(sz[2])} × ${L(sz[0])}`, `${L(sz[1])} long`, i ? "right end" : "left end"]);
+      });
+      y = table(g, rx, y + 3, rw, [{ label: "", w: 8 }, { label: "Feature", w: 38 }, { label: "Depth", w: 22 }, { label: "Mates with", w: 32 }], rows, { size: 2.4, rowHeight: 5 });
+    } else if (!sheet.joinery) {
+      y += 4;
+      el("text", { x: rx, y, "font-size": 2.4, fill: "#7b8190" }, g, "Joinery details hidden on this sheet.");
+    } else {
+      y += 4;
+      el("text", { x: rx, y, "font-size": 2.4, fill: "#7b8190" }, g, it.name === "Top" ? "Fixed with figure-8 fasteners; no machining." : "Plain part; no joinery machining.");
+    }
+    if (v.iso) {
+      const isoTop = y + 8;
+      const notesSpace = portrait ? partNotes.length * 4.4 + 12 : 0;
+      const isoH = Math.min(H - M - 30 - 8 - isoTop - notesSpace, 80);
+      if (isoH > 30) {
+        viewLabel(g, rx, isoTop, "Isometric", "NTS");
+        D.isoBoxes(g, [{ min: P.min, max: P.max, highlight: true }, ...tenons.map((t) => ({ min: t.min, max: t.max, highlight: true }))], { x: rx, y: isoTop + 2, w: rw, h: isoH }, { fill: 0.8 });
+      }
+    }
+    titleBlock(g, W, H, sheet, sc.label, portrait ? 112 : rw);
+    el("text", { x: M + 6, y: H - M - 1, "font-size": 2.2, fill: "#7b8190" }, g, portrait ? `Dimensions in ${U()}` : `Dimensions in ${U()} · ${sheet.dims === "chain" ? "Chain" : "Baseline"} dimensioning from the left end · ${sheet.hidden ? "Hidden edges dashed" : "Hidden edges omitted"}`);
+    return sc;
+  }
+
+  function cutRows() {
+    return ITEMS.map((it) => {
+      const s = size(it.part);
+      const ten = D.tenonsOf(it.rep).length > 0;
+      return [it.no, it.name, it.ids.length, L(s.length + (ten ? 4 : 0)), L(s.width), L(s.thickness), ten ? L(s.length) : "—", MATERIALS[it.part.material].name, "Along length", ten ? "Tenons both ends" : it.name === "Leg" ? "4 mortises, mirrored pairs" : ""];
+    });
+  }
+  function drawCutList(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const x = M + 4, w = W - 2 * M - 8;
+    viewLabel(g, x, top + 5, "Cut list", null);
+    el("text", { x: x + 22, y: top + 5, "font-size": 2.4, fill: "#7b8190" }, g, `Finished sizes in ${U()}. Length includes tenons; add 20 mm trimming allowance when cutting.`);
+    const cols = [
+      { label: "Item", w: 6 }, { label: "Part", w: 16, bold: true }, { label: "Qty", w: 6, align: "end" },
+      { label: "Length", w: 10, align: "end" }, { label: "Width", w: 9, align: "end" }, { label: "Thick.", w: 9, align: "end" },
+      { label: "Shoulder", w: 10, align: "end" }, { label: "Material", w: 15 }, { label: "Grain", w: 12 }, { label: "Notes", w: 22 },
+    ];
+    let y = table(g, x, top + 9, w, cols, cutRows(), { rowHeight: 7, size: 2.9 });
+    y += 12;
+    const half = (w - 12) / 2;
+    viewLabel(g, x, y, "Stock to buy", null);
+    table(g, x, y + 3, half, [{ label: "Material", w: 30 }, { label: "Stock", w: 30 }, { label: "Quantity", w: 18, align: "end" }, { label: "Cost", w: 14, align: "end" }], [
+      ["White oak", `27 mm board, ${L(240)} × ${L(14)}`, "2 boards", "€ 96"],
+      ["Black walnut", `25 mm board, ${L(120)} × ${L(36)}`, "1 board", "€ 64"],
+      ["Birch plywood", `18 mm sheet, ${L(122)} × ${L(61)}`, "¼ sheet", "€ 26"],
+      ["", "", "Total", "€ 186"],
+    ], { rowHeight: 6.4, size: 2.7 });
+    const nx = x + half + 12;
+    viewLabel(g, nx, y, "Summary", null);
+    table(g, nx, y + 3, half, [{ label: "Measure", w: 50 }, { label: "Value", w: 30, align: "end" }], [
+      ["Pieces", "12"], ["Board feet (hardwood)", "11.6"], ["Waste", "14 %"], ["Estimated workshop time", "9 h 30"],
+    ], { rowHeight: 6.4, size: 2.7 });
+    titleBlock(g, W, H, sheet, "—");
+    return { label: "—", fits: true };
+  }
+
+  function pack() {
+    const items = PARTS.filter((p) => p.material !== "plywood").map((p) => {
+      const s = size(p);
+      return { p, l: (s.length + (D.tenonsOf(p.id).length ? 4 : 0)) * 10 + 20, w: s.width * 10 + 5 };
+    }).sort((a, b) => b.w - a.w || b.l - a.l); // widest strips first, then longest
+    const boards = [];
+    for (const it of items) {
+      const mat = it.p.material;
+      let placed = false;
+      for (const b of boards) {
+        if (b.mat !== mat) continue;
+        for (const shelf of b.shelves) {
+          if (shelf.x + it.l <= b.L && it.w <= shelf.h) { b.items.push({ ...it, x: shelf.x, y: shelf.y }); shelf.x += it.l + 4; placed = true; break; }
+        }
+        if (placed) break;
+        const used = b.shelves.reduce((a, s) => a + s.h + 4, 0);
+        if (used + it.w <= b.W) { b.shelves.push({ x: it.l + 4, y: used, h: it.w }); b.items.push({ ...it, x: 0, y: used }); placed = true; break; }
+      }
+      if (!placed) {
+        const L0 = mat === "walnut" ? 1200 : 2400, W0 = mat === "walnut" ? 360 : 140;
+        boards.push({ mat, L: L0, W: W0, shelves: [{ x: it.l + 4, y: 0, h: it.w }], items: [{ ...it, x: 0, y: 0 }] });
+      }
+    }
+    const shelf = PARTS.find((p) => p.id === "shelf");
+    // The short boards share the first row of the diagram.
+    boards.splice(1, 0, { mat: "plywood", L: 1220, W: 610, items: [{ p: shelf, l: size(shelf).length * 10, w: size(shelf).width * 10, x: 0, y: 0 }] });
+    return boards;
+  }
+  function drawDiagrams(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const x = M + 4, w = W - 2 * M - 8;
+    const boards = pack();
+    const denom = [5, 8, 10, 15, 20, 25].find((n) => 2400 / n <= w - 40) || 25;
+    const k = 1 / denom;
+    let y = top + 6;
+    viewLabel(g, x, y, "Cutting diagrams", `1:${Math.round(1 / k)}`);
+    el("text", { x: x + 56, y, "font-size": 2.4, fill: "#7b8190" }, g, "Cut lengths include tenons and 20 mm trimming allowance; 4 mm kerf between pieces.");
+    y += 8;
+    const ink = D.INK;
+    // Flow the boards left to right in rows, like a nesting report.
+    let cx = x, rowH = 0, hidden = 0;
+    for (const [i, b] of boards.entries()) {
+      const bw = b.L * k, bh = b.W * k;
+      if (cx > x && cx + bw > x + w) { cx = x; y += rowH + 9; rowH = 0; }
+      if (y + bh + 14 > H - M - 34) { hidden++; continue; }
+      el("text", { x: cx, y: y + 3, "font-size": 2.7, "font-weight": 600, fill: ink }, g, `${MATERIALS[b.mat].name} · ${b.mat === "plywood" ? "sheet" : "board"} ${i + 1}`);
+      el("text", { x: cx + bw, y: y + 3, "font-size": 2.4, fill: "#7b8190", "text-anchor": "end", class: "num" }, g, `${fmt(b.L, state.units)} × ${fmt(b.W, state.units)}`);
+      const by = y + 5;
+      el("rect", { x: cx, y: by, width: bw, height: bh, fill: "url(#waste)", stroke: ink, "stroke-width": 0.3 }, g);
+      for (const it of b.items) {
+        const it2 = itemOfId(it.p.id);
+        el("rect", { x: cx + it.x * k, y: by + it.y * k, width: it.l * k, height: Math.min(it.w * k, bh - it.y * k), fill: "#fffdf9", stroke: ink, "stroke-width": 0.3 }, g);
+        if (it.l * k > 22) el("text", { x: cx + it.x * k + 2, y: by + it.y * k + Math.min(it.w * k, 6) - 1.6, "font-size": Math.min(2.6, it.w * k * 0.5), fill: ink, class: "num" }, g, `${it2.no} ${it.p.name} · ${fmt(it.l, state.units)}`);
+      }
+      rowH = Math.max(rowH, bh + 5);
+      cx += bw + 14;
+    }
+    if (hidden) el("text", { x, y: H - M - 36, "font-size": 2.5, fill: D.ACCENT }, g, `${hidden} more board${hidden > 1 ? "s" : ""} continue on the next sheet.`);
+    titleBlock(g, W, H, sheet, `1:${Math.round(1 / k)}`);
+    return { label: "", fits: true };
+  }
+
+  function drawDetail(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    const leg = PARTS.find((p) => p.id === "leg-fl");
+    const af = PARTS.find((p) => p.id === "apron-f");
+    const al = PARTS.find((p) => p.id === "apron-l");
+    const crop = (b, axis, lo, hi) => { const min = b.min.slice(), max = b.max.slice(); min[axis] = Math.max(min[axis], lo); max[axis] = Math.min(max[axis], hi); return { min, max }; };
+    const boxes = [
+      { ...crop(leg, 2, 28, 42.5) },
+      { ...crop(af, 0, 6.5, 20), offset: [9, 0, 0], highlight: true },
+      ...D.tenonsOf("apron-f").filter((t) => t.min[0] < 10).map((t) => ({ min: t.min, max: t.max, offset: [9, 0, 0], highlight: true })),
+      { ...crop(al, 1, 16, 28.5), offset: [0, -9, 0], highlight: true },
+      ...D.tenonsOf("apron-l").filter((t) => t.min[1] > 20).map((t) => ({ min: t.min, max: t.max, offset: [0, -9, 0], highlight: true })),
+    ];
+    viewLabel(g, M + 4, top + 4, "Joint detail · leg to aprons", "NTS");
+    D.isoBoxes(g, boxes, { x: M + 4, y: top + 8, w: W - 2 * M - 140, h: H - M - top - 20 }, { azimuth: 130, elevation: 24, fill: 0.8, stroke: 0.35 });
+    const rx = W - M - 124;
+    viewLabel(g, rx, top + 4, "Mortise and tenon", null);
+    [`Tenon thickness ${L(1)} (½ of apron thickness)`, `Tenon width ${L(6)}, shoulders ${L(1)} and ${L(1.5)}`, `Tenon length ${L(2)}, mortise depth ${L(2.1)}`, "Clearance 0.2 mm on thickness", "Cut mortises with a 10 mm chisel or router bit", "Short and long tenons do not meet inside the leg"]
+      .forEach((t, i) => el("text", { x: rx, y: top + 10 + i * 4.6, "font-size": 2.6, fill: D.INK }, g, `• ${t}`));
+    titleBlock(g, W, H, sheet, "NTS", 124);
+    return { label: "NTS", fits: true };
+  }
+
+  function drawNotes(g, W, H, sheet) {
+    const top = header(g, W, sheet);
+    notes(g, M + 4, top + 6, W - 2 * M, sheet);
+    viewLabel(g, M + 4, top + 34, "Finishing", null);
+    ["Sand 120 → 180 → 240 before assembly; raise the grain with a damp cloth.", "Hardwax oil, matte, two coats; 12 h between coats.", "Leave the underside of the top unfinished only if both faces are oiled equally."]
+      .forEach((t, i) => el("text", { x: M + 4, y: top + 40 + i * 4.6, "font-size": 2.6, fill: D.INK }, g, `${i + 1}. ${t}`));
+    titleBlock(g, W, H, sheet, "—");
+    return { label: "—", fits: true };
+  }
+
+  const DRAW = { assembly: drawAssembly, exploded: drawExploded, part: drawPart, cutlist: drawCutList, diagrams: drawDiagrams, detail: drawDetail, notes: drawNotes };
+
+  function sheetSvg(sheet) {
+    const [W, H] = paperSize();
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "sheet", xmlns: "http://www.w3.org/2000/svg" });
+    svg.innerHTML = `<defs><pattern id="waste" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="2" fill="#f4efe6"/><line x1="0" y1="0" x2="0" y2="2" stroke="#d9cfbe" stroke-width="0.3"/></pattern></defs>`;
+    el("rect", { x: 0, y: 0, width: W, height: H, fill: "#fffdf9" }, svg);
+    const g = el("g", {}, svg);
+    const result = DRAW[sheet.kind](g, W, H, sheet) || {};
+    return { svg, result };
+  }
+
+  // ------------------------------------------------------------ UI
+  const PX_PER_MM = 96 / 25.4;
+  let lastResult = {};
+  function renderPage() {
+    const sheet = cur();
+    const { svg, result } = sheetSvg(sheet);
+    lastResult = result;
+    const page = document.getElementById("page");
+    page.innerHTML = "";
+    page.appendChild(svg);
+    applyZoom();
+    const n = included().indexOf(sheet);
+    document.getElementById("pageLabel").innerHTML = `${sheet.title} <span>· ${sheet.include ? `${n + 1} of ${included().length}` : "not exported"}</span>`;
+  }
+  function fitZoom() {
+    const [W, H] = paperSize();
+    const desk = document.getElementById("desk");
+    return Math.min((desk.clientWidth - 56) / (W * PX_PER_MM), (desk.clientHeight - 56) / (H * PX_PER_MM));
+  }
+  function applyZoom() {
+    const [W, H] = paperSize();
+    const z = state.zoom === "fit" ? fitZoom() : state.zoom;
+    const page = document.getElementById("page");
+    page.style.width = `${W * PX_PER_MM * z}px`;
+    page.style.height = `${H * PX_PER_MM * z}px`;
+    document.getElementById("zPct").textContent = `${Math.round(z * 100)} %`;
+    document.getElementById("zFit").classList.toggle("on", state.zoom === "fit");
+    document.getElementById("z100").classList.toggle("on", state.zoom === 1);
+  }
+  function setZoom(z) {
+    state.zoom = z === "fit" ? "fit" : Math.max(0.2, Math.min(4, z));
+    applyZoom();
+  }
+
+  let dragFrom = null;
+  function renderNav() {
+    const host = document.getElementById("nav");
+    host.innerHTML = "";
+    let n = 0;
+    state.sheets.forEach((sheet, i) => {
+      if (sheet.include) n++;
+      const item = document.createElement("div");
+      item.className = `sheet-item ${i === state.current ? "sel" : ""} ${sheet.include ? "" : "off"}`;
+      item.draggable = true;
+      item.dataset.i = i;
+      item.innerHTML = `<span class="grip" title="Drag to reorder">⋮⋮</span><div><div class="thumb"></div>
+        <div class="meta"><b><span class="no">${sheet.include ? n : "–"}</span>${sheet.title}</b>
+        <label class="switch" title="Include in export"><input type="checkbox" ${sheet.include ? "checked" : ""}/><span></span></label></div></div>`;
+      item.querySelector(".thumb").appendChild(sheetSvg(sheet).svg);
+      item.addEventListener("click", (e) => { if (e.target.closest(".switch")) return; select(i); });
+      item.querySelector("input").addEventListener("change", (e) => { sheet.include = e.target.checked; refresh(); });
+      item.addEventListener("dragstart", (e) => { dragFrom = i; item.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+      item.addEventListener("dragend", () => { dragFrom = null; renderNav(); });
+      item.addEventListener("dragover", (e) => { e.preventDefault(); host.querySelectorAll(".drop-before").forEach((x) => x.classList.remove("drop-before")); item.classList.add("drop-before"); });
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (dragFrom == null || dragFrom === i) return;
+        const selected = cur();
+        const [moved] = state.sheets.splice(dragFrom, 1);
+        state.sheets.splice(dragFrom < i ? i - 1 : i, 0, moved);
+        state.current = state.sheets.indexOf(selected);
+        refresh();
+      });
+      host.appendChild(item);
+    });
+    document.getElementById("navCount").textContent = `${included().length}/${state.sheets.length}`;
+    document.getElementById("hdrCount").textContent = `${included().length} sheets`;
+    const sel = host.querySelector(".sel");
+    if (sel) sel.scrollIntoView({ block: "nearest" });
+  }
+
+  function seg(name, options, value) {
+    return `<div class="segs wrap" data-seg="${name}">${options.map(([v, label]) => `<button data-v="${v}" class="${String(v) === String(value) ? "on" : ""}">${label}</button>`).join("")}</div>`;
+  }
+  const VIEW_NAMES = { plan: "Plan", front: "Front", side: "Right side", iso: "Isometric", face: "Face", edge: "Edge", end: "End" };
+  function renderSettings() {
+    const sheet = cur();
+    const host = document.getElementById("settings");
+    const drawable = ["assembly", "part"].includes(sheet.kind);
+    const scaleOpts = [["fit", "Fit"], ["1:2", "1:2"], ["1:5", "1:5"], ["1:10", "1:10"]];
+    const sheetCard = `
+      <div class="card">
+        <h3>This sheet<span>${sheet.include ? "In export" : "Excluded"}</span></h3>
+        <input class="text-input" id="sheetTitle" value="${sheet.title}" />
+        ${drawable ? `
+        <div class="field"><label>Scale</label>${seg("scale", scaleOpts, sheet.scale)}</div>
+        <div class="warn ${lastResult.fits === false && sheet.scale !== "fit" ? "show" : ""}">Views do not fit on ${state.paper} at ${sheet.scale}. Choose Fit or a smaller scale.</div>
+        <div class="field" style="align-items:start"><label style="padding-top:4px">Views</label><div class="views">
+          ${Object.keys(sheet.views).map((k) => `<label class="check"><input type="checkbox" data-view="${k}" ${sheet.views[k] ? "checked" : ""}/>${VIEW_NAMES[k]}</label>`).join("")}
+        </div></div>
+        <div class="field"><label>Hidden lines</label>${seg("hidden", [["true", "Dashed"], ["false", "Hide"]], sheet.hidden)}</div>
+        <div class="field"><label>Dimensions</label>${seg("dims", [["chain", "Chain"], ["baseline", "Baseline"]], sheet.dims)}</div>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="joinery" ${sheet.joinery ? "checked" : ""}/>Show joinery details</label>` : `
+        <div class="set-summary">${sheet.kind === "cutlist" ? "The cut list follows the parts and materials in the model." : sheet.kind === "diagrams" ? "Boards are packed with the cutting plan settings: 4 mm kerf, 20 mm trimming allowance." : "Drawn at no fixed scale."}</div>`}
+        ${sheet.kind === "detail" || sheet.kind === "notes" ? `<button class="btn" id="removeSheet" style="margin-top:12px;width:100%;justify-content:center">${icon("hide", 15)}Remove sheet</button>` : ""}
+      </div>`;
+    const setCard = `
+      <div class="card">
+        <h3>Drawing set<span>${included().length} sheets</span></h3>
+        <div class="field" style="margin-top:0"><label>Paper</label>${seg("paper", Object.keys(PAPER).map((k) => [k, k]), state.paper)}</div>
+        <div class="field"><label>Orientation</label>${seg("orientation", [["landscape", "Landscape"], ["portrait", "Portrait"]], state.orientation)}</div>
+        <div class="field"><label>Units</label>${seg("units", [["mm", "mm"], ["in", "in"], ["frac", "in ⅟₁₆"]], state.units)}</div>
+      </div>
+      <div class="card">
+        <h3>Title block</h3>
+        <div class="field" style="margin-top:0"><label>Designer</label><input class="text-input" data-tb="designer" value="${state.designer}" placeholder="Your name" /></div>
+        <div class="field"><label>Client</label><input class="text-input" data-tb="client" value="${state.client}" placeholder="Optional" /></div>
+        <div class="field"><label>Revision</label><input class="text-input" data-tb="revision" value="${state.revision}" /></div>
+        <div class="set-summary">Every sheet carries the BenchUp header with the project name, report type and generation date.</div>
+      </div>
+      <div class="actions"><button class="btn" id="printBtn">${icon("print", 15)}Print</button><button class="btn primary" id="export2">${icon("download", 15)}Export PDF</button></div>`;
+    host.innerHTML = sheetCard + setCard;
+
+    host.querySelectorAll("[data-seg]").forEach((group) => {
+      group.querySelectorAll("button").forEach((b) => b.onclick = () => {
+        const name = group.dataset.seg, v = b.dataset.v;
+        if (name === "scale") sheet.scale = v;
+        else if (name === "hidden") sheet.hidden = v === "true";
+        else if (name === "dims") sheet.dims = v;
+        else state[name] = v;
+        refresh(["paper", "orientation"].includes(name) ? "fit" : null);
+      });
+    });
+    host.querySelectorAll("[data-view]").forEach((c) => c.onchange = () => {
+      sheet.views[c.dataset.view] = c.checked;
+      if (!Object.values(sheet.views).some(Boolean)) { sheet.views[c.dataset.view] = true; c.checked = true; }
+      refresh();
+    });
+    const j = host.querySelector("#joinery");
+    if (j) j.onchange = () => { sheet.joinery = j.checked; refresh(); };
+    host.querySelector("#sheetTitle").oninput = (e) => { sheet.title = e.target.value || "Untitled"; renderPage(); renderNav(); };
+    host.querySelectorAll("[data-tb]").forEach((inp) => inp.oninput = () => { state[inp.dataset.tb] = inp.value; renderPage(); renderNav(); });
+    const rm = host.querySelector("#removeSheet");
+    if (rm) rm.onclick = () => { state.sheets.splice(state.current, 1); state.current = Math.max(0, state.current - 1); refresh(); };
+    host.querySelector("#export2").onclick = exportPdf;
+    host.querySelector("#printBtn").onclick = () => toast(`Sent ${included().length} sheets to the printer`);
+  }
+
+  function refresh(zoom) {
+    if (zoom) state.zoom = zoom;
+    renderPage();
+    renderNav();
+    renderSettings();
+  }
+  function select(i) {
+    state.current = Math.max(0, Math.min(state.sheets.length - 1, i));
+    refresh();
+  }
+
+  let toastTimer;
+  function toast(text) {
+    const t = document.getElementById("toast");
+    t.innerHTML = `${icon("check", 16)}${text}`;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+  function exportPdf() {
+    toast(`Exported ${included().length} sheets · ${state.paper} ${state.orientation} · “Hall bench – Shop drawings.pdf”`);
+  }
+
+  document.getElementById("export").onclick = exportPdf;
+  document.getElementById("prev").onclick = () => select(state.current - 1);
+  document.getElementById("next").onclick = () => select(state.current + 1);
+  document.getElementById("zFit").onclick = () => setZoom("fit");
+  document.getElementById("z100").onclick = () => setZoom(1);
+  const curZoom = () => (state.zoom === "fit" ? fitZoom() : state.zoom);
+  document.getElementById("zIn").onclick = () => setZoom(curZoom() * 1.25);
+  document.getElementById("zOut").onclick = () => setZoom(curZoom() / 1.25);
+  document.getElementById("addSheet").onclick = (e) => { e.stopPropagation(); document.getElementById("addMenu").classList.toggle("open"); };
+  document.addEventListener("click", () => document.getElementById("addMenu").classList.remove("open"));
+  document.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
+    const kind = b.dataset.add;
+    state.added++;
+    const sheet = kind === "detail"
+      ? { id: "detail-" + state.added, kind: "detail", title: "Joint detail", include: true }
+      : { id: "notes-" + state.added, kind: "notes", title: "Notes", include: true };
+    state.sheets.splice(state.current + 1, 0, sheet);
+    state.current++;
+    refresh();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown") { select(state.current + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft" || e.key === "PageUp") { select(state.current - 1); e.preventDefault(); }
+    if (e.key === "+" || e.key === "=") setZoom(curZoom() * 1.25);
+    if (e.key === "-") setZoom(curZoom() / 1.25);
+    if (e.key === "0") setZoom("fit");
+  });
+  document.getElementById("desk").addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setZoom(curZoom() * Math.exp(-e.deltaY * 0.002));
+  }, { passive: false });
+  window.addEventListener("resize", () => { if (state.zoom === "fit") applyZoom(); });
+
+  hydrateIcons();
+  document.querySelector("#prev .ic").style.transform = "rotate(180deg)";
+  const start = new URLSearchParams(location.search).get("sheet");
+  if (start) { const i = state.sheets.findIndex((s) => s.id === start); if (i >= 0) state.current = i; }
+  refresh();
+</script>
+</body>
+</html>
