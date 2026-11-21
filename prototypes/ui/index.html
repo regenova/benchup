@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp · UI directions</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; color: #1d2126; background: #f5f4f1; }
+  body { margin: 0; padding: 48px 56px 80px; }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  p.lead { margin: 0 0 36px; color: #5f656c; max-width: 760px; line-height: 1.55; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  a.card { display: block; color: inherit; text-decoration: none; background: #fff; border: 1px solid #e8e5df; border-radius: 14px; overflow: hidden; transition: box-shadow .15s, transform .15s; }
+  a.card:hover { box-shadow: 0 14px 40px rgba(0,0,0,.08); transform: translateY(-2px); }
+  a.card img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; border-bottom: 1px solid #e8e5df; }
+  .body { padding: 18px 20px 22px; }
+  .body h2 { margin: 0 0 6px; font-size: 17px; }
+  .body p { margin: 0 0 12px; color: #5f656c; line-height: 1.5; font-size: 13.5px; }
+  .body ul { margin: 0; padding-left: 18px; color: #3d4248; font-size: 13px; line-height: 1.6; }
+  h3 { margin: 48px 0 12px; font-size: 16px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; border: 1px solid #e8e5df; border-radius: 12px; overflow: hidden; font-size: 13px; }
+  th, td { padding: 10px 14px; border-bottom: 1px solid #eeebe6; text-align: left; vertical-align: middle; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8b9096; background: #fbfaf8; }
+  tr:last-child td { border-bottom: 0; }
+  .extra { display: flex; gap: 16px; margin-top: 16px; }
+  .extra a { color: #b8302a; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>BenchUp: three UI directions</h1>
+  <p class="lead">Each prototype uses the same sample bench and a small interactive renderer: drag to orbit, scroll to zoom and click a part to select it. They explore different ways of moving away from the SketchUp look, from layout and navigation to visual language and interaction model.</p>
+
+  <div class="grid">
+    <a class="card" href="a-workshop-flow.html">
+      <img src="screens/a-workshop-flow.jpeg" alt="Workshop flow prototype" />
+      <div class="body">
+        <h2>A · Workshop flow</h2>
+        <p>The app is organised around the woodworker's process rather than a generic toolbox. Each stage brings its own tools and panels.</p>
+        <ul>
+          <li>Stages Design → Joinery → Materials → Cut list replace the tool rail as primary navigation.</li>
+          <li>A parts list with real dimensions replaces the outliner.</li>
+          <li>A part card edits length, width, thickness, grain and joints.</li>
+        </ul>
+      </div>
+    </a>
+    <a class="card" href="b-canvas.html">
+      <img src="screens/b-canvas.jpeg" alt="Canvas prototype" />
+      <div class="body">
+        <h2>B · Canvas</h2>
+        <p>A full-bleed, dark viewport with floating islands, closer to Figma, Shapr3D or Plasticity than to a desktop CAD tray.</p>
+        <ul>
+          <li>Icon dock at the bottom with shortcuts in tooltips.</li>
+          <li>Contextual panel anchored to the selection, instead of a fixed inspector.</li>
+          <li>Numeric input follows the cursor; <kbd>⌘K</kbd> opens a command palette.</li>
+        </ul>
+      </div>
+    </a>
+    <a class="card" href="c-blueprint.html">
+      <img src="screens/c-blueprint.jpeg" alt="Blueprint prototype" />
+      <div class="body">
+        <h2>C · Blueprint</h2>
+        <p>The workspace is a technical drawing sheet. It leans into the craft identity: ink lines, red pencil for selection and dimensions.</p>
+        <ul>
+          <li>Isometric view plus live front, plan and side elevations.</li>
+          <li>The bill of materials doubles as the outliner.</li>
+          <li>The title block doubles as the property editor.</li>
+        </ul>
+      </div>
+    </a>
+  </div>
+  <div class="extra">
+    <a href="screens/a-joinery.jpeg">A · Joinery stage</a>
+    <a href="screens/a-cutlist.jpeg">A · Cut list stage</a>
+    <a href="screens/b-canvas-palette.jpeg">B · Command palette</a>
+  </div>
+
+  <h3>What currently reads as SketchUp, and how each direction answers it</h3>
+  <table>
+    <thead><tr><th>Current element</th><th>A · Workshop flow</th><th>B · Canvas</th><th>C · Blueprint</th></tr></thead>
+    <tbody>
+      <tr><td>Vertical tool rail with Line, Push/Pull, Paint, Orbit</td><td>Contextual tool strip per stage</td><td>Floating icon dock</td><td>Text tool bar with keyboard letters</td></tr>
+      <tr><td>Beige ground, sky and black edges</td><td>Neutral studio backdrop, soft contact shadow</td><td>Dark graphite stage</td><td>Paper, ink lines and hatching</td></tr>
+      <tr><td>Right tray with collapsible panels</td><td>Part card focused on the selection</td><td>Panel anchored next to the part</td><td>Title block on the sheet</td></tr>
+      <tr><td>Outliner of groups and components</td><td>Parts list with dimensions</td><td>Assembly tree in a drawer</td><td>Bill of materials with item numbers</td></tr>
+      <tr><td>"Length" measurement box in the status bar</td><td>Inline hint with typed values</td><td>Chip at the cursor</td><td>Editable dimensions in the title block</td></tr>
+      <tr><td>Geometry vocabulary (faces, edges, groups)</td><td>Boards, panels, joints, stock</td><td>Parts and assemblies</td><td>Items, elevations, sheets</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

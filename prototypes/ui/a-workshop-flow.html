@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Workshop flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f5f4f1;
+    --panel: #ffffff;
+    --line: #e8e5df;
+    --line-strong: #d9d5cd;
+    --ink: #1d2126;
+    --muted: #6f747b;
+    --faint: #9aa0a6;
+    --accent: #d63b32;
+    --accent-soft: #fbe9e6;
+    --hover: #f3f1ed;
+    --radius: 10px;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input, select { font: inherit; color: inherit; }
+  .ic { display: block; flex: none; }
+
+  .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  /* Header with the stage stepper as primary navigation */
+  header {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
+  .project { display: flex; flex-direction: column; line-height: 1.15; }
+  .project b { font-weight: 600; font-size: 14px; }
+  .project span { color: var(--faint); font-size: 11.5px; }
+  .hdr-actions { display: flex; justify-content: flex-end; gap: 6px; align-items: center; }
+  .iconbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
+  .iconbtn:hover { background: var(--hover); color: var(--ink); }
+  .btn { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line-strong); display: inline-flex; align-items: center; gap: 6px; background: var(--panel); }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.primary:hover { background: #33383f; }
+
+  .stages { display: flex; align-items: center; gap: 2px; background: var(--bg); padding: 3px; border-radius: 11px; border: 1px solid var(--line); }
+  .stage { height: 34px; padding: 0 14px 0 8px; border-radius: 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 500; }
+  .stage .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; border: 1px solid var(--line-strong); color: var(--muted); background: var(--panel); }
+  .stage:hover { color: var(--ink); }
+  .stage.done .n { background: #e7efe9; border-color: #cfe0d4; color: #3e7a52; }
+  .stage.active { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 0 0 1px var(--line); }
+  .stage.active .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .body { display: grid; grid-template-columns: 268px 1fr 312px; min-height: 0; }
+
+  /* Left: parts list instead of an outliner */
+  aside { background: var(--panel); min-height: 0; display: flex; flex-direction: column; }
+  aside.left { border-right: 1px solid var(--line); }
+  aside.right { border-left: 1px solid var(--line); overflow: auto; }
+  .aside-head { padding: 14px 14px 10px; display: flex; align-items: center; justify-content: space-between; }
+  .aside-head h2 { margin: 0; font-size: 13px; font-weight: 600; }
+  .count { color: var(--faint); font-weight: 500; margin-left: 4px; }
+  .search { margin: 0 12px 8px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; background: var(--bg); color: var(--faint); }
+  .search input { border: 0; background: none; outline: none; flex: 1; min-width: 0; }
+  .parts { overflow: auto; flex: 1; padding: 0 8px 8px; }
+  .group-h { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+  .row:hover { background: var(--hover); }
+  .row.sel { background: var(--accent-soft); }
+  .row .sw { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .dm { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .stockbar { border-top: 1px solid var(--line); padding: 12px; }
+  .stockbar .lbl { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px dashed var(--line-strong); display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .chip:hover { border-style: solid; color: var(--ink); background: var(--hover); }
+
+  /* Center viewport */
+  main { position: relative; min-width: 0; min-height: 0; background: radial-gradient(120% 90% at 50% 35%, #fbfbfa 0%, #eceae6 100%); }
+  main svg.vp { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  .overlay { position: absolute; display: flex; gap: 6px; align-items: center; }
+  .seg { display: flex; background: rgba(255,255,255,.86); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { height: 28px; padding: 0 10px; border-radius: 6px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { background: var(--ink); color: #fff; }
+
+  .toolstrip { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .hint { background: rgba(29,33,38,.86); color: #e9eaec; padding: 6px 12px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .hint kbd { font: 11px ui-monospace, Menlo, monospace; background: rgba(255,255,255,.14); padding: 1px 5px; border-radius: 4px; margin: 0 2px; }
+  .tools { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px; box-shadow: 0 8px 24px rgba(30,30,30,.10), 0 1px 2px rgba(0,0,0,.05); }
+  .tool { width: 64px; height: 54px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-size: 11px; }
+  .tool:hover { background: var(--hover); color: var(--ink); }
+  .tool.on { background: var(--accent-soft); color: var(--accent); }
+  .tool-sep { width: 1px; background: var(--line); margin: 6px 4px; }
+
+  /* Right: part card */
+  .card { padding: 16px; border-bottom: 1px solid var(--line); }
+  .card h3 { margin: 0 0 12px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; }
+  .title-input { font-size: 18px; font-weight: 600; border: 0; outline: none; padding: 0; width: 100%; background: none; }
+  .sub { color: var(--muted); margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+  .dims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .dim { border: 1px solid var(--line-strong); border-radius: 9px; padding: 7px 9px 6px; }
+  .dim:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(29,33,38,.08); }
+  .dim label { display: block; font-size: 11px; color: var(--faint); }
+  .dim div { display: flex; align-items: baseline; gap: 3px; }
+  .dim input { width: 100%; border: 0; outline: none; padding: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; background: none; }
+  .dim span { color: var(--faint); font-size: 11px; }
+  .field { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; margin-top: 10px; }
+  .field > label { color: var(--muted); }
+  .select { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+  .select .sw { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .select .grow { flex: 1; }
+  .segs { display: flex; border: 1px solid var(--line-strong); border-radius: 8px; padding: 2px; }
+  .segs button { flex: 1; height: 26px; border-radius: 6px; color: var(--muted); font-size: 12px; }
+  .segs button.on { background: var(--bg); color: var(--ink); font-weight: 500; }
+  .joint { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .joint:first-of-type { border-top: 0; }
+  .joint .jic { width: 28px; height: 28px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; color: var(--muted); }
+  .joint small { display: block; color: var(--muted); }
+  .empty { color: var(--muted); padding: 28px 16px; line-height: 1.5; }
+  .actions { display: flex; gap: 8px; padding: 16px; }
+  .actions .btn { flex: 1; justify-content: center; }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; }
+  .stat span { color: var(--muted); }
+  .stat b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mat { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 9px; cursor: pointer; }
+  .mat:hover { background: var(--hover); }
+  .mat.on { background: var(--accent-soft); }
+  .mat .big { width: 36px; height: 36px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); background-image: repeating-linear-gradient(100deg, rgba(0,0,0,.06) 0 2px, transparent 2px 7px); }
+  .mat small { display: block; color: var(--muted); }
+
+  /* Cut list stage */
+  .cutlist { position: absolute; inset: 0; overflow: auto; padding: 24px 28px; display: none; background: var(--bg); }
+  .cutlist.show { display: block; }
+  .cutlist h2 { margin: 0 0 4px; font-size: 18px; }
+  .cutlist p.lead { margin: 0 0 18px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; background: #fbfaf8; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--hover); }
+  .boards { margin-top: 22px; display: grid; gap: 14px; }
+  .board { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+  .board .bh { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .board svg { width: 100%; height: auto; display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
+      <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages" id="stages">
+      <button class="stage done" data-stage="design"><span class="n">1</span>Design</button>
+      <button class="stage" data-stage="joinery"><span class="n">2</span>Joinery</button>
+      <button class="stage" data-stage="materials"><span class="n">3</span>Materials</button>
+      <button class="stage" data-stage="cutlist"><span class="n">4</span>Cut list</button>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <button class="btn primary"><i data-icon="print" data-size="16"></i>Shop drawings</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="left">
+      <div class="aside-head"><h2>Parts<span class="count">12</span></h2><button class="iconbtn" title="Add part"><i data-icon="plus" data-size="16"></i></button></div>
+      <div class="search"><i data-icon="search" data-size="15"></i><input placeholder="Find a part" /></div>
+      <div class="parts" id="parts"></div>
+      <div class="stockbar">
+        <div class="lbl">Add from stock</div>
+        <div class="chips">
+          <button class="chip"><i data-icon="plus" data-size="13"></i>Square 45 × 45</button>
+          <button class="chip"><i data-icon="plus" data-size="13"></i>Board 90 × 20</button>
+          <button class="chip"><i data-icon="plus" data-size="13"></i>Sheet 18 mm</button>
+          <button class="chip"><i data-icon="plus" data-size="13"></i>Dowel Ø10</button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <svg class="vp" id="vp"></svg>
+      <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" id="views">
+          <button class="on" data-v="persp"><i data-icon="cube" data-size="15"></i>3D</button>
+          <button data-v="front">Front</button>
+          <button data-v="side">Side</button>
+          <button data-v="top">Top</button>
+        </div>
+      </div>
+      <div class="overlay" style="right:16px;top:16px">
+        <div class="seg">
+          <button class="on">Wood</button>
+          <button>Grain</button>
+          <button>X-ray</button>
+        </div>
+      </div>
+      <div class="toolstrip" id="toolstrip">
+        <div class="hint" id="hint"></div>
+        <div class="tools" id="tools"></div>
+      </div>
+      <div class="cutlist" id="cutlist"></div>
+    </main>
+
+    <aside class="right" id="right"></aside>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script>
+  const { PARTS, MATERIALS, size, fmtDims, mm, BenchView } = BenchModel;
+  const COLORS = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" };
+  const GROUPS = ["Panels", "Legs", "Aprons", "Stretchers"];
+
+  const touching = (A, B) => [0, 1, 2].every((k) => A.min[k] <= B.max[k] + 1e-6 && B.min[k] <= A.max[k] + 1e-6);
+  function jointType(a, b) {
+    const kinds = [a.kind, b.kind].sort().join("+");
+    if (kinds === "Aprons+Legs" || kinds === "Legs+Stretchers") return { name: "Mortise & tenon", icon: "tenon", spec: "Tenon 30 × 10, depth 25" };
+    if (kinds === "Aprons+Panels") return { name: "Tabletop fastener", icon: "screw", spec: "Figure-8, every 250" };
+    if (kinds === "Panels+Stretchers") return { name: "Groove", icon: "groove", spec: "18 wide, 8 deep" };
+    return { name: "Butt", icon: "joint", spec: "Glue only" };
+  }
+  const JOINT_FIELDS = {
+    tenon: [["Length", 30], ["Thickness", 10], ["Depth", 25]],
+    screw: [["Spacing", 250], ["Count", 6], ["Inset", 10]],
+    groove: [["Width", 18], ["Depth", 8], ["Offset", 12]],
+  };
+  const neighbours = (p) => PARTS.filter((q) => q !== p && touching(p, q));
+
+  const STAGES = {
+    design: {
+      tools: [["select", "Select"], ["board", "Board"], ["panel", "Panel"], ["draw", "Sketch"], "|", ["pushpull", "Extrude"], ["move", "Move"], ["rotate", "Rotate"], ["mirror", "Mirror"], ["array", "Repeat"], "|", ["measure", "Measure"], ["section", "Section"]],
+      hint: 'Board: click two corners, drag the thickness, or type <kbd>450</kbd><kbd>Tab</kbd><kbd>90</kbd>',
+    },
+    joinery: {
+      tools: [["select", "Select"], "|", ["tenon", "Mortise"], ["dowel", "Dowels"], ["dovetail", "Dovetail"], ["halflap", "Half-lap"], ["finger", "Finger"], ["groove", "Groove"], ["screw", "Screws"]],
+      hint: "Pick two touching parts to join them · Connected parts are highlighted",
+    },
+    materials: {
+      tools: [["select", "Select"], "|", ["paint", "Assign"], ["grain", "Grain"], ["finish", "Finish"], ["stock", "Stock"]],
+      hint: "Pick a material on the right, then click parts · Hold <kbd>⇧</kbd> to fill every identical part",
+    },
+    cutlist: { tools: [], hint: "" },
+  };
+
+  let stage = "design";
+  let tool = "select";
+  let selected = "apron-f";
+
+  const view = new BenchView(document.getElementById("vp"), {
+    theme: {
+      colors: COLORS,
+      stroke: "rgba(60,45,30,0.45)",
+      strokeWidth: 0.7,
+      selectedStroke: "#d63b32",
+      selectedWidth: 2,
+      hoverStroke: "rgba(214,59,50,.6)",
+      dimColor: "#d63b32",
+      dimText: "#b8302a",
+      grid: { minor: "rgba(40,40,40,.06)", major: "rgba(40,40,40,.12)" },
+      shadow: "rgba(60,50,40,.22)",
+    },
+    selectedId: selected,
+    view: { azimuth: 62, elevation: 24, pan: [0, -30] },
+    onSelect: (id) => select(id, false),
+  });
+
+  function select(id, updateView = true) {
+    selected = id;
+    if (updateView) view.setSelected(id);
+    applyStageTheme();
+    renderParts();
+    renderRight();
+    if (stage === "cutlist") renderCutlist();
+  }
+
+  function applyStageTheme() {
+    const p = PARTS.find((q) => q.id === selected);
+    view.theme.dimmed = stage === "joinery" && p ? new Set([p.id, ...neighbours(p).map((q) => q.id)]) : null;
+    view.dims = stage === "design";
+    view.render();
+  }
+
+  function renderParts() {
+    const host = document.getElementById("parts");
+    host.innerHTML = GROUPS.map((g) => {
+      const items = PARTS.filter((p) => p.kind === g);
+      return `<div class="group-h">${g}<span class="count">${items.length}</span></div>` +
+        items.map((p) => `<div class="row ${p.id === selected ? "sel" : ""}" data-id="${p.id}">
+          <span class="sw" style="background:${COLORS[p.material]}"></span>
+          <span class="nm">${p.name}</span><span class="dm">${fmtDims(p)}</span></div>`).join("");
+    }).join("");
+    host.querySelectorAll(".row").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+  }
+
+  function renderTools() {
+    const s = STAGES[stage];
+    document.getElementById("toolstrip").style.display = s.tools.length ? "" : "none";
+    document.getElementById("hint").innerHTML = s.hint;
+    document.getElementById("tools").innerHTML = s.tools.map((t) => t === "|" ? '<span class="tool-sep"></span>' :
+      `<button class="tool ${t[0] === tool ? "on" : ""}" data-tool="${t[0]}">${icon(t[0], 20)}<span>${t[1]}</span></button>`).join("");
+    document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => { tool = b.dataset.tool; renderTools(); }));
+  }
+
+  function partCard(p) {
+    const s = size(p);
+    const twins = PARTS.filter((q) => q.name === p.name).length;
+    const joints = neighbours(p).map((q) => ({ q, j: jointType(p, q) }));
+    return `
+      <div class="card">
+        <input class="title-input" value="${p.name}" />
+        <div class="sub"><span class="tag">${p.kind}</span>${twins > 1 ? `<span>${twins} identical parts</span>` : ""}</div>
+      </div>
+      <div class="card">
+        <h3>Size<span style="text-transform:none;letter-spacing:0;font-weight:500">mm</span></h3>
+        <div class="dims">
+          <div class="dim"><label>Length</label><div><input value="${mm(s.length)}" /></div></div>
+          <div class="dim"><label>Width</label><div><input value="${mm(s.width)}" /></div></div>
+          <div class="dim"><label>Thickness</label><div><input value="${mm(s.thickness)}" /></div></div>
+        </div>
+        <div class="field"><label>Material</label>
+          <div class="select"><span class="sw" style="background:${COLORS[p.material]}"></span><span class="grow">${MATERIALS[p.material].name}</span>${icon("chevronDown", 14)}</div></div>
+        <div class="field"><label>Grain</label>
+          <div class="segs"><button class="on">Along length</button><button>Across</button></div></div>
+        <div class="field"><label>Stock</label><div style="color:var(--muted)">${MATERIALS[p.material].stock}</div></div>
+      </div>
+      <div class="card">
+        <h3>Joints<span>${joints.length}</span></h3>
+        ${joints.map(({ q, j }) => `<div class="joint"><span class="jic">${icon(j.icon, 16)}</span>
+          <div>${j.name}<small>to ${q.name.toLowerCase()} · ${j.spec}</small></div>${icon("chevronRight", 14)}</div>`).join("")}
+      </div>
+      <div class="actions"><button class="btn">${icon("copy", 15)}Duplicate</button><button class="btn">${icon("hide", 15)}Hide</button></div>`;
+  }
+
+  function renderRight() {
+    const host = document.getElementById("right");
+    const p = PARTS.find((q) => q.id === selected);
+    if (stage === "materials") {
+      host.innerHTML = `<div class="card"><h3>Materials in this project</h3>
+        ${Object.entries(MATERIALS).map(([k, m]) => `<div class="mat ${p && p.material === k ? "on" : ""}">
+          <span class="big" style="background-color:${COLORS[k]}"></span>
+          <div>${m.name}<small>${m.stock}</small></div><small>${PARTS.filter((q) => q.material === k).length} parts</small></div>`).join("")}
+        <button class="btn" style="margin-top:10px;width:100%;justify-content:center">${icon("plus", 15)}Add material</button></div>
+        <div class="card"><h3>Finish</h3>
+          <div class="field" style="margin-top:0"><label>Product</label><div class="select"><span class="grow">Hardwax oil, matte</span>${icon("chevronDown", 14)}</div></div>
+          <div class="field"><label>Coats</label><div class="segs"><button>1</button><button class="on">2</button><button>3</button></div></div>
+          <div class="field"><label>Sanding</label><div style="color:var(--muted)">120 → 180 → 240</div></div></div>`;
+      return;
+    }
+    if (stage === "cutlist") {
+      host.innerHTML = `<div class="card"><h3>Stock to buy</h3>
+        <div class="stat"><span>White oak 27 mm</span><b>2 boards · 2400</b></div>
+        <div class="stat"><span>Black walnut 25 mm</span><b>1 board · 1200</b></div>
+        <div class="stat"><span>Birch plywood 18 mm</span><b>¼ sheet</b></div></div>
+        <div class="card"><h3>Summary</h3>
+        <div class="stat"><span>Waste</span><b>14 %</b></div>
+        <div class="stat"><span>Board feet</span><b>11.6</b></div>
+        <div class="stat"><span>Material cost</span><b>€ 186</b></div>
+        <div class="stat"><span>Estimated time</span><b>9 h 30</b></div></div>
+        <div class="actions"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button></div>`;
+      return;
+    }
+    if (!p) {
+      host.innerHTML = `<div class="empty"><b>Nothing selected.</b><br>Click a part in the model or in the list to edit its size, material and joints.</div>`;
+      return;
+    }
+    if (stage === "joinery") {
+      const joints = neighbours(p).map((q) => ({ q, j: jointType(p, q) }));
+      host.innerHTML = `<div class="card"><input class="title-input" value="${p.name}" /><div class="sub"><span class="tag">${p.kind}</span><span>${joints.length} joints</span></div></div>` +
+        joints.map(({ q, j }, i) => `<div class="card"><h3>${j.name}<span>${q.name}</span></h3>
+          <div class="dims">${(JOINT_FIELDS[j.icon] || JOINT_FIELDS.tenon).map(([l, v]) => `<div class="dim"><label>${l}</label><div><input value="${v}" /></div></div>`).join("")}</div>
+          <div class="field"><label>Clearance</label><div class="segs"><button>Tight</button><button class="on">0.2 mm</button><button>Loose</button></div></div></div>`).join("");
+      return;
+    }
+    host.innerHTML = partCard(p);
+  }
+
+  function pack() {
+    // Shelf packing of the solid-wood parts onto 2400 × 140 boards (illustrative).
+    const items = PARTS.filter((p) => p.material !== "plywood").map((p) => ({ p, l: size(p).length * 10, w: size(p).width * 10 }))
+      .sort((a, b) => b.l - a.l);
+    const boards = [];
+    for (const it of items) {
+      const mat = it.p.material;
+      let placed = false;
+      for (const b of boards) {
+        if (b.mat !== mat) continue;
+        for (const shelf of b.shelves) {
+          if (shelf.x + it.l <= b.L && it.w <= shelf.h) { b.items.push({ ...it, x: shelf.x, y: shelf.y }); shelf.x += it.l + 5; placed = true; break; }
+        }
+        if (placed) break;
+        const used = b.shelves.reduce((a, s) => a + s.h + 5, 0);
+        if (used + it.w <= b.W) { b.shelves.push({ x: it.l + 5, y: used, h: it.w }); b.items.push({ ...it, x: 0, y: used }); placed = true; break; }
+      }
+      if (!placed) {
+        const L = mat === "walnut" ? 1200 : 2400; const W = mat === "walnut" ? 360 : 140;
+        boards.push({ mat, L, W, shelves: [{ x: it.l + 5, y: 0, h: it.w }], items: [{ ...it, x: 0, y: 0 }] });
+      }
+    }
+    return boards;
+  }
+
+  function renderCutlist() {
+    const host = document.getElementById("cutlist");
+    const rows = [];
+    for (const p of PARTS) {
+      const key = p.name + p.material;
+      const r = rows.find((x) => x.key === key);
+      if (r) { r.qty++; r.ids.push(p.id); } else rows.push({ key, p, qty: 1, ids: [p.id] });
+    }
+    const boards = pack();
+    host.innerHTML = `<h2>Cut list</h2><p class="lead">Finished sizes in millimetres. Lengths include tenons; grain runs along the length.</p>
+      <table><thead><tr><th>Part</th><th class="num">Qty</th><th class="num">Length</th><th class="num">Width</th><th class="num">Thick.</th><th>Material</th></tr></thead><tbody>
+      ${rows.map((r) => { const s = size(r.p); return `<tr data-id="${r.ids[0]}" ${r.ids.includes(selected) ? 'style="background:var(--accent-soft)"' : ""}>
+        <td><span style="display:inline-flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:3px;background:${COLORS[r.p.material]}"></span>${r.p.name}</span></td>
+        <td class="num">${r.qty}</td><td class="num">${mm(s.length)}</td><td class="num">${mm(s.width)}</td><td class="num">${mm(s.thickness)}</td><td>${MATERIALS[r.p.material].name}</td></tr>`; }).join("")}
+      </tbody></table>
+      <div class="boards">${boards.map((b, i) => {
+        const k = 1000 / 2400; // shared scale so boards compare honestly
+        return `<div class="board"><div class="bh"><span>${MATERIALS[b.mat].name} · board ${i + 1}</span><span>${b.L} × ${b.W}</span></div>
+          <svg viewBox="0 0 1000 ${b.W * k + 2}"><rect x="1" y="1" width="${b.L * k - 2}" height="${b.W * k}" rx="3" fill="${COLORS[b.mat]}" opacity=".25" stroke="${COLORS[b.mat]}"/>
+          ${b.items.map((it) => `<rect x="${1 + it.x * k}" y="${1 + it.y * k}" width="${it.l * k}" height="${it.w * k}" fill="${COLORS[b.mat]}" stroke="${it.p.id === selected ? "#d63b32" : "rgba(0,0,0,.35)"}" stroke-width="${it.p.id === selected ? 2 : 0.8}"/>
+            ${it.w * k > 9 && it.l * k > 50 ? `<text x="${1 + it.x * k + 6}" y="${1 + it.y * k + Math.min(it.w * k, 14) - 3}" font-size="${Math.min(10, it.w * k - 2)}" fill="#2a1f14" font-family="system-ui">${it.p.name} ${Math.round(it.l)}</text>` : ""}`).join("")}
+          </svg></div>`; }).join("")}</div>`;
+    host.querySelectorAll("tbody tr").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+  }
+
+  function setStage(s) {
+    stage = s;
+    tool = "select";
+    const order = Object.keys(STAGES);
+    document.querySelectorAll(".stage").forEach((b) => {
+      const i = order.indexOf(b.dataset.stage);
+      b.classList.toggle("active", b.dataset.stage === s);
+      b.classList.toggle("done", i < order.indexOf(s));
+    });
+    document.getElementById("cutlist").classList.toggle("show", s === "cutlist");
+    if (s === "cutlist") renderCutlist();
+    renderTools();
+    applyStageTheme();
+    renderRight();
+  }
+
+  document.querySelectorAll(".stage").forEach((b) => (b.onclick = () => setStage(b.dataset.stage)));
+  const VIEWS = { persp: { azimuth: 62, elevation: 24 }, front: { azimuth: 90, elevation: 0.5 }, side: { azimuth: 0.5, elevation: 0.5 }, top: { azimuth: 90, elevation: 89.5 } };
+  document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b));
+    view.animateTo(VIEWS[b.dataset.v]);
+  }));
+
+  hydrateIcons();
+  renderParts();
+  setStage("design");
+</script>
+</body>
+</html>
