@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Tool illustrations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<script>
+  // Two illustration styles share the same API, so only one can be loaded per page.
+  window.ART_STYLE = new URLSearchParams(location.search).get("v") === "flat" ? "flat" : "iso";
+  document.write(`<script src="shared/${window.ART_STYLE === "flat" ? "tool-art-flat.js" : "tool-art.js"}"><\/script>`);
+</script>
+<style>
+  html, body { overflow: auto; height: auto; }
+  a.mark { text-decoration: none; }
+  .app { display: block; height: auto; }
+  header { position: sticky; top: 0; z-index: 2; height: 56px; }
+  .styles { display: flex; gap: 2px; background: var(--bg); padding: 3px; border-radius: 11px; border: 1px solid var(--line); }
+  .styles a { height: 34px; padding: 0 14px; border-radius: 8px; display: flex; align-items: center; color: var(--muted); font-weight: 500; text-decoration: none; }
+  .styles a:hover { color: var(--ink); }
+  .styles a.on { background: var(--panel); color: var(--ink); box-shadow: var(--stage-shadow), 0 0 0 1px var(--line); }
+  main.sheet { display: block; background: var(--bg); padding: 28px 32px 60px; min-height: calc(100vh - 56px); }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -.01em; }
+  .lead { margin: 0 0 24px; color: var(--muted); max-width: 760px; line-height: 1.55; font-size: 14px; }
+  h2 { margin: 26px 2px 10px; font-size: 15px; display: flex; gap: 8px; align-items: baseline; }
+  h2 span { color: var(--faint); font-weight: 500; font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+  .cell { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .cell .pic { height: 96px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+  .cell b { font-weight: 500; padding: 0 4px; font-size: 12.5px; }
+  .sizes { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 14px; }
+  .sizes .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .sizes .row label { width: 120px; color: var(--muted); font-size: 12px; flex: none; }
+  .sizes .row span { border-radius: 7px; background: var(--bg); display: grid; place-items: center; }
+  .sizes .row.grey svg { filter: grayscale(1); opacity: .45; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects">B</a>
+      <div class="project"><b>Tool illustrations</b><span id="subtitle"></span></div>
+    </div>
+    <nav class="styles" id="styles">
+      <a href="a-tool-art.html?v=iso" data-v="iso">Isometric sketch</a>
+      <a href="a-tool-art.html?v=flat" data-v="flat">Flat side view</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <a class="btn" href="index.html" style="text-decoration:none;color:inherit">All prototypes</a>
+    </div>
+  </header>
+  <main class="sheet"><div class="wrap">
+    <h1 id="title"></h1>
+    <p class="lead" id="lead"></p>
+    <div id="sections"></div>
+  </div></main>
+</div>
+<script src="shared/planning-data.js"></script>
+<script>
+(function () {
+  "use strict";
+  const BP = BenchPlan;
+  const iso = window.ART_STYLE === "iso";
+  document.querySelectorAll("#styles a").forEach((a) => a.classList.toggle("on", a.dataset.v === window.ART_STYLE));
+  document.getElementById("subtitle").textContent = `${BP.TOOLS.length} tools · used by the workshop setup, My workshop and Planning`;
+  document.getElementById("title").textContent = iso ? "Isometric sketch" : "Flat side view";
+  document.getElementById("lead").textContent = iso
+    ? "The style used by the prototype. Every tool is drawn on true 30° isometric axes, with a thin ink line, a heavier silhouette, three tints per material for volume and a few draughting cues: overshooting corners, centre lines and hidden edges. Below 60 px the cues drop out so small icons stay legible."
+    : "The first version, kept as an alternative. Side views with one ink stroke and four flat tones (wood, steel, body and dark). Simpler and more icon-like, and easier to read at very small sizes, but the set reads less like a woodworking drawing.";
+  const sections = BP.CATS.map((c) => {
+    const tools = BP.TOOLS.filter((t) => t.cat === c.id);
+    return `<h2>${c.name}<span>${tools.length}</span></h2><div class="grid">${tools.map((t) => `<div class="cell"><span class="pic">${toolArt(t.id, 132)}</span><b>${t.name}</b></div>`).join("")}</div>`;
+  }).join("");
+  const sample = ["tablesaw", "router", "jackplane", "chisels", "barclamps", "drill", "mitersaw", "scraper"];
+  const row = (label, w, cls = "") => `<div class="row ${cls}"><label>${label}</label>${sample.map((id) => `<span style="width:${w + 8}px;height:${Math.round(w * 0.67) + 8}px">${toolArt(id, w)}</span>`).join("")}</div>`;
+  document.getElementById("sections").innerHTML = `<h2>Sizes and states<span>As used in tiles, chips and the setup footer</span></h2>
+    <div class="sizes">${row("Tile, 96 px", 96)}${row("Chip, 46 px", 46)}${row("Footer, 30 px", 30)}${row("Not owned, 96 px", 96, "grey")}</div>${sections}`;
+})();
+</script>
+</body>
+</html>

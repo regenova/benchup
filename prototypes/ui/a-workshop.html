@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · My workshop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.btn { text-decoration: none; color: inherit; }
+  a.btn.primary { color: var(--primary-ink); }
+  .body.shop { grid-template-columns: 268px 1fr 332px; }
+  .crumb { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+  .crumb a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px; }
+  .crumb a:hover { background: var(--hover); color: var(--ink); }
+
+  /* Left: presets and categories */
+  .presets { padding: 0 8px 4px; display: grid; gap: 2px; }
+  .preset { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; text-align: left; padding: 8px; border-radius: 8px; }
+  .preset:hover { background: var(--hover); }
+  .preset.on { background: var(--accent-soft); }
+  .preset .dot { width: 14px; height: 14px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--panel); }
+  .preset.on .dot { border: 4px solid var(--accent); }
+  .preset small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+  .custom-note { margin: 2px 16px 6px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+  .cats { flex: 1; overflow: auto; padding: 0 8px 8px; }
+  .catrow { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 8px; border-radius: 8px; text-align: left; }
+  .catrow:hover { background: var(--hover); }
+  .catrow span { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+  /* Centre */
+  main.shop-main { background: var(--bg); display: flex; flex-direction: column; }
+  .centre-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .centre-bar .left { display: flex; align-items: center; gap: 10px; }
+  .centre-bar .search { margin: 0; width: 240px; }
+  .centre-bar .seg { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 3px; display: flex; gap: 2px; backdrop-filter: none; }
+  .centre-bar .seg button { height: 28px; padding: 0 12px; border-radius: 6px; color: var(--muted); font-size: 12.5px; }
+  .centre-bar .seg button.on { background: var(--panel); color: var(--ink); box-shadow: var(--stage-shadow), 0 0 0 1px var(--line); }
+  .facts { color: var(--muted); font-size: 12.5px; }
+  .facts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .scroll { flex: 1; overflow: auto; padding: 22px 28px 60px; }
+  .intro { max-width: 720px; margin: 0 0 22px; color: var(--muted); line-height: 1.55; }
+  .intro b { color: var(--ink); font-weight: 600; }
+  section.cat { margin-bottom: 26px; scroll-margin-top: 12px; }
+  section.cat h3 { margin: 0 2px 10px; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+  section.cat h3 span { color: var(--faint); font-weight: 500; font-size: 12.5px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 10px; }
+  .tile { position: relative; display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 8px 8px 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; user-select: none; transition: border-color .12s, box-shadow .12s; }
+  .tile:hover { border-color: var(--line-strong); }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile .pic { height: 86px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+  .tile .pic svg { transition: filter .15s, opacity .15s; }
+  .tile:not(.on) .pic svg { filter: grayscale(1); opacity: .45; }
+  .tile.on { border-color: var(--line-strong); box-shadow: var(--stage-shadow); }
+  .tile .box { position: absolute; top: 14px; right: 14px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--panel); display: grid; place-items: center; color: transparent; }
+  .tile.on .box { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .tile .nm { min-width: 0; padding: 0 4px; line-height: 1.3; }
+  .tile .nm b { font-weight: 500; }
+  .tile:not(.on) .nm b { color: var(--muted); }
+  .tile .nm small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .tile .gain { display: inline-block; margin-top: 6px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--info-bg); color: var(--info-ink); }
+  .tile .stepper { align-self: flex-start; margin: 0 4px; }
+  .stepper { display: flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 7px; height: 26px; }
+  .stepper button { width: 24px; height: 24px; color: var(--muted); display: grid; place-items: center; }
+  .stepper button:hover { color: var(--ink); }
+  .stepper b { min-width: 18px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .addtile { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border-radius: 10px; border: 1px dashed var(--line-strong); color: var(--muted); }
+  .addtile:hover { color: var(--ink); background: var(--hover); border-style: solid; }
+  .nores { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  /* Right */
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 10px; }
+  .field.stack { grid-template-columns: 1fr; gap: 6px; }
+  .cap { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .cap:first-of-type { border-top: 0; padding-top: 0; }
+  .cap .st { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+  .cap .st.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .cap .st.no { background: var(--warn-bg); color: var(--warn-ink); font-weight: 700; font-size: 12px; }
+  .cap b { font-weight: 500; }
+  .cap small { display: block; color: var(--muted); line-height: 1.4; margin-top: 1px; }
+  .up { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .up:first-of-type { border-top: 0; padding-top: 0; }
+  .up b { font-weight: 500; }
+  .up small { display: block; color: var(--muted); }
+  .up .btn { height: 28px; font-size: 12px; padding: 0 10px; }
+  /* Tabs and wood stock */
+  .body[hidden] { display: none; }
+  .centre-bar .seg button, .facts { white-space: nowrap; }
+  /* Laptop widths: slimmer side panels so the stock table keeps readable columns. */
+  @media (max-width: 1440px) {
+    .body.shop { grid-template-columns: 240px 1fr 300px; }
+    #sfacts { display: none; }
+  }
+  header .stages .stage .n { width: auto; min-width: 20px; padding: 0 5px; border-radius: 999px; }
+  header .stages .stage.active .n { background: var(--accent); }
+  .hdr-actions .crumb a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; }
+  .hdr-actions .crumb a:hover { background: var(--hover); color: var(--ink); }
+  .sel { width: 100%; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 6px; background: var(--panel); }
+  .catrow.on { background: var(--accent-soft); }
+  .stock-table { table-layout: fixed; }
+  .stock-table th, .stock-table td { vertical-align: middle; }
+  .stock-table td { padding: 8px 12px; }
+  .stock-table tbody tr { cursor: default; }
+  .wood-cell { display: flex; align-items: center; gap: 14px; }
+  .stock-table .thumb { flex: none; width: 96px; height: 44px; border-radius: 7px; background: var(--bg); display: grid; place-items: center; }
+  .stock-table td small { display: block; color: var(--muted); font-size: 11.5px; }
+  .stock-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stock-table tr.have td { background: color-mix(in srgb, var(--ok-bg) 45%, transparent); }
+  .stock-table .used { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--info-bg); color: var(--info-ink); white-space: nowrap; }
+  .stock-table .used.buy { background: var(--warn-bg); color: var(--warn-ink); }
+  .addrow { display: flex; align-items: center; gap: 6px; color: var(--muted); padding: 10px 2px 0; }
+  .addrow:hover { color: var(--ink); }
+  .offcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .offcut { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .offcut .pic { height: 84px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+  .offcut b { font-weight: 500; padding: 0 4px; }
+  .offcut small { display: block; color: var(--muted); font-size: 11.5px; padding: 0 4px; margin-top: -5px; }
+  .offcut .use { margin: 0 4px; align-self: flex-start; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--info-bg); color: var(--info-ink); }
+  .offcut .x { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 6px; color: var(--muted); display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); }
+  .offcut .x:hover { color: var(--ink); }
+  .offcut.add { align-items: center; justify-content: center; border-style: dashed; color: var(--muted); min-height: 150px; }
+  .offcut.add:hover { color: var(--ink); background: var(--hover); }
+  .offcut.stale .pic svg { opacity: .55; }
+  .offcut.selecting { cursor: pointer; user-select: none; }
+  .offcut.selecting:hover { border-color: var(--line-strong); }
+  .offcut.picked { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .offcut .pick { position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--panel); display: grid; place-items: center; color: transparent; }
+  .offcut.picked .pick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .offcut .seen { margin: -4px 4px 0; font-size: 11.5px; color: var(--faint); }
+  .offcut .seen.stale { color: var(--warn-ink); }
+  .offcut .use.maybe { background: var(--warn-bg); color: var(--warn-ink); }
+  .ask { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 4px 0; font-size: 12px; color: var(--muted); }
+  .ask span { margin-right: 2px; }
+  .ask button { height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: 12px; color: var(--ink); }
+  .ask button:hover { background: var(--hover); }
+  h3.split { display: flex; justify-content: space-between; align-items: baseline; }
+  section.cat h3.split .ttl { color: var(--ink); font-size: 15px; font-weight: 600; }
+  section.cat h3.split .ttl span { color: var(--faint); font-size: 12.5px; font-weight: 500; }
+  section.cat h3.split .sec-acts { font-size: 12.5px; }
+  h3.split .ttl { display: flex; align-items: baseline; gap: 8px; }
+  .sec-acts { display: flex; gap: 12px; }
+  .linkish { color: var(--accent); font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+  .linkish:hover { text-decoration: underline; }
+  .review { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--warn-bg); color: var(--ink); border-radius: 10px; padding: 10px 10px 10px 14px; margin-bottom: 10px; line-height: 1.45; }
+  .review .btn { height: 28px; font-size: 12px; flex: none; }
+  .bulkbar { position: sticky; bottom: 12px; margin-top: 14px; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 8px 8px 8px 14px; box-shadow: var(--pop-shadow); }
+  .bulkbar span { flex: 1; color: var(--muted); }
+  .bulkbar b { color: var(--ink); }
+  .bulkbar .btn:disabled { opacity: .4; cursor: default; }
+  .maybe-box { margin-top: 10px; background: var(--warn-bg); border-radius: 10px; padding: 10px 12px; }
+  .maybe-box p { margin: 0 0 6px; line-height: 1.45; }
+  .maybe-box .ask { margin: 0; }
+  .srow2 { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; }
+  .srow2 .mini { width: 56px; height: 30px; border-radius: 6px; background: var(--bg); display: grid; place-items: center; }
+  .srow2 small { display: block; color: var(--muted); font-size: 11.5px; }
+  .srow2 b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .stat.total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+  .stat.total span, .stat.total b { color: var(--ink); font-weight: 600; }
+  .compare-line { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13px; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  :root[data-theme="dark"] .tile:not(.on) .pic svg, :root[data-theme="dark"] .tchip:not(.on) svg { opacity: .5; }
+  /* After the base table rules so it wins on narrow screens. */
+  @media (max-width: 1340px) { .stock-table .thumb { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
+      <div class="project"><b>My workshop</b><span id="subtitle"></span></div>
+    </div>
+    <nav class="stages" id="tabs">
+      <button class="stage" data-tab="tools"><span class="n" id="tabToolsN"></span>Tools</button>
+      <button class="stage" data-tab="stock"><span class="n" id="tabStockN"></span>Wood stock</button>
+    </nav>
+    <div class="hdr-actions">
+      <div class="crumb"><a href="a-planning.html" id="backLink"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg><span id="backLabel">Hall bench</span></a></div>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <a class="btn primary" href="a-planning.html" id="doneLink"><i data-icon="check" data-size="16"></i>Done</a>
+    </div>
+  </header>
+
+  <div class="body shop" id="toolsBody">
+    <aside class="left">
+      <div class="aside-head"><h2>Start from</h2></div>
+      <div class="presets" id="presets"></div>
+      <div class="custom-note" id="customNote"></div>
+      <a class="btn" href="a-workshop-setup.html" id="setupAgain" style="margin:4px 16px 4px;justify-content:center"><i data-icon="rotate" data-size="15"></i>Run the guided setup again</a>
+      <div class="group-h" style="padding:14px 16px 4px">Categories</div>
+      <div class="cats" id="cats"></div>
+    </aside>
+
+    <main class="shop-main">
+      <div class="centre-bar">
+        <div class="left">
+          <div class="search"><i data-icon="search" data-size="15"></i><input id="q" placeholder="Find a tool" /></div>
+          <div class="seg" id="filter">
+            <button data-f="all" class="on">All</button>
+            <button data-f="have">I have</button>
+            <button data-f="missing">I don't have</button>
+          </div>
+        </div>
+        <div class="facts" id="facts"></div>
+      </div>
+      <div class="scroll" id="scroll">
+        <p class="intro">Tap the tools in your shop to add or remove them. <b>Every project's plan</b> uses this list to suggest methods you can actually do, and tells you when a step needs something you don't have. Your workshop is saved with your preferences, not with the project.</p>
+        <div id="sections"></div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div class="card">
+        <h3>How you work</h3>
+        <div class="field stack" style="margin-top:0"><label>Prefer methods with</label><div class="segs" id="style"></div></div>
+        <div class="field stack" style="margin-top:14px"><label>Experience</label><div class="segs" id="level"></div></div>
+        <p class="note">When several methods are possible, BenchUp prefers the ones that match how you work. Experience adjusts the time of each step.</p>
+      </div>
+      <div class="card">
+        <h3>What you can do <span id="capCount"></span></h3>
+        <div id="caps"></div>
+      </div>
+      <div class="card">
+        <h3>Worth adding next</h3>
+        <p class="note" style="margin:0 0 10px">Based on Hall bench, the project you opened last.</p>
+        <div id="ups"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="body shop" id="stockBody" hidden>
+    <aside class="left">
+      <div class="aside-head"><h2>Wood stock</h2></div>
+      <div class="cats" id="stockCats" style="flex:none"></div>
+      <div class="card" style="border-top:1px solid var(--line);border-bottom:0;margin-top:8px">
+        <h3>Prices</h3>
+        <div class="field stack" style="margin-top:0"><label for="currency">Currency</label>
+          <select id="currency" class="sel"><option>€ Euro</option><option>$ US dollar</option><option>£ Pound</option></select></div>
+        <div class="field stack" style="margin-top:14px"><label>Wood you already have counts in estimates at</label><div class="segs" id="costing"><button data-cost="purchase">Purchase price</button><button data-cost="free">No cost</button></div></div>
+        <p class="note">Supplier prices feed every estimate. Use actual sizes, not nominal ones.</p>
+      </div>
+    </aside>
+
+    <main class="shop-main">
+      <div class="centre-bar">
+        <div class="left">
+          <div class="search"><i data-icon="search" data-size="15"></i><input id="sq" placeholder="Find wood by name or size" /></div>
+          <div class="seg" id="sfilter">
+            <button data-sf="all" class="on">All</button>
+            <button data-sf="have">In the shop</button>
+          </div>
+        </div>
+        <div class="facts" id="sfacts"></div>
+      </div>
+      <div class="scroll">
+        <p class="intro">The <b>catalogue</b> lists the boards and sheets you can buy, with your supplier's prices. Set how many of each you <b>already have</b>, and keep useful <b>offcuts</b> from finished projects. Cut lists use your own wood first.</p>
+        <div id="stockSections"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="stockRight"></aside>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/tool-art.js"></script>
+<script src="shared/planning-data.js"></script>
+<script>
+(function () {
+  "use strict";
+  const BP = BenchPlan;
+  const $ = (id) => document.getElementById(id);
+  // First visit: the guided setup fills the workshop in about a minute.
+  if (!BP.hasShop()) { location.replace(BP.withFrom("a-workshop-setup.html")); return; }
+  const from = BP.origin();
+  $("backLink").href = from.href;
+  $("backLabel").textContent = from.label;
+  $("doneLink").href = from.href;
+  $("setupAgain").href = BP.withFrom("a-workshop-setup.html");
+  let shop = BP.loadShop();
+  let filter = "all";
+  let query = "";
+
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  function matchingPreset() {
+    return BP.PRESETS.find((p) => {
+      const ids = new Set([...Object.keys(p.owned), ...Object.keys(shop.owned)]);
+      return [...ids].every((id) => (p.owned[id] || 0) === (shop.owned[id] || 0));
+    });
+  }
+  const ownedCount = (cat) => BP.TOOLS.filter((t) => (!cat || t.cat === cat) && BP.have(shop, t.id)).length;
+
+  function save() {
+    BP.saveShop(shop);
+    render();
+  }
+
+  function renderLeft() {
+    const match = matchingPreset();
+    $("presets").innerHTML = BP.PRESETS.map((p) => `<button class="preset${match && match.id === p.id ? " on" : ""}" data-preset="${p.id}"><span class="dot"></span><span>${p.name}<small>${p.note}</small></span></button>`).join("");
+    $("customNote").textContent = match ? "" : "Your list differs from the presets. Choosing one replaces it.";
+    $("cats").innerHTML = BP.CATS.map((c) => {
+      const total = BP.TOOLS.filter((t) => t.cat === c.id).length;
+      return `<button class="catrow" data-cat="${c.id}">${c.name}<span>${ownedCount(c.id)} / ${total}</span></button>`;
+    }).join("");
+  }
+
+  function renderCentre(gains) {
+    const q = query.trim().toLowerCase();
+    const html = BP.CATS.map((c) => {
+      const tools = BP.TOOLS.filter((t) => t.cat === c.id)
+        .filter((t) => !q || (t.name + " " + (t.detail || "")).toLowerCase().includes(q))
+        .filter((t) => filter === "all" || (filter === "have" ? BP.have(shop, t.id) : !BP.have(shop, t.id)));
+      if (!tools.length) return "";
+      const tiles = tools.map((t) => {
+        const n = BP.have(shop, t.id);
+        const g = gains[t.id];
+        const gain = !n && g ? `<span class="gain">${g.unblocks ? "Unblocks a step in Hall bench" : `Saves ${BP.fmtH(g.saved)} on Hall bench`}</span>` : "";
+        const right = t.qty && n ? `<div class="stepper" data-stop><button data-dec="${t.id}" title="One fewer">−</button><b>${n}</b><button data-inc="${t.id}" title="One more">+</button></div>` : "";
+        return `<div class="tile${n ? " on" : ""}" data-tool="${t.id}" role="checkbox" aria-checked="${!!n}" tabindex="0">
+          <span class="pic">${toolArt(t.id, 108)}</span><span class="box">${icon("check", 12)}</span>
+          <span class="nm"><b>${t.name}</b>${t.detail ? `<small>${t.detail}</small>` : ""}${gain}</span>${right}</div>`;
+      }).join("");
+      const add = !q && filter !== "have" ? `<button class="addtile" data-add="${c.name}">${icon("plus", 14)}Add a tool</button>` : "";
+      return `<section class="cat" id="cat-${c.id}"><h3>${c.name}<span>${ownedCount(c.id)} of ${BP.TOOLS.filter((t) => t.cat === c.id).length}</span></h3><div class="tiles">${tiles}${add}</div></section>`;
+    }).join("");
+    $("sections").innerHTML = html || `<div class="nores">No tools match “${query}”.</div>`;
+    $("facts").innerHTML = `<b>${ownedCount()}</b> of ${BP.TOOLS.length} tools`;
+    $("subtitle").textContent = `Shared by every project · ${ownedCount()} tools`;
+  }
+
+  const CAPS = [
+    { name: "Mill rough lumber", step: "s-mill", skip: "s4s" },
+    { name: "Glue up wide panels", step: "s-gluetop", skip: "twostage" },
+    { name: "Mortise & tenon", step: "s-mortise", skip: "domino" },
+    { name: "Grooves and rebates", step: "s-groove" },
+    { name: "Edge profiles", step: "s-round" },
+    { name: "Glue up a full frame", step: "s-gluelong" },
+  ];
+  function renderRight(ups) {
+    $("style").innerHTML = BP.STYLES.map((s) => `<button data-style="${s.id}" class="${shop.style === s.id ? "on" : ""}">${s.name}</button>`).join("");
+    $("level").innerHTML = BP.LEVELS.map((l) => `<button data-level="${l.id}" class="${shop.level === l.id ? "on" : ""}">${l.name}</button>`).join("");
+    let okCount = 0;
+    $("caps").innerHTML = CAPS.map((c) => {
+      const step = BP.STEP[c.step];
+      const usable = step.methods.filter((m) => m.id !== c.skip && BP.feasible(m, shop));
+      const best = usable.sort((a, b) => a.min - b.min)[0];
+      if (best) okCount++;
+      if (best) return `<div class="cap"><span class="st ok">${icon("check", 12)}</span><div><b>${c.name}</b><small>${best.name}${usable.length > 1 ? `, or ${usable.length - 1} more method${usable.length > 2 ? "s" : ""}` : ""}</small></div></div>`;
+      const fix = step.methods.filter((m) => m.id !== c.skip).map((m) => ({ m, miss: BP.missing(m, shop) })).map((x) => Object.assign(x, { cost: x.miss.reduce((a, b) => a + b.cost, 0) })).sort((a, b) => a.cost - b.cost)[0];
+      const need = fix.miss.map((x) => (x.got ? `${x.buy} more ` : x.buy > 1 ? `${x.buy} ` : "") + BP.TOOL[x.id].name.toLowerCase()).join(" and ");
+      const same = fix.miss.length === 1 && fix.m.name.toLowerCase().includes(BP.TOOL[fix.miss[0].id].name.toLowerCase());
+      return `<div class="cap"><span class="st no">!</span><div><b>${c.name}</b><small>${same ? "Needs " + need : `${fix.m.name}: needs ${need}`}</small></div></div>`;
+    }).join("");
+    $("capCount").textContent = `${okCount} / ${CAPS.length}`;
+    $("ups").innerHTML = ups.length ? ups.slice(0, 4).map((u) => `<div class="up"><div><b>${BP.toolName(u.tool.id, u.add)}</b><small>${u.unblocks ? "Unblocks a step" : `Saves ${BP.fmtH(u.saved)}`} · about €${u.cost.toLocaleString("en")}</small></div><button class="btn" data-gain="${u.tool.id}" data-n="${u.add}">I have it</button></div>`).join("") : `<p class="note" style="margin:0">Your workshop already covers the fastest methods for this project.</p>`;
+  }
+
+  function render() {
+    const plan = BP.loadPlan();
+    const ups = BP.upgrades(shop, plan.methods);
+    const gains = Object.fromEntries(ups.map((u) => [u.tool.id, u]));
+    renderLeft();
+    renderCentre(gains);
+    renderRight(ups);
+  }
+
+  function setOwned(id, n) {
+    const owned = Object.assign({}, shop.owned);
+    if (n > 0) owned[id] = n; else delete owned[id];
+    shop.owned = owned;
+    save();
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const preset = t.closest("[data-preset]");
+    if (preset) {
+      const p = BP.PRESETS.find((x) => x.id === preset.dataset.preset);
+      shop.owned = Object.assign({}, p.owned);
+      shop.preset = p.id;
+      save();
+      toast(`Workshop set to ${p.name.toLowerCase()}`);
+      return;
+    }
+    const cat = t.closest("[data-cat]");
+    if (cat) { const s = $("cat-" + cat.dataset.cat); if (s) s.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    const inc = t.closest("[data-inc]");
+    if (inc) { setOwned(inc.dataset.inc, BP.have(shop, inc.dataset.inc) + 1); return; }
+    const dec = t.closest("[data-dec]");
+    if (dec) { setOwned(dec.dataset.dec, BP.have(shop, dec.dataset.dec) - 1); return; }
+    if (t.closest("[data-stop]")) return;
+    const tile = t.closest("[data-tool]");
+    if (tile) {
+      const id = tile.dataset.tool;
+      const tool = BP.TOOL[id];
+      setOwned(id, BP.have(shop, id) ? 0 : tool.qty ? 2 : 1);
+      return;
+    }
+    const add = t.closest("[data-add]");
+    if (add) { toast(`Custom tools in ${add.dataset.add.toLowerCase()} would open a small form`); return; }
+    const gain = t.closest("[data-gain]");
+    if (gain) { setOwned(gain.dataset.gain, BP.have(shop, gain.dataset.gain) + Number(gain.dataset.n)); toast(`${BP.TOOL[gain.dataset.gain].name} added to your workshop`); return; }
+    const st = t.closest("[data-style]");
+    if (st) { shop.style = st.dataset.style; save(); return; }
+    const lv = t.closest("[data-level]");
+    if (lv) { shop.level = lv.dataset.level; save(); return; }
+    const f = t.closest("[data-f]");
+    if (f) {
+      filter = f.dataset.f;
+      document.querySelectorAll("#filter button").forEach((b) => b.classList.toggle("on", b === f));
+      render();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    const tile = e.target.closest && e.target.closest("[data-tool]");
+    if (tile && (e.key === " " || e.key === "Enter")) { e.preventDefault(); tile.click(); }
+  });
+  $("q").addEventListener("input", (e) => { query = e.target.value; render(); });
+  window.addEventListener("storage", (e) => { if (e.key === "benchup-proto-workshop") { shop = BP.loadShop(); render(); } });
+
+  hydrateIcons();
+  render();
+})();
+</script>
+<script src="shared/model.js"></script>
+<script src="shared/stock-data.js"></script>
+<script>
+// Wood stock tab: supplier catalogue, boards already in the shop and offcuts.
+(function () {
+  "use strict";
+  const S = BenchStock;
+  const BP = BenchPlan;
+  const $ = (id) => document.getElementById(id);
+  const TAB_KEY = "benchup-proto-workshop-tab";
+  let stock = S.loadStock();
+  let cat = "all";
+  let filter = "all";
+  let query = "";
+  let selecting = false;
+  const picked = new Set();
+  const snapshot = () => JSON.parse(JSON.stringify(stock));
+  const reload = () => { stock = S.loadStock(); render(); };
+
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+  const save = () => { S.saveStock(stock); render(); };
+  const piecesInShop = () => Object.values(stock.onHand).reduce((a, n) => a + n, 0) + stock.offcuts.length;
+
+  // ---------- Tabs ----------
+  function setTab(tab) {
+    $("toolsBody").hidden = tab !== "tools";
+    $("stockBody").hidden = tab !== "stock";
+    document.querySelectorAll("#tabs [data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    localStorage.setItem(TAB_KEY, tab);
+    history.replaceState(null, "", location.pathname + location.search + (tab === "stock" ? "#stock" : ""));
+  }
+  function counts() {
+    $("tabToolsN").textContent = Object.keys(BP.loadShop().owned).length;
+    $("tabStockN").textContent = piecesInShop();
+  }
+
+  // ---------- Plan for the open project ----------
+  const plan = () => S.cutPlan(S.itemsFromParts(BenchModel.PARTS, BenchModel.size), stock, true);
+  const planWithout = () => S.cutPlan(S.itemsFromParts(BenchModel.PARTS, BenchModel.size), stock, false);
+
+  function render() {
+    counts();
+    const p = plan();
+    const usedCatalog = {};
+    p.fromStock.filter((x) => x.kind === "stock").forEach((x) => (usedCatalog[x.catalog.id] = (usedCatalog[x.catalog.id] || 0) + 1));
+    const buyCatalog = Object.fromEntries(p.buyList.map((g) => [g.catalog.id, g.qty]));
+    const usedOffcuts = new Set(p.fromStock.filter((x) => x.kind === "offcut").map((x) => x.offcut.id));
+
+    // Left: categories
+    const CATS = [
+      ["all", "All wood", S.CATALOG.length + stock.offcuts.length],
+      ["solid", "Solid wood", S.CATALOG.filter((c) => S.SPECIES[c.species].kind === "solid").length],
+      ["sheet", "Sheet goods", S.CATALOG.filter((c) => S.SPECIES[c.species].kind === "sheet").length],
+      ["offcuts", "Offcuts", stock.offcuts.length],
+    ];
+    const staleCount = stock.offcuts.filter(S.isStale).length;
+    if (staleCount) CATS.push(["stale", "Not confirmed", staleCount]);
+    $("stockCats").innerHTML = CATS.map(([id, name, n]) => `<button class="catrow${cat === id ? " on" : ""}" data-scat="${id}">${name}<span>${n}</span></button>`).join("");
+    document.querySelectorAll("#costing button").forEach((b) => b.classList.toggle("on", b.dataset.cost === stock.costing));
+
+    // Centre: catalogue table and offcuts
+    const q = query.trim().toLowerCase();
+    const match = (txt) => !q || txt.toLowerCase().includes(q);
+    const rows = S.CATALOG.filter((c) => (cat === "all" || cat === S.SPECIES[c.species].kind))
+      .filter((c) => filter === "all" || stock.onHand[c.id])
+      .filter((c) => match(`${c.name} ${S.fmtSize(c)}`));
+    const table = cat === "offcuts" || cat === "stale" ? "" : `<section class="cat"><h3>Boards and sheets<span>${rows.length} in the catalogue</span></h3>
+      <table class="stock-table"><colgroup><col><col style="width:150px"><col style="width:96px"><col style="width:112px"><col style="width:124px"></colgroup>
+      <thead><tr><th>Wood</th><th class="num">Size, mm</th><th class="num">Price / piece</th><th>In the shop</th><th>Hall bench</th></tr></thead><tbody>
+      ${rows.map((c) => {
+        const n = stock.onHand[c.id] || 0;
+        const tag = usedCatalog[c.id] ? `<span class="used">Uses ${usedCatalog[c.id]} of yours</span>` : buyCatalog[c.id] ? `<span class="used buy">Buy ${buyCatalog[c.id]}</span>` : "";
+        return `<tr class="${n ? "have" : ""}"><td><div class="wood-cell"><span class="thumb">${S.boardArt(c.L, c.W, c.T, c.species, 92, 40, S.SPECIES[c.species].kind === "sheet" ? { L: 2500, W: 1250 } : { L: 2400, W: 200 })}</span>
+          <span><b style="font-weight:500">${c.name}</b><small>${S.SPECIES[c.species].kind === "sheet" ? "Sheet goods" : "Solid wood"} · ${c.T} mm</small></span></div></td>
+          <td class="num">${c.L} × ${c.W} × ${c.T}</td><td class="num">€${c.price}</td>
+          <td><div class="stepper" style="width:max-content"><button data-dec="${c.id}" title="One fewer">−</button><b>${n}</b><button data-inc="${c.id}" title="One more">+</button></div></td>
+          <td>${tag}</td></tr>`;
+      }).join("") || `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">No wood matches this filter.</td></tr>`}
+      </tbody></table><button class="addrow" data-toast="Adding wood stock would open a row to enter its name, size and price">${icon("plus", 14)}Add wood stock</button></section>`;
+    const offs = stock.offcuts.filter((o) => cat !== "stale" || S.isStale(o)).filter((o) => match(`${S.SPECIES[o.species].name} ${S.fmtSize(o)} ${o.from}`));
+    const maybeIds = new Set(p.maybe.map((o) => o.id));
+    const card = (o) => {
+      const stale = S.isStale(o);
+      const on = picked.has(o.id);
+      const status = stale ? `<span class="seen stale">${S.seenText(o.seen)}</span>` : `<span class="seen">${S.seenText(o.seen)}</span>`;
+      const ask = stale && !selecting ? `<div class="ask"><span>Still there?</span><button data-yes="${o.id}">Yes</button><button data-gone="${o.id}">It's gone</button></div>` : "";
+      const corner = selecting ? `<span class="pick">${icon("check", 12)}</span>` : `<button class="x" data-gone="${o.id}" title="Mark as gone">${icon("erase", 13)}</button>`;
+      return `<div class="offcut${stale ? " stale" : ""}${selecting ? " selecting" : ""}${on ? " picked" : ""}" ${selecting ? `data-off="${o.id}" role="checkbox" aria-checked="${on}" tabindex="0"` : ""}>
+        <span class="pic">${S.boardArt(o.L, o.W, o.T, o.species, 170, 78)}</span>${corner}
+        <b>${S.SPECIES[o.species].name}</b><small>${S.fmtSize(o)} mm · from ${o.from}</small>${status}
+        ${usedOffcuts.has(o.id) ? `<span class="use">Used by Hall bench</span>` : maybeIds.has(o.id) ? `<span class="use maybe">Hall bench could use it</span>` : ""}${ask}</div>`;
+    };
+    const head = selecting
+      ? `<div class="sec-acts"><button class="linkish" data-selall>Select all</button><button class="linkish" data-cancelsel>Cancel</button></div>`
+      : `<div class="sec-acts"><button class="linkish" data-select>${icon("check", 13)}Select to clean up</button></div>`;
+    const review = staleCount && cat !== "stale" && !selecting ? `<div class="review"><span>${staleCount} offcut${staleCount > 1 ? "s haven't" : " hasn't"} been confirmed for over six months, so cut lists don't count on ${staleCount > 1 ? "them" : "it"}.</span><button class="btn" data-scat="stale">Review</button></div>` : "";
+    const offcuts = cat === "solid" || cat === "sheet" ? "" : `<section class="cat"><h3 class="split"><span class="ttl">Offcuts<span>${stock.offcuts.length} kept from finished projects</span></span>${head}</h3>${review}
+      <div class="offcuts">${offs.map(card).join("")}${selecting ? "" : `<button class="offcut add" data-addoff>${icon("plus", 16)}Add an offcut</button>`}</div>
+      ${selecting ? `<div class="bulkbar"><span><b>${picked.size}</b> selected</span><button class="btn primary" data-bulkgone ${picked.size ? "" : "disabled"}>Mark as gone</button><button class="btn" data-cancelsel>Cancel</button></div>` : ""}</section>`;
+    $("stockSections").innerHTML = table + offcuts;
+    $("sfacts").innerHTML = `<b>${Object.values(stock.onHand).reduce((a, n) => a + n, 0)}</b> boards and sheets · <b>${stock.offcuts.length}</b> offcuts in the shop`;
+
+    // Right: what the open project takes from the shop and what it still needs
+    const without = planWithout();
+    const src = (x) => x.kind === "offcut" ? `Offcut from ${x.offcut.from}` : "From your shop";
+    const fromRows = p.fromStock.map((x) => `<div class="srow2"><span class="mini">${S.boardArt(x.L, x.W, x.T, x.species, 54, 28)}</span><span>${S.SPECIES[x.species].name} ${x.L} × ${x.W}<small>${src(x)} · ${x.items.length} part${x.items.length > 1 ? "s" : ""}</small></span><b></b></div>`).join("");
+    const buyRows = p.buyList.map((g) => `<div class="srow2"><span class="mini">${S.boardArt(g.catalog.L, g.catalog.W, g.catalog.T, g.catalog.species, 54, 28)}</span><span>${g.qty} × ${g.catalog.name}<small>${S.fmtSize(g.catalog)} mm</small></span><b>€${g.qty * g.catalog.price}</b></div>`).join("");
+    $("stockRight").innerHTML = `
+      <div class="card"><h3>For Hall bench</h3>
+        <div class="group-h" style="padding:0 0 4px">From your shop</div>${fromRows || `<p class="note" style="margin:0">Nothing in your shop fits this project.</p>`}
+        <div class="group-h" style="padding:12px 0 4px">To buy</div>${buyRows || `<p class="note" style="margin:0">You have all the wood you need.</p>`}
+        ${p.maybe.map((o) => `<div class="maybe-box"><p>You may still have a <b>${S.SPECIES[o.species].name.toLowerCase()} offcut ${o.L} × ${o.W}</b> from ${o.from} that would save buying wood.</p><div class="ask"><span>Still have it?</span><button data-yes="${o.id}">Yes</button><button data-gone="${o.id}">No, it's gone</button></div></div>`).join("")}
+        <div class="stat total"><span>To buy</span><b>€${p.buyCost}</b></div>
+        <div class="compare-line"><span>Without your stock</span><span>€${without.buyCost}</span></div>
+        <a class="btn" href="a-workshop-flow.html#cutlist" style="margin-top:12px;width:100%;justify-content:center;text-decoration:none;color:inherit">${icon("cutlist", 15)}Open the cut list</a></div>
+      <div class="card"><h3>After a build</h3><p class="note" style="margin:0">When you mark a project as built, BenchUp takes the boards it used out of your stock and offers to keep the pieces worth saving as offcuts.</p></div>
+      <div class="card" style="border-bottom:0"><button class="linkish" data-reset>Reset the sample stock</button><p class="note" style="margin:4px 0 0">Prototype only: restores the example boards and offcuts.</p></div>`;
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const tab = t.closest("[data-tab]");
+    if (tab) { setTab(tab.dataset.tab); return; }
+    // Clicks inside the stock tab are handled here only, so the tools handlers never see them.
+    if ($("stockBody").hidden || !t.closest("#stockBody")) return;
+    e.stopPropagation();
+    const c = t.closest("[data-scat]");
+    if (c) { cat = c.dataset.scat; render(); return; }
+    const inc = t.closest("[data-inc]");
+    if (inc && S.BY_ID[inc.dataset.inc]) { stock.onHand[inc.dataset.inc] = (stock.onHand[inc.dataset.inc] || 0) + 1; save(); return; }
+    const dec = t.closest("[data-dec]");
+    if (dec && S.BY_ID[dec.dataset.dec]) { const id = dec.dataset.dec; stock.onHand[id] = Math.max(0, (stock.onHand[id] || 0) - 1); if (!stock.onHand[id]) delete stock.onHand[id]; save(); return; }
+    const yes = t.closest("[data-yes]");
+    if (yes) {
+      const o = stock.offcuts.find((x) => x.id === yes.dataset.yes);
+      if (o) o.seen = new Date().toISOString();
+      if (cat === "stale" && !stock.offcuts.some(S.isStale)) cat = "offcuts";
+      save();
+      toast("Confirmed. Cut lists can count on it again.");
+      return;
+    }
+    const gone = t.closest("[data-gone]");
+    if (gone) {
+      const snap = snapshot();
+      stock.offcuts = stock.offcuts.filter((x) => x.id !== gone.dataset.gone);
+      if (cat === "stale" && !stock.offcuts.some(S.isStale)) cat = "offcuts";
+      save();
+      S.undoToast("Offcut marked as gone", snap, reload);
+      return;
+    }
+    if (t.closest("[data-select]")) { selecting = true; picked.clear(); render(); return; }
+    if (t.closest("[data-cancelsel]")) { selecting = false; picked.clear(); render(); return; }
+    if (t.closest("[data-selall]")) { stock.offcuts.filter((o) => cat !== "stale" || S.isStale(o)).forEach((o) => picked.add(o.id)); render(); return; }
+    if (t.closest("[data-bulkgone]")) {
+      const n = picked.size;
+      if (!n) return;
+      const snap = snapshot();
+      stock.offcuts = stock.offcuts.filter((o) => !picked.has(o.id));
+      selecting = false; picked.clear();
+      if (cat === "stale" && !stock.offcuts.some(S.isStale)) cat = "offcuts";
+      save();
+      S.undoToast(`${n} offcut${n > 1 ? "s" : ""} marked as gone`, snap, reload);
+      return;
+    }
+    const off = t.closest("[data-off]");
+    if (off) { picked.has(off.dataset.off) ? picked.delete(off.dataset.off) : picked.add(off.dataset.off); render(); return; }
+    if (t.closest("[data-reset]")) { S.resetStock(); selecting = false; picked.clear(); cat = "all"; reload(); toast("Sample stock restored"); return; }
+    if (t.closest("[data-addoff]")) { toast("Adding an offcut would ask for the species and its size"); return; }
+    const cost = t.closest("[data-cost]");
+    if (cost) { stock.costing = cost.dataset.cost; save(); return; }
+    const sf = t.closest("[data-sf]");
+    if (sf) { filter = sf.dataset.sf; document.querySelectorAll("#sfilter button").forEach((b) => b.classList.toggle("on", b === sf)); render(); return; }
+    const tt = t.closest("[data-toast]");
+    if (tt) toast(tt.dataset.toast);
+  }, true);
+  $("sq").addEventListener("input", (e) => { query = e.target.value; render(); });
+  document.addEventListener("keydown", (e) => {
+    const off = e.target.closest && e.target.closest("[data-off]");
+    if (off && (e.key === " " || e.key === "Enter")) { e.preventDefault(); off.click(); }
+    if (e.key === "Escape" && selecting) { selecting = false; picked.clear(); render(); }
+  });
+  window.addEventListener("storage", (e) => { if (e.key === "benchup-proto-stock") { stock = S.loadStock(); render(); } if (e.key === "benchup-proto-workshop") counts(); });
+
+  hydrateIcons();
+  render();
+  setTab(location.hash === "#stock" ? "stock" : localStorage.getItem(TAB_KEY) || "tools");
+})();
+</script>
+</body>
+</html>

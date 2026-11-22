@@ -37,7 +37,7 @@
         <h2>A · Workshop flow</h2>
         <p>The app is organised around the woodworker's process rather than a generic toolbox. Each stage brings its own tools and panels.</p>
         <ul>
-          <li>Stages Design → Joinery → Materials → Cut list replace the tool rail as primary navigation.</li>
+          <li>Stages Design → Joinery → Materials → Cut list → Planning → Estimate replace the tool rail as primary navigation.</li>
           <li>A parts list with real dimensions replaces the outliner.</li>
           <li>A part card edits length, width, thickness, grain and joints.</li>
         </ul>
@@ -101,7 +101,7 @@
   </div>
 
   <h3>Before and after the model</h3>
-  <p class="lead" style="margin-bottom:20px">How a project starts, and how it ends as a price for the client. Estimate is proposed as a fifth stage after Cut list.</p>
+  <p class="lead" style="margin-bottom:20px">How a project starts, and how it ends as a price for the client. Estimate is proposed as the sixth stage, after Planning.</p>
   <div class="grid">
     <a class="card" href="a-start.html">
       <img src="screens/a-start.jpeg" alt="Start screen" />
@@ -122,6 +122,72 @@
       <div class="body">
         <h2>Estimate</h2>
         <p>An editable breakdown of time and cost by operation, what drives the price, pricing settings with margin and VAT, and a client quote that recalculates live.</p>
+      </div>
+    </a>
+  </div>
+
+  <h3>Planning the build</h3>
+  <p class="lead" style="margin-bottom:20px">A proposed Planning stage between Cut list and Estimate: a step-by-step build guide whose methods depend on the tools you own. The workshop is a user preference shared by every project; the plan, its chosen methods and finished steps belong to the project.</p>
+  <div class="grid">
+    <a class="card" href="a-workshop-setup.html">
+      <img src="screens/a-workshop-setup.jpeg" alt="Workshop setup" />
+      <div class="body">
+        <h2>Workshop setup</h2>
+        <p>A one-minute guided setup that asks you to confirm rather than fill in: pick an illustrated shop type, then correct machines, power tools (with their bits only when you have one), special hand tools, clamp counts and how you like to work. Basics are assumed and can be unticked.</p>
+      </div>
+    </a>
+    <a class="card" href="a-workshop.html">
+      <img src="screens/a-workshop.jpeg" alt="My workshop" />
+      <div class="body">
+        <h2>My workshop</h2>
+        <p>Every tool as an illustrated card, coloured when you own it, with clamp counts, how you like to work and your experience. It shows what your shop can and can't do and which tool would help most next. The first visit opens the guided setup.</p>
+      </div>
+    </a>
+    <a class="card" href="a-workshop.html#stock">
+      <img src="screens/a-workshop-stock.jpeg" alt="Wood stock" />
+      <div class="body">
+        <h2>My workshop · Wood stock</h2>
+        <p>A second tab next to Tools: the supplier catalogue with prices (today in Settings → Material), how many boards of each you already have, and offcuts kept from finished projects. Offcuts nobody has confirmed for six months stop counting until you answer “Still there?”, and several can be marked as gone at once, with undo. It shows what the open project takes from your shop and what it still needs to buy.</p>
+      </div>
+    </a>
+    <a class="card" href="a-workshop-flow.html#cutlist">
+      <img src="screens/a-cutlist-stock.jpeg" alt="Cut list using stock" />
+      <div class="body">
+        <h2>Cut list · From your stock</h2>
+        <p>The cut list fills offcuts and boards you own first, at the right thickness, then picks the cheapest boards to buy. Each part shows where it comes from, leftovers worth keeping are hatched, and wood from your shop asks “Still have it?”. "Mark as built" opens a dialog that takes the used wood out of your stock and lets you choose which leftovers to keep.</p>
+      </div>
+    </a>
+    <a class="card" href="a-planning.html">
+      <img src="screens/a-planning.jpeg" alt="Planning steps" />
+      <div class="body">
+        <h2>Planning · Steps</h2>
+        <p>The build in order, from milling to finish, with why each step comes when it does. Each joint offers several methods with their tools and time. "Only my workshop" picks what you can do and flags blocked steps; "Ideal tools" shows how a fully equipped shop would do it.</p>
+      </div>
+    </a>
+    <a class="card" href="a-planning.html">
+      <img src="screens/a-planning-tools.jpeg" alt="Planning tools" />
+      <div class="body">
+        <h2>Planning · Tools</h2>
+        <p>Both plans side by side with shop time, blocked steps and tool cost, the tools that would save the most time on this project, and every tool the plan uses with what is missing.</p>
+      </div>
+    </a>
+  </div>
+
+  <h3>Tool illustrations</h3>
+  <p class="lead" style="margin-bottom:20px">Every tool in the workshop has its own drawing, shared by the setup, My workshop and Planning. Two styles were explored; the prototype uses the isometric sketch, and the flat version is kept as an alternative.</p>
+  <div class="grid">
+    <a class="card" href="a-tool-art.html?v=iso">
+      <img src="screens/a-tool-art-iso.jpeg" alt="Isometric sketch tool illustrations" />
+      <div class="body">
+        <h2>Isometric sketch</h2>
+        <p>True 30° isometric drawings with a technical-sketch feel: thin ink lines, a heavier silhouette, three tints per material and a few draughting cues. Used across the prototype.</p>
+      </div>
+    </a>
+    <a class="card" href="a-tool-art.html?v=flat">
+      <img src="screens/a-tool-art-flat.jpeg" alt="Flat side view tool illustrations" />
+      <div class="body">
+        <h2>Flat side view</h2>
+        <p>The first version: side views with one ink stroke and four flat tones. More icon-like and very legible at small sizes, but less like a woodworking drawing.</p>
       </div>
     </a>
   </div>
