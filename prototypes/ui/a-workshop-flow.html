@@ -6,12 +6,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <script src="shared/theme.js"></script>
 <link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  /* The #cutlist hash makes the browser focus the panel; it is not an interactive control. */
+  .cutlist:focus { outline: none; }
+  .cut-bar { display: flex; align-items: center; gap: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; }
+  .cut-facts { display: flex; gap: 16px; color: var(--muted); font-size: 12.5px; flex: 1; }
+  .cut-facts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cut-facts span, .switch, .cut-link { white-space: nowrap; }
+  @media (max-width: 1440px) { .cut-facts > span:nth-child(3) { display: none; } .cut-bar { gap: 14px; } }
+  .cut-link { color: var(--accent); font-size: 12.5px; text-decoration: none; }
+  .cut-link:hover { text-decoration: underline; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; }
+  .switch input { position: absolute; opacity: 0; }
+  .switch span { width: 30px; height: 18px; border-radius: 9px; background: var(--line-strong); position: relative; transition: background .15s; }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(12px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .otag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; margin-left: 4px; }
+  .otag.mine { background: var(--ok-bg); color: var(--ok-ink); }
+  .otag.buy { background: var(--warn-bg); color: var(--warn-ink); }
+  td .otag { margin-left: 0; }
+  .cut-h { margin: 24px 2px 10px; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+  .cut-h span { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+  .cutlist .boards { margin-top: 0; }
+  .cut-note { color: var(--muted); font-size: 12px; margin: 14px 2px 30px; }
+  .bh-r { display: inline-flex; align-items: center; gap: 12px; }
+  .confirmed { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--ok-ink); }
+  .ask { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .ask button { height: 24px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: 12px; color: var(--ink); }
+  .ask button:hover { background: var(--hover); }
+  .maybe-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; background: var(--warn-bg); border-radius: var(--radius); padding: 8px 12px 8px 8px; margin-bottom: 12px; line-height: 1.45; }
+  .maybe-row .mini, .mrow .mini { width: 64px; height: 34px; border-radius: 6px; background: var(--panel); display: grid; place-items: center; }
+  .modal-back { position: fixed; inset: 0; background: rgba(20,18,14,.38); display: grid; place-items: center; z-index: 30; animation: fade .15s ease-out; }
+  @keyframes fade { from { opacity: 0; } }
+  .modal { width: 520px; max-height: 86vh; display: flex; flex-direction: column; background: var(--panel); border-radius: 14px; box-shadow: var(--pop-shadow); border: 1px solid var(--line); }
+  .modal-body { padding: 20px 22px 8px; overflow: auto; }
+  .modal h2 { margin: 0 0 4px; font-size: 17px; }
+  .modal .lead { margin: 0 0 14px; color: var(--muted); line-height: 1.5; }
+  .modal h4 { margin: 14px 0 6px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; }
+  .modal h4 span { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); }
+  .mrow { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .mrow.pickable { grid-template-columns: 18px 64px 1fr; cursor: pointer; }
+  .mrow input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+  .mrow .mini { background: var(--bg); }
+  .mrow small { display: block; color: var(--muted); font-size: 11.5px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px 18px; border-top: 1px solid var(--line); margin-top: 8px; }
+  .srow2 { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; }
+  .srow2 .mini { width: 56px; height: 30px; border-radius: 6px; background: var(--bg); display: grid; place-items: center; }
+  .srow2 small { display: block; color: var(--muted); font-size: 11.5px; }
+  .srow2 b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .stat.total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+  .stat.total span, .stat.total b { color: var(--ink); font-weight: 600; }
+  aside.right .note { color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .cut-toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13px; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 20; max-width: 560px; }
+  .cut-toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="brand">
-      <div class="mark">B</div>
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
       <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
       <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
       <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
@@ -21,7 +77,8 @@
       <button class="stage" data-stage="joinery"><span class="n">2</span>Joinery</button>
       <button class="stage" data-stage="materials"><span class="n">3</span>Materials</button>
       <button class="stage" data-stage="cutlist"><span class="n">4</span>Cut list</button>
-      <button class="stage" data-stage="estimate"><span class="n">5</span>Estimate</button>
+      <button class="stage" data-stage="planning"><span class="n">5</span>Planning</button>
+      <button class="stage" data-stage="estimate"><span class="n">6</span>Estimate</button>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
@@ -77,6 +134,7 @@
 
 <script src="shared/icons.js"></script>
 <script src="shared/model.js"></script>
+<script src="shared/stock-data.js"></script>
 <script>
   const { PARTS, MATERIALS, size, fmtDims, mm, BenchView } = BenchModel;
   const COLORS = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" };
@@ -221,16 +279,25 @@
       return;
     }
     if (stage === "cutlist") {
-      host.innerHTML = `<div class="card"><h3>Stock to buy</h3>
-        <div class="stat"><span>White oak 27 mm</span><b>2 boards · 2400</b></div>
-        <div class="stat"><span>Black walnut 25 mm</span><b>1 board · 1200</b></div>
-        <div class="stat"><span>Birch plywood 18 mm</span><b>¼ sheet</b></div></div>
+      const S = BenchStock;
+      const stock = S.loadStock();
+      const plan = S.cutPlan(S.itemsFromParts(PARTS, size), stock);
+      const mini = (L, W, T, sp) => `<span class="mini">${S.boardArt(L, W, T, sp, 54, 28)}</span>`;
+      const buy = plan.buyList.map((g) => `<div class="srow2">${mini(g.catalog.L, g.catalog.W, g.catalog.T, g.catalog.species)}<span>${g.qty} × ${g.catalog.name}<small>${S.fmtSize(g.catalog)} mm</small></span><b>€${g.qty * g.catalog.price}</b></div>`).join("");
+      const mine = plan.fromStock.map((x) => `<div class="srow2">${mini(x.L, x.W, x.T, x.species)}<span>${S.SPECIES[x.species].name} ${x.L} × ${x.W}<small>${x.kind === "offcut" ? "Offcut from " + x.offcut.from : "From your shop"}</small></span><b></b></div>`).join("");
+      const stockCost = stock.costing === "free" ? 0 : plan.stockValue;
+      host.innerHTML = `<div class="card"><h3>To buy</h3>${buy || '<p class="note" style="margin:0">You have all the wood you need.</p>'}
+          <div class="stat total"><span>Total</span><b>€${plan.buyCost}</b></div></div>
+        <div class="card"><h3>From your shop</h3>${mine || '<p class="note" style="margin:0">' + (stock.useStock ? "Nothing in your shop fits these parts." : "Using your own wood is switched off.") + "</p>"}
+          <a class="btn" href="a-workshop.html?from=cutlist#stock" style="margin-top:10px;width:100%;justify-content:center;text-decoration:none;color:inherit">${icon("stock", 15)}Manage wood stock</a></div>
         <div class="card"><h3>Summary</h3>
-        <div class="stat"><span>Waste</span><b>14 %</b></div>
-        <div class="stat"><span>Board feet</span><b>11.6</b></div>
-        <div class="stat"><span>Material cost</span><b>€ 186</b></div>
-        <div class="stat"><span>Estimated time</span><b>9 h 30</b></div></div>
-        <div class="actions"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button></div>`;
+        <div class="stat"><span>Waste</span><b>${plan.waste} %</b></div>
+        <div class="stat"><span>Offcuts to keep</span><b>${plan.leftovers}</b></div>
+        <div class="stat"><span>Material cost</span><b>€ ${plan.buyCost + stockCost}</b></div>
+        <p class="note" style="margin:6px 0 0">${stock.costing === "free" ? "Wood from your shop counts at no cost." : `Includes €${plan.stockValue} for wood you already have, at purchase price.`}</p></div>
+        <div class="actions" style="flex-wrap:wrap"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button>
+          <button class="btn primary" id="built" style="flex-basis:100%">${icon("check", 15)}Mark as built</button></div>`;
+      host.querySelector("#built").onclick = () => openBuilt();
       return;
     }
     if (!p) {
@@ -273,29 +340,124 @@
     return boards;
   }
 
+  function cutToast(text) {
+    let t = document.getElementById("cutToast");
+    if (!t) { t = document.createElement("div"); t.id = "cutToast"; t.className = "cut-toast"; document.body.appendChild(t); }
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(cutToast.t);
+    cutToast.t = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+
+  // "Mark as built": take used wood out of the stock and choose which leftovers to keep.
+  function openBuilt() {
+    const S = BenchStock;
+    const stock = S.loadStock();
+    const plan = S.cutPlan(S.itemsFromParts(PARTS, size), stock);
+    const keep = plan.sources.flatMap((src) => src.leftovers.map((l, i) => ({ key: `${plan.sources.indexOf(src)}-${i}`, species: src.species, L: l.L, W: l.W, T: src.T, origin: src.kind === "buy" ? "from a board you'll buy" : src.kind === "offcut" ? "left from the " + src.offcut.from.toLowerCase() + " offcut" : "from a board in your shop" })));
+    const row = (art, title, sub, extra = "") => `<div class="mrow">${extra}<span class="mini">${art}</span><span>${title}<small>${sub}</small></span></div>`;
+    const used = plan.fromStock.map((x) => row(S.boardArt(x.L, x.W, x.T, x.species, 60, 32), `${S.SPECIES[x.species].name} ${x.L} × ${x.W} × ${x.T}`, x.kind === "offcut" ? "Offcut from " + x.offcut.from : "Board from your shop")).join("");
+    const kept = keep.map((k) => `<label class="mrow pickable">${`<input type="checkbox" data-keep="${k.key}" checked />`}<span class="mini">${S.boardArt(k.L, k.W, k.T, k.species, 60, 32)}</span><span>${S.SPECIES[k.species].name} ${k.L} × ${k.W} × ${k.T}<small>${k.origin[0].toUpperCase() + k.origin.slice(1)}</small></span></label>`).join("");
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="builtTitle">
+      <div class="modal-body"><h2 id="builtTitle">Mark Hall bench as built</h2>
+        <p class="lead">BenchUp updates your wood stock with what this build used and what is left over. You can change it later in My workshop.</p>
+        <h4>Taken out of your stock<span>${plan.fromStock.length}</span></h4>${used || '<p class="note">Nothing came from your stock.</p>'}
+        <h4>Offcuts worth keeping<span>Untick the ones you won't keep</span></h4>${kept || '<p class="note">No piece is big enough to keep.</p>'}</div>
+      <div class="modal-foot"><button class="btn primary" data-apply>Update stock</button><button class="btn" data-close>Cancel</button></div></div>`;
+    document.body.appendChild(back);
+    const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    back.addEventListener("click", (e) => {
+      if (e.target === back || e.target.closest("[data-close]")) { close(); return; }
+      if (!e.target.closest("[data-apply]")) return;
+      const snap = JSON.parse(JSON.stringify(stock));
+      plan.fromStock.forEach((src) => S.goneSource(stock, src));
+      const chosen = [...back.querySelectorAll("[data-keep]:checked")].map((c) => keep.find((k) => k.key === c.dataset.keep));
+      chosen.forEach((k, i) => stock.offcuts.push({ id: `hb${Date.now()}${i}`, species: k.species, L: k.L, W: k.W, T: k.T, from: "Hall bench", seen: new Date().toISOString() }));
+      S.saveStock(stock);
+      close();
+      renderCutlist(); renderRight();
+      S.undoToast(`Stock updated: ${plan.fromStock.length} piece${plan.fromStock.length === 1 ? "" : "s"} used, ${chosen.length} offcut${chosen.length === 1 ? "" : "s"} kept`, snap, () => { renderCutlist(); renderRight(); });
+    });
+    back.querySelector("[data-apply]").focus();
+  }
+
   function renderCutlist() {
+    const S = BenchStock;
     const host = document.getElementById("cutlist");
+    const stock = S.loadStock();
+    const plan = S.cutPlan(S.itemsFromParts(PARTS, size), stock);
+    // Where each part comes from, for the table.
+    const origin = {};
+    for (const src of plan.sources) for (const it of src.items) (origin[it.id] = origin[it.id] || new Set()).add(src.kind === "offcut" ? "Offcut" : src.kind === "stock" ? "Your shop" : "Buy");
     const rows = [];
     for (const p of PARTS) {
       const key = p.name + p.material;
       const r = rows.find((x) => x.key === key);
       if (r) { r.qty++; r.ids.push(p.id); } else rows.push({ key, p, qty: 1, ids: [p.id] });
     }
-    const boards = pack();
-    host.innerHTML = `<h2>Cut list</h2><p class="lead">Finished sizes in millimetres. Lengths include tenons; grain runs along the length.</p>
-      <table><thead><tr><th>Part</th><th class="num">Qty</th><th class="num">Length</th><th class="num">Width</th><th class="num">Thick.</th><th>Material</th></tr></thead><tbody>
+    const originTag = (ids) => {
+      const kinds = new Set(ids.flatMap((id) => [...(origin[id] || [])]));
+      return [...kinds].map((k) => `<span class="otag ${k === "Buy" ? "buy" : "mine"}">${k}</span>`).join(" ");
+    };
+    const maxL = Math.max(...plan.sources.map((x) => x.L), 1200);
+    const k = 1000 / maxL; // shared scale so boards compare honestly
+    const board = (b) => {
+      const col = S.SPECIES[b.species].color;
+      const tag = b.kind === "buy" ? `<span class="otag buy">Buy · €${b.catalog.price}</span>` : `<span class="otag mine">${b.kind === "offcut" ? "Offcut · " + b.offcut.from : "In your shop"}</span>`;
+      const key = b.kind === "offcut" ? "offcut:" + b.offcut.id : b.kind === "stock" ? "stock:" + b.catalog.id : "";
+      const check = !key ? "" : S.sourceConfirmed(stock, b)
+        ? `<span class="confirmed">${icon("check", 12)}Still in the shop</span>`
+        : `<span class="ask"><span>Still have it?</span><button data-src-yes="${key}">Yes</button><button data-src-gone="${key}">No</button></span>`;
+      const name = b.kind === "offcut" ? `${S.SPECIES[b.species].name} offcut` : b.catalog.name;
+      return `<div class="board"><div class="bh"><span>${name} ${tag}</span><span class="bh-r">${check}<span>${b.L} × ${b.W} × ${b.T}</span></span></div>
+        <svg viewBox="0 0 1000 ${b.W * k + 2}" style="max-height:${Math.max(24, b.W * k + 2)}px"><rect x="1" y="1" width="${b.L * k - 2}" height="${b.W * k}" rx="3" fill="${col}" opacity=".22" stroke="${col}"/>
+        ${b.leftovers.map((l) => `<rect x="${1 + l.x * k}" y="${1 + l.y * k}" width="${l.L * k - 2}" height="${l.W * k}" fill="url(#keep)" style="stroke:var(--done-ink)" stroke-dasharray="4 3" stroke-width="1"/>
+          ${l.W * k > 11 ? `<text x="${1 + l.x * k + 6}" y="${1 + l.y * k + Math.min(l.W * k, 14) - 3}" font-size="${Math.min(10, l.W * k - 2)}" style="fill:var(--done-ink)" font-family="system-ui">Keep ${l.L} × ${l.W}</text>` : ""}`).join("")}
+        ${b.items.map((it) => `<rect x="${1 + it.x * k}" y="${1 + it.y * k}" width="${it.l * k}" height="${it.w * k}" fill="${col}" stroke="${it.id === selected ? benchTheme.accent() : "rgba(0,0,0,.35)"}" stroke-width="${it.id === selected ? 2 : 0.8}"/>
+          ${it.w * k > 9 && it.l * k > 50 ? `<text x="${1 + it.x * k + 6}" y="${1 + it.y * k + Math.min(it.w * k, 14) - 3}" font-size="${Math.min(10, it.w * k - 2)}" fill="${b.species === "walnut" ? "#f6ead8" : "#2a1f14"}" font-family="system-ui">${it.name} ${Math.round(it.l)}</text>` : ""}`).join("")}
+        </svg></div>`;
+    };
+    host.innerHTML = `<svg width="0" height="0" style="position:absolute"><defs><pattern id="keep" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--done-ink)" stroke-width="1" opacity=".35"/></pattern></defs></svg>
+      <h2>Cut list</h2><p class="lead">Finished sizes in millimetres. Lengths include tenons; grain runs along the length.</p>
+      <div class="cut-bar">
+        <label class="switch"><input type="checkbox" id="useStock" ${stock.useStock ? "checked" : ""}/><span></span>Use wood from my shop first</label>
+        <div class="cut-facts"><span><b>${plan.fromStock.length}</b> from your shop</span><span><b>${plan.toBuy.length}</b> to buy · <b>€${plan.buyCost}</b></span><span>Waste <b>${plan.waste} %</b></span></div>
+        <a class="cut-link" href="a-workshop.html?from=cutlist#stock">Manage wood stock</a>
+      </div>
+      <table><thead><tr><th>Part</th><th class="num">Qty</th><th class="num">Length</th><th class="num">Width</th><th class="num">Thick.</th><th>Material</th><th>From</th></tr></thead><tbody>
       ${rows.map((r) => { const s = size(r.p); return `<tr data-id="${r.ids[0]}" ${r.ids.includes(selected) ? 'style="background:var(--accent-soft)"' : ""}>
         <td><span style="display:inline-flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:3px;background:${COLORS[r.p.material]}"></span>${r.p.name}</span></td>
-        <td class="num">${r.qty}</td><td class="num">${mm(s.length)}</td><td class="num">${mm(s.width)}</td><td class="num">${mm(s.thickness)}</td><td>${MATERIALS[r.p.material].name}</td></tr>`; }).join("")}
+        <td class="num">${r.qty}</td><td class="num">${mm(s.length)}</td><td class="num">${mm(s.width)}</td><td class="num">${mm(s.thickness)}</td><td>${MATERIALS[r.p.material].name}</td><td>${originTag(r.ids)}</td></tr>`; }).join("")}
       </tbody></table>
-      <div class="boards">${boards.map((b, i) => {
-        const k = 1000 / 2400; // shared scale so boards compare honestly
-        return `<div class="board"><div class="bh"><span>${MATERIALS[b.mat].name} · board ${i + 1}</span><span>${b.L} × ${b.W}</span></div>
-          <svg viewBox="0 0 1000 ${b.W * k + 2}"><rect x="1" y="1" width="${b.L * k - 2}" height="${b.W * k}" rx="3" fill="${COLORS[b.mat]}" opacity=".25" stroke="${COLORS[b.mat]}"/>
-          ${b.items.map((it) => `<rect x="${1 + it.x * k}" y="${1 + it.y * k}" width="${it.l * k}" height="${it.w * k}" fill="${COLORS[b.mat]}" stroke="${it.p.id === selected ? benchTheme.accent() : "rgba(0,0,0,.35)"}" stroke-width="${it.p.id === selected ? 2 : 0.8}"/>
-            ${it.w * k > 9 && it.l * k > 50 ? `<text x="${1 + it.x * k + 6}" y="${1 + it.y * k + Math.min(it.w * k, 14) - 3}" font-size="${Math.min(10, it.w * k - 2)}" fill="#2a1f14" font-family="system-ui">${it.p.name} ${Math.round(it.l)}</text>` : ""}`).join("")}
-          </svg></div>`; }).join("")}</div>`;
+      ${plan.fromStock.length ? `<h3 class="cut-h">From your shop<span>${plan.fromStock.length} piece${plan.fromStock.length > 1 ? "s" : ""} you already have</span></h3><div class="boards">${plan.fromStock.map(board).join("")}</div>` : ""}
+      ${plan.toBuy.length ? `<h3 class="cut-h">To buy<span>${plan.toBuy.length} board${plan.toBuy.length > 1 ? "s" : ""} · €${plan.buyCost}</span></h3>
+        ${plan.maybe.map((o) => `<div class="maybe-row"><span class="mini">${S.boardArt(o.L, o.W, o.T, o.species, 60, 32)}</span><span>You may still have a <b>${S.SPECIES[o.species].name.toLowerCase()} offcut ${o.L} × ${o.W}</b> from ${o.from}. It hasn't been confirmed for ${Math.round(S.daysSince(o.seen) / 30)} months, so this cut list doesn't count on it.</span><span class="ask"><span>Still have it?</span><button data-off-yes="${o.id}">Yes</button><button data-off-gone="${o.id}">No</button></span></div>`).join("")}
+        <div class="boards">${plan.toBuy.map(board).join("")}</div>` : ""}
+      <p class="cut-note">Hatched areas are offcuts worth keeping. When you mark the project as built, BenchUp offers to add them to your stock.</p>`;
     host.querySelectorAll("tbody tr").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+    host.querySelector("#useStock").onchange = (e) => { stock.useStock = e.target.checked; S.saveStock(stock); renderCutlist(); renderRight(); };
+    const refresh = () => { renderCutlist(); renderRight(); };
+    const srcOf = (key) => plan.sources.find((x) => (x.kind === "offcut" ? "offcut:" + x.offcut.id : x.kind === "stock" ? "stock:" + (x.catalog && x.catalog.id) : "") === key);
+    host.onclick = (e) => {
+      const t = e.target;
+      const yes = t.closest("[data-src-yes]");
+      if (yes) { S.confirmSource(stock, srcOf(yes.dataset.srcYes)); S.saveStock(stock); refresh(); return; }
+      const gone = t.closest("[data-src-gone]");
+      if (gone) {
+        const snap = JSON.parse(JSON.stringify(stock));
+        S.goneSource(stock, srcOf(gone.dataset.srcGone)); S.saveStock(stock); refresh();
+        S.undoToast("Taken out of your stock. The cut list now buys that wood instead.", snap, refresh);
+        return;
+      }
+      const oy = t.closest("[data-off-yes]");
+      if (oy) { const o = stock.offcuts.find((x) => x.id === oy.dataset.offYes); if (o) o.seen = new Date().toISOString(); S.saveStock(stock); refresh(); cutToast("Confirmed. The cut list uses it now."); return; }
+      const og = t.closest("[data-off-gone]");
+      if (og) { const snap = JSON.parse(JSON.stringify(stock)); stock.offcuts = stock.offcuts.filter((x) => x.id !== og.dataset.offGone); S.saveStock(stock); refresh(); S.undoToast("Offcut marked as gone", snap, refresh); }
+    };
   }
 
   function setStage(s) {
@@ -315,7 +477,7 @@
   }
 
   // Joinery and Materials have their own full screens; Design and Cut list stay on this page.
-  const STAGE_PAGES = { joinery: "a-joinery.html", materials: "a-materials.html", estimate: "a-estimate.html" };
+  const STAGE_PAGES = { joinery: "a-joinery.html", materials: "a-materials.html", planning: "a-planning.html", estimate: "a-estimate.html" };
   document.querySelectorAll(".stage").forEach((b) => (b.onclick = () => {
     const page = STAGE_PAGES[b.dataset.stage];
     if (page) location.href = page;

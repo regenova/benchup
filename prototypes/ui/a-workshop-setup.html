@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Set up your workshop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.btn { text-decoration: none; color: inherit; }
+  a.btn.primary { color: var(--primary-ink); }
+  .app.setup { grid-template-rows: 56px 1fr 68px; }
+  .skip { color: var(--muted); font-size: 12.5px; padding: 6px 10px; border-radius: 8px; text-decoration: none; }
+  .skip:hover { background: var(--hover); color: var(--ink); }
+
+  .stage-wrap { overflow: auto; background: var(--bg); }
+  .inner { max-width: 980px; margin: 0 auto; padding: 26px 32px 48px; }
+  .steps-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 30px; }
+  .steps-bar button { text-align: left; color: var(--faint); font-size: 11.5px; font-weight: 500; padding: 0; }
+  .steps-bar button i { display: block; height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 7px; transition: background .2s; }
+  .steps-bar button.done { color: var(--muted); }
+  .steps-bar button.done i { background: var(--done-ink); }
+  .steps-bar button.cur { color: var(--ink); }
+  .steps-bar button.cur i { background: var(--accent); }
+  .steps-bar button:disabled { cursor: default; }
+
+  h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; letter-spacing: -.015em; }
+  .lead { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 640px; }
+  .step { animation: in .22s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .step { animation: none; } }
+
+  /* Shop type cards */
+  .shops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .shop { position: relative; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .12s, box-shadow .12s; }
+  .shop:hover { border-color: var(--line-strong); }
+  .shop.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .scene { position: relative; height: 150px; border-radius: 10px; background: var(--bg); overflow: hidden; }
+  .scene svg { position: absolute; }
+  .shop .tx { padding: 0 6px; }
+  .shop b { display: block; font-size: 14px; font-weight: 600; }
+  .shop small { display: block; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+  .shop .cnt { display: inline-block; margin-top: 8px; font-size: 11.5px; color: var(--muted); background: var(--bg); padding: 2px 8px; border-radius: 999px; }
+  .tick { position: absolute; top: 18px; right: 18px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--panel); display: grid; place-items: center; color: transparent; }
+  .on > .tick { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  /* Tool tiles */
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .grid.six { grid-template-columns: repeat(6, 1fr); }
+  .grid.six .tile .pic { height: 78px; }
+  .grid.six .tile .tick { top: 12px; right: 12px; width: 18px; height: 18px; }
+  .tile { position: relative; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 8px; transition: border-color .12s, box-shadow .12s; }
+  .tile:hover { border-color: var(--line-strong); }
+  .tile.on { border-color: var(--line-strong); box-shadow: var(--stage-shadow); }
+  .tile .pic { height: 104px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+  .tile .pic svg { transition: filter .15s, opacity .15s, transform .15s; }
+  .tile:not(.on) .pic svg { filter: grayscale(1); opacity: .42; }
+  .tile.on .pic svg { transform: scale(1.04); }
+  .tile .tick { top: 14px; right: 14px; width: 20px; height: 20px; }
+  .tile b { font-weight: 500; padding: 0 4px; }
+  .tile:not(.on) b { color: var(--muted); }
+  .tile small { display: block; color: var(--muted); font-size: 11.5px; padding: 0 4px; margin-top: -5px; }
+  .noteline { color: var(--muted); font-size: 12.5px; margin: 16px 2px 0; display: flex; align-items: center; gap: 8px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  .acc { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; animation: in .2s ease-out; }
+  .acc h4 { margin: 0 0 10px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .acc h4 span { color: var(--muted); font-weight: 400; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tchip { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px 0 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .tchip:hover { border-color: var(--line-strong); color: var(--ink); }
+  .tchip .mini { width: 48px; height: 34px; border-radius: 7px; background: var(--bg); display: grid; place-items: center; }
+  .tchip:not(.on) svg { filter: grayscale(1); opacity: .45; }
+  .tchip.on { color: var(--ink); border-color: var(--line-strong); }
+  .tchip .cb { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: grid; place-items: center; color: transparent; }
+  .tchip.on .cb { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+  .basics { margin-top: 22px; }
+  .basics h3 { margin: 0 0 4px; font-size: 15px; }
+  .basics p { margin: 0 0 12px; color: var(--muted); }
+
+  /* Clamps */
+  .clamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .clamp { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .clamp .pic { height: 130px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; position: relative; }
+  .clamp.none .pic svg { filter: grayscale(1); opacity: .42; }
+  .pile { display: grid; gap: 0 6px; justify-content: center; align-content: center; }
+  .clamp .pic .stack { position: absolute; right: 12px; bottom: 10px; font: 600 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .clamp b { font-size: 14px; font-weight: 600; padding: 0 4px; }
+  .clamp small { color: var(--muted); padding: 0 4px; margin-top: -6px; }
+  .qty { display: flex; gap: 4px; padding: 0 4px; }
+  .qty button { flex: 1; height: 34px; border-radius: 8px; border: 1px solid var(--line-strong); color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .qty button:hover { color: var(--ink); background: var(--hover); }
+  .qty button.on { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+  .need { margin-top: 16px; background: var(--info-bg); color: var(--info-ink); border-radius: 10px; padding: 10px 14px; display: flex; gap: 10px; align-items: center; line-height: 1.45; }
+
+  /* How you work */
+  .ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 26px; }
+  .way { position: relative; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .way:hover { border-color: var(--line-strong); }
+  .way.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .way .scene { height: 110px; }
+  .way b { font-size: 14px; font-weight: 600; padding: 0 6px; }
+  .way small { color: var(--muted); padding: 0 6px; margin-top: -6px; line-height: 1.45; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .level { position: relative; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .level:hover { border-color: var(--line-strong); }
+  .level.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .level b { display: block; font-size: 14px; font-weight: 600; }
+  .level small { display: block; color: var(--muted); margin-top: 4px; line-height: 1.45; padding-right: 20px; }
+  .level .tick { top: 14px; right: 14px; width: 20px; height: 20px; }
+  .sec2 { display: block; margin: 0 0 4px; font-size: 16px; color: var(--ink); }
+  .sec2p { display: block; margin: 0 0 12px; color: var(--muted); }
+
+  /* Done */
+  .done-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .panel h4 { margin: 0 0 12px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; }
+  .wall { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .wall span { height: 52px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+  .cap { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .cap:first-of-type { border-top: 0; padding-top: 0; }
+  .cap .st { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+  .cap .st.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .cap .st.no { background: var(--warn-bg); color: var(--warn-ink); font-weight: 700; font-size: 12px; }
+  .cap b { font-weight: 500; }
+  .cap small { display: block; color: var(--muted); line-height: 1.4; margin-top: 1px; }
+  .proj { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .proj .num { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .proj p { margin: 0; color: var(--muted); line-height: 1.5; }
+  .cta { display: flex; gap: 8px; margin-top: 22px; }
+  .cta .btn { height: 40px; padding: 0 18px; font-size: 14px; }
+
+  footer.bar { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--panel); border-top: 1px solid var(--line); }
+  .count { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+  .count b { color: var(--ink); font-variant-numeric: tabular-nums; font-size: 15px; }
+  .count .strip { display: flex; }
+  .count .strip span { width: 34px; height: 26px; margin-left: -8px; border-radius: 7px; background: var(--bg); border: 2px solid var(--panel); display: grid; place-items: center; }
+  .count .strip span:first-child { margin-left: 0; }
+  .nav { display: flex; gap: 8px; }
+  .nav .btn { height: 38px; padding: 0 18px; font-size: 13.5px; }
+  .nav kbd { font: 11px ui-monospace, Menlo, monospace; opacity: .6; margin-left: 4px; }
+  :root[data-theme="dark"] .tile:not(.on) .pic svg, :root[data-theme="dark"] .tchip:not(.on) svg { opacity: .5; }
+</style>
+</head>
+<body>
+<div class="app setup">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
+      <div class="project"><b>Set up your workshop</b><span>About a minute · you can change everything later</span></div>
+    </div>
+    <div></div>
+    <div class="hdr-actions">
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <a class="skip" href="a-planning.html" id="skipLink" data-skip>Skip for now</a>
+    </div>
+  </header>
+
+  <div class="stage-wrap" id="wrap"><div class="inner">
+    <div class="steps-bar" id="bar"></div>
+    <div id="step"></div>
+  </div></div>
+
+  <footer class="bar" id="foot">
+    <div class="count" id="count"></div>
+    <div class="nav">
+      <button class="btn" data-back>Back</button>
+      <button class="btn primary" data-next>Continue<kbd>↵</kbd></button>
+    </div>
+  </footer>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/tool-art.js"></script>
+<script src="shared/planning-data.js"></script>
+<script>
+(function () {
+  "use strict";
+  const BP = BenchPlan;
+  const $ = (id) => document.getElementById(id);
+  const STEP_KEY = "benchup-proto-setup-step";
+  const from = BP.origin();
+  document.getElementById("skipLink").href = from.href;
+
+  // Start from the saved workshop if there is one, otherwise from nothing chosen yet.
+  let shop = BP.hasShop() ? BP.loadShop() : { preset: null, owned: {}, style: "balanced", level: "intermediate", setup: "in-progress" };
+  let index = Math.min(Number(localStorage.getItem(STEP_KEY) || 0), 6);
+
+  const STEPS = [
+    { id: "shop", label: "Your shop" },
+    { id: "machines", label: "Machines" },
+    { id: "power", label: "Power tools" },
+    { id: "hand", label: "Hand tools" },
+    { id: "clamps", label: "Clamps" },
+    { id: "work", label: "How you work" },
+    { id: "done", label: "Ready" },
+  ];
+
+  // Composite scenes for the shop types: [tool, x, y, width].
+  const SCENES = {
+    starter: [["drill", 4, 16, 108], ["fclamps", 10, 86, 78], ["jigsaw", 52, 50, 104]],
+    hand: [["tenonsaw", 4, 12, 112], ["chisels", 6, 92, 84], ["jackplane", 40, 60, 124]],
+    small: [["router", 2, 34, 96], ["circsaw", 40, 4, 100], ["mitersaw", 40, 72, 104]],
+    full: [["bandsaw", 2, 8, 88], ["jointer", 44, 22, 100], ["tablesaw", 18, 66, 124]],
+    hand_way: [["jackplane", 22, 14, 128]],
+    balanced_way: [["router", 8, 10, 100], ["chisels", 52, 30, 96]],
+    machine_way: [["tablesaw", 22, 6, 136]],
+  };
+  const scene = (key) => SCENES[key].map(([id, x, y, w]) => toolArt(id, w).replace("<svg ", `<svg style="left:${x}%;top:${y}px" `)).join("");
+
+  const MACHINES = ["tablesaw", "mitersaw", "bandsaw", "drillpress", "jointer", "planer", "mortiser", "routertable"];
+  const POWER = ["drill", "router", "ros", "circsaw", "jigsaw", "domino"];
+  const HAND = ["jackplane", "jointerplane", "blockplane", "shoulderplane", "routerplane", "ploughplane", "tenonsaw", "mortchisel", "mortgauge", "scraper", "rasp", "shootboard"];
+  const BASICS = ["tape", "square", "mgauge", "knife", "labels", "crosscut", "chisels", "mallet", "glue", "rags", "brushes"];
+  // Accessories only make sense once their parent tool is in the shop.
+  const ACCESSORIES = {
+    tablesaw: { title: "For your table saw", items: ["dado", "tenonjig"] },
+    router: { title: "Router bits and accessories", items: ["straightbit", "roundover", "chamferbit", "edgeguide"] },
+    drill: { title: "For your drill", items: ["forstner"] },
+  };
+  const CLAMPS = [
+    { id: "barclamps", note: "Long clamps for frames and panels", picks: [0, 2, 4, 6, 8] },
+    { id: "fclamps", note: "Short clamps for holding work and small glue-ups", picks: [0, 2, 4, 6, 8] },
+    { id: "strap", note: "A cheap way to pull a whole frame together", picks: [0, 1, 2, 4] },
+  ];
+  const WAYS = [
+    { id: "hand", name: "Mostly by hand", note: "Quiet and precise; I enjoy planes, saws and chisels.", scene: "hand_way" },
+    { id: "balanced", name: "A bit of both", note: "Power tools for the heavy work, hand tools to fit and finish.", scene: "balanced_way" },
+    { id: "machine", name: "With machines", note: "Fast and repeatable; set up once and cut many parts.", scene: "machine_way" },
+  ];
+  const LEVELS = [
+    { id: "beginner", name: "Beginner", note: "My first projects. Explain each step and allow extra time." },
+    { id: "intermediate", name: "Intermediate", note: "I've built a few pieces and know the basic joints." },
+    { id: "experienced", name: "Experienced", note: "Keep instructions short and the times tight." },
+  ];
+
+  const have = (id) => shop.owned[id] || 0;
+  let recent = []; // tools added in this session, newest first, for the footer strip
+  const count = () => Object.keys(shop.owned).length;
+  function persist() {
+    BP.saveShop(shop);
+    localStorage.setItem(STEP_KEY, String(index));
+  }
+  function setOwned(id, n) {
+    const owned = Object.assign({}, shop.owned);
+    if (n > 0 && !owned[id]) recent = [id, ...recent.filter((x) => x !== id)];
+    if (n <= 0) recent = recent.filter((x) => x !== id);
+    if (n > 0) owned[id] = n; else delete owned[id];
+    shop.owned = owned;
+    persist();
+  }
+  function toggle(id) {
+    const t = BP.TOOL[id];
+    if (have(id)) {
+      setOwned(id, 0);
+      // Removing a tool also removes the accessories that only work with it.
+      (ACCESSORIES[id] ? ACCESSORIES[id].items : []).forEach((a) => setOwned(a, 0));
+    } else setOwned(id, t.qty ? 2 : 1);
+  }
+
+  // ---------- Pieces ----------
+  const tile = (id, w = 120) => {
+    const t = BP.TOOL[id];
+    const on = have(id) > 0;
+    return `<button class="tile${on ? " on" : ""}" data-tool="${id}" role="checkbox" aria-checked="${on}"><span class="pic">${toolArt(id, w)}</span><span class="tick">${icon("check", 12)}</span><b>${t.name}</b>${t.detail ? `<small>${t.detail}</small>` : ""}</button>`;
+  };
+  const chip = (id) => {
+    const on = have(id) > 0;
+    return `<button class="tchip${on ? " on" : ""}" data-tool="${id}" role="checkbox" aria-checked="${on}"><span class="mini">${toolArt(id, 46)}</span>${BP.TOOL[id].name}<span class="cb">${icon("check", 10)}</span></button>`;
+  };
+  const accessories = (ids) => ids.filter((id) => ACCESSORIES[id] && have(id)).map((id) => `<div class="acc"><h4>${ACCESSORIES[id].title}<span>Only shown because you have one</span></h4><div class="chips">${ACCESSORIES[id].items.map(chip).join("")}</div></div>`).join("");
+
+  // ---------- Steps ----------
+  const VIEWS = {
+    shop() {
+      const cards = BP.PRESETS.concat().sort((a, b) => ["starter", "hand", "small", "full"].indexOf(a.id) - ["starter", "hand", "small", "full"].indexOf(b.id)).map((p) => `
+        <button class="shop${shop.preset === p.id ? " on" : ""}" data-preset="${p.id}"><span class="scene">${scene(p.id)}</span><span class="tick">${icon("check", 12)}</span>
+          <span class="tx"><b>${p.name}</b><small>${p.note}</small><span class="cnt">${Object.keys(p.owned).length} tools</span></span></button>`).join("");
+      return `<h1>What does your workshop look like?</h1>
+        <p class="lead">Pick the closest one. It fills in a typical set of tools, and the next screens only ask you to correct it.</p>
+        <div class="shops">${cards}</div>
+        <p class="noteline">${icon("lock", 14)}Your workshop is saved with your preferences and shared by every project.</p>`;
+    },
+    machines() {
+      return `<h1>Which machines do you have?</h1>
+        <p class="lead">Machines change the most how a project is built. Tap to add or remove; most home shops have one or two.</p>
+        <div class="grid">${MACHINES.map((id) => tile(id, 132)).join("")}</div>${accessories(MACHINES)}`;
+    },
+    power() {
+      return `<h1>And power tools?</h1>
+        <p class="lead">When you add a router or a drill, BenchUp asks about the bits that go with it.</p>
+        <div class="grid">${POWER.map((id) => tile(id)).join("")}</div>${accessories(POWER)}`;
+    },
+    hand() {
+      return `<h1>Planes and special hand tools</h1>
+        <p class="lead">These decide whether a joint can be cut by hand. Skip the ones you don't recognise.</p>
+        <div class="grid six">${HAND.map((id) => tile(id, 96)).join("")}</div>
+        <div class="basics"><h3>Basics</h3><p>Most woodworkers already have these, so they are ticked unless your shop type says otherwise. Untick anything you're missing.</p>
+          <div class="chips">${BASICS.map(chip).join("")}</div></div>`;
+    },
+    clamps() {
+      const cards = CLAMPS.map((c) => {
+        const t = BP.TOOL[c.id];
+        const n = have(c.id);
+        const top = c.picks[c.picks.length - 1];
+        // One drawing per clamp, laid out in a tidy grid so the count is visible at a glance.
+        const shown = Math.min(n, 8);
+        const cols = shown <= 1 ? 1 : shown <= 4 ? 2 : shown <= 6 ? 3 : 4;
+        const w = [128, 128, 88, 70, 56][cols];
+        const pile = shown ? `<span class="pile" style="grid-template-columns:repeat(${cols}, auto)">${Array.from({ length: shown }, () => toolArt(c.id, w)).join("")}</span>` : toolArt(c.id, 128);
+        return `<div class="clamp${n ? "" : " none"}"><span class="pic">${pile}<span class="stack">× ${n}</span></span><b>${t.name}</b><small>${c.note}</small>
+          <div class="qty">${c.picks.map((p) => `<button class="${n === p || (p === top && n > top) ? "on" : ""}" data-qty="${c.id}" data-n="${p}">${p === top ? p + "+" : p}</button>`).join("")}</div></div>`;
+      }).join("");
+      const bars = have("barclamps");
+      const msg = bars >= 4 ? "That's enough for Hall bench: its largest glue-up needs 4 bar clamps." : `Hall bench's largest glue-up needs 4 bar clamps. With ${bars}, BenchUp will suggest gluing in stages or using straps.`;
+      return `<h1>How many clamps do you have?</h1>
+        <p class="lead">Glue-ups are where missing clamps hurt most, so BenchUp counts them instead of just ticking them.</p>
+        <div class="clamps">${cards}</div><div class="need">${icon(bars >= 4 ? "check" : "layers", 16)}${msg}</div>`;
+    },
+    work() {
+      return `<h1>How do you like to work?</h1>
+        <p class="lead">When a step can be done in several ways, BenchUp suggests the one that suits you.</p>
+        <div class="ways">${WAYS.map((w) => `<button class="way${shop.style === w.id ? " on" : ""}" data-style="${w.id}"><span class="scene">${scene(w.scene)}</span><span class="tick">${icon("check", 12)}</span><b>${w.name}</b><small>${w.note}</small></button>`).join("")}</div>
+        <h2 class="sec2">Your experience</h2><p class="sec2p">It adjusts how long each step takes and how much each instruction explains.</p>
+        <div class="levels">${LEVELS.map((l) => `<button class="level${shop.level === l.id ? " on" : ""}" data-level="${l.id}"><span class="tick">${icon("check", 12)}</span><b>${l.name}</b><small>${l.note}</small></button>`).join("")}</div>`;
+    },
+    done() {
+      const CAPS = [
+        { name: "Mill rough lumber", step: "s-mill", skip: "s4s" },
+        { name: "Glue up wide panels", step: "s-gluetop", skip: "twostage" },
+        { name: "Mortise & tenon", step: "s-mortise", skip: "domino" },
+        { name: "Grooves and rebates", step: "s-groove" },
+        { name: "Edge profiles", step: "s-round" },
+        { name: "Glue up a full frame", step: "s-gluelong" },
+      ];
+      const caps = CAPS.map((c) => {
+        const best = BP.STEP[c.step].methods.filter((m) => m.id !== c.skip && BP.feasible(m, shop)).sort((a, b) => a.min - b.min)[0];
+        return `<div class="cap"><span class="st ${best ? "ok" : "no"}">${best ? icon("check", 12) : "!"}</span><div><b>${c.name}</b><small>${best ? best.name : "Not yet; plans will suggest a way round it"}</small></div></div>`;
+      }).join("");
+      const plan = BP.build(shop, "mine", BP.loadPlan().methods);
+      const projectMsg = plan.blocked.length
+        ? `${plan.blocked.length} step needs something you don't have yet; the plan shows the cheapest way to solve it.`
+        : "Every step is possible.";
+      const wall = BP.TOOLS.filter((t) => have(t.id)).map((t) => `<span title="${t.name}">${toolArt(t.id, 58)}</span>`).join("");
+      return `<h1>Your workshop is ready</h1>
+        <p class="lead">${count()} tools. You can change anything from My workshop, and every plan updates straight away.</p>
+        <div class="done-grid">
+          <div class="panel"><h4>Your tools<span>${count()}</span></h4><div class="wall">${wall}</div></div>
+          <div class="panel"><h4>What you can do</h4>${caps}
+            <div class="proj"><span class="num">${BP.fmtH(plan.minutes)}</span><p>To build Hall bench with your workshop. ${projectMsg}</p></div></div>
+        </div>
+        <div class="cta"><a class="btn primary" href="${from.href}" data-finish>${icon(from.key === "start" ? "chevronRight" : "list", 16)}${from.done}</a><a class="btn" href="${BP.withFrom("a-workshop.html")}" data-finish>Review all tools</a></div>`;
+    },
+  };
+
+  function render() {
+    const cur = STEPS[index];
+    $("bar").innerHTML = STEPS.slice(0, 6).map((s, i) => `<button class="${i < index ? "done" : i === index ? "cur" : ""}" data-goto="${i}" ${i > index || !shop.preset ? "disabled" : ""}><i></i>${s.label}</button>`).join("");
+    $("step").innerHTML = `<div class="step">${VIEWS[cur.id]()}</div>`;
+    const order = [...recent, ...MACHINES, ...POWER, ...HAND].filter((id, i, a) => have(id) && a.indexOf(id) === i);
+    const strip = order.slice(0, 5).map((id) => `<span title="${BP.TOOL[id].name}">${toolArt(id, 30)}</span>`).join("");
+    $("count").innerHTML = shop.preset ? `<span class="strip">${strip}</span><span><b>${count()}</b> tools in your workshop</span>` : `<span>Choose a shop type to start</span>`;
+    $("foot").style.visibility = cur.id === "done" ? "hidden" : "visible";
+    document.querySelector("[data-back]").disabled = index === 0;
+    const next = document.querySelector("[data-next]");
+    next.disabled = !shop.preset;
+    next.innerHTML = (index === 5 ? "Finish" : "Continue") + "<kbd>↵</kbd>";
+  }
+  function go(i) {
+    index = Math.max(0, Math.min(6, i));
+    if (STEPS[index].id === "done") shop.setup = "done";
+    persist();
+    render();
+    $("wrap").scrollTop = 0;
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const preset = t.closest("[data-preset]");
+    if (preset) {
+      const p = BP.PRESETS.find((x) => x.id === preset.dataset.preset);
+      shop.preset = p.id;
+      shop.owned = Object.assign({}, p.owned);
+      persist();
+      render();
+      return;
+    }
+    const tool = t.closest("[data-tool]");
+    if (tool) { toggle(tool.dataset.tool); render(); return; }
+    const q = t.closest("[data-qty]");
+    if (q) { setOwned(q.dataset.qty, Number(q.dataset.n)); render(); return; }
+    const st = t.closest("[data-style]");
+    if (st) { shop.style = st.dataset.style; persist(); render(); return; }
+    const lv = t.closest("[data-level]");
+    if (lv) { shop.level = lv.dataset.level; persist(); render(); return; }
+    if (t.closest("[data-next]")) { go(index + 1); return; }
+    if (t.closest("[data-back]")) { go(index - 1); return; }
+    const g = t.closest("[data-goto]");
+    if (g && !g.disabled) { go(Number(g.dataset.goto)); return; }
+    if (t.closest("[data-finish]")) { localStorage.removeItem(STEP_KEY); return; }
+    if (t.closest("[data-skip]")) {
+      // Skipping keeps a typical small shop so plans still work, and remembers to ask again.
+      if (!shop.preset) { const p = BP.PRESETS.find((x) => x.id === "small"); shop.preset = p.id; shop.owned = Object.assign({}, p.owned); }
+      shop.setup = shop.setup === "done" ? "done" : "skipped";
+      BP.saveShop(shop);
+      localStorage.setItem(STEP_KEY, String(index));
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    // Enter on a focused tile toggles it; anywhere else it moves on.
+    if (e.target.closest && e.target.closest("button, a, input") && !e.target.closest("[data-next]")) return;
+    if (e.key === "Enter" && shop.preset && index < 6) { e.preventDefault(); go(index + 1); }
+  });
+
+  hydrateIcons();
+  render();
+})();
+</script>
+</body>
+</html>

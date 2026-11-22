@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Planning</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.stage { text-decoration: none; }
+  a.btn { text-decoration: none; color: inherit; }
+  .body.plan { grid-template-columns: 300px 1fr 320px; }
+
+  /* Left: the step list */
+  .progress { margin: 0 16px 10px; }
+  .progress .bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
+  .progress .bar i { display: block; height: 100%; background: var(--done-ink); border-radius: 3px; transition: width .2s; }
+  .progress small { display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .steps { flex: 1; overflow: auto; padding: 0 8px 12px; }
+  .steps .group-h { justify-content: space-between; }
+  .steps .group-h span { font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 500; }
+  .srow { width: 100%; display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 7px 8px; border-radius: 8px; }
+  .srow:hover { background: var(--hover); }
+  .srow.sel { background: var(--accent-soft); }
+  .srow .st { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 600; border: 1px solid var(--line-strong); color: var(--muted); background: var(--panel); font-variant-numeric: tabular-nums; }
+  .srow.done .st { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); }
+  .srow.blocked .st { background: var(--warn-bg); border-color: transparent; color: var(--warn-ink); }
+  .srow.skipped .st { border-style: dashed; }
+  .srow .nm { min-width: 0; }
+  .srow .nm b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow.done .nm b { color: var(--muted); }
+  .srow.skipped .nm b { color: var(--faint); text-decoration: line-through; }
+  .srow .nm small { display: block; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow.blocked .nm small { color: var(--warn-ink); }
+  .srow .tm { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* Centre */
+  main.plan-main { background: var(--bg); display: flex; flex-direction: column; }
+  .centre-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .centre-bar .grp { display: flex; align-items: center; gap: 10px; }
+  .centre-bar .seg { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 3px; display: flex; gap: 2px; backdrop-filter: none; }
+  .centre-bar .seg button { height: 28px; padding: 0 12px; border-radius: 6px; color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .centre-bar .seg button.on { background: var(--panel); color: var(--ink); box-shadow: var(--stage-shadow), 0 0 0 1px var(--line); }
+  .centre-bar .seg.mode button.on { background: var(--primary); color: var(--primary-ink); box-shadow: none; }
+  .centre-bar .lbl { color: var(--muted); font-size: 12px; }
+  .facts { display: flex; gap: 16px; color: var(--muted); font-size: 12.5px; }
+  .facts b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .facts .warn b { color: var(--warn-ink); }
+  .centre-bar .seg button, .facts span, .centre-bar .lbl { white-space: nowrap; }
+  /* Laptop widths: keep the bar on one line by dropping the label and the drying fact. */
+  @media (max-width: 1500px) {
+    .centre-bar { padding: 12px 18px; }
+    .centre-bar .lbl, .facts > span:nth-child(2) { display: none; }
+    .facts { gap: 12px; }
+  }
+  @media (max-width: 1320px) { .facts > span:nth-child(1) { display: none; } }
+  .scroll { flex: 1; overflow: auto; padding: 22px 28px 60px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  .shead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+  .shead .eyebrow { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .shead h2 { margin: 4px 0 6px; font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  .shead .meta { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .shead .meta b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .shead .acts { display: flex; gap: 6px; flex: none; }
+  .btn.done-on { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); }
+
+  .visual { display: grid; grid-template-columns: 1fr 300px; gap: 12px; margin-bottom: 18px; }
+  .vpcard { position: relative; height: 260px; border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; background: radial-gradient(120% 90% at 50% 35%, var(--vp-1) 0%, var(--vp-2) 100%); }
+  .vpcard svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .vpcard .cap { position: absolute; left: 10px; bottom: 10px; font-size: 11.5px; color: var(--muted); background: var(--glass); border: 1px solid var(--line); padding: 3px 8px; border-radius: 999px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .panel h4 { margin: 0 0 8px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+  .panel h4 span { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); font-size: 12px; }
+  .why p { margin: 0; line-height: 1.55; }
+  .pcodes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+  .pcode { font: 600 11px ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 5px; background: var(--bg); color: var(--muted); }
+
+  .blockbox { background: var(--warn-bg); color: var(--ink); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 18px; display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; }
+  .blockbox b { color: var(--warn-ink); }
+  .blockbox p { margin: 4px 0 0; line-height: 1.5; color: var(--ink); }
+  .blockbox .acts { display: flex; gap: 6px; }
+  .skipbox { background: var(--panel); border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 16px; margin-bottom: 18px; line-height: 1.55; }
+  .skipbox a { color: var(--accent); cursor: pointer; }
+
+  .sec-h { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 8px; }
+  .sec-h h3 { margin: 0; font-size: 15px; }
+  .sec-h span { color: var(--muted); font-size: 12.5px; }
+  .methods { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+  .method { width: 100%; display: grid; grid-template-columns: 18px 1fr 92px; gap: 12px; align-items: center; text-align: left; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .method:first-child { border-top: 0; }
+  .method:hover:not(.locked) { background: var(--hover); }
+  .method.on { background: var(--accent-soft); }
+  .method.locked { cursor: not-allowed; }
+  .method.locked .mname, .method.locked .mtime { color: var(--faint); }
+  .method .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--panel); }
+  .method.on .radio { border: 5px solid var(--accent); }
+  .method.locked .radio { border-style: dashed; }
+  .mname { font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .badge { font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+  .badge.best { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.ideal { background: var(--info-bg); color: var(--info-ink); }
+  .mnote { color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.45; }
+  .tchips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+  .tchip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; background: var(--bg); color: var(--muted); }
+  .tchip.miss { background: var(--warn-bg); color: var(--warn-ink); }
+  .tchip.none { background: none; padding-left: 0; }
+  .mtime { text-align: right; font-variant-numeric: tabular-nums; }
+  .mtime b { display: block; font-weight: 600; }
+  .mtime small { color: var(--muted); font-size: 11.5px; }
+
+  .how { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px; margin-bottom: 18px; }
+  .how ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  .how li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); line-height: 1.55; align-items: baseline; }
+  .how li:first-child { border-top: 0; }
+  .how li::before { content: counter(s); width: 22px; height: 22px; border-radius: 50%; background: var(--bg); color: var(--muted); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+  .how .wait { color: var(--muted); font-size: 12px; padding: 10px 0; border-top: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+
+  .desk { background: var(--desk); border-radius: var(--radius); padding: 18px; margin-bottom: 18px; }
+  .sheet { background: #fffdf9; color: #23272e; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 10px 28px rgba(30,25,15,.16); padding: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .lab { border: 1px dashed #c9c3b8; border-radius: 4px; padding: 8px 10px; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; }
+  .lab .code { grid-row: span 3; font: 700 22px ui-monospace, Menlo, monospace; letter-spacing: -.02em; }
+  .lab .pn { font-size: 11.5px; font-weight: 600; }
+  .lab .pd { font-size: 10px; color: #6f747b; font-variant-numeric: tabular-nums; }
+  .lab .or { font-size: 10px; color: #b8302a; display: flex; gap: 6px; align-items: center; }
+  .desk .bar { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: var(--muted); font-size: 12px; }
+
+  /* Tools view */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .opt { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .opt:hover { border-color: var(--line-strong); }
+  .opt.on { border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .opt h4 { margin: 0 0 10px; font-size: 13px; display: flex; justify-content: space-between; }
+  .opt h4 span { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .opt .nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .opt .nums label { display: block; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .opt .nums b { display: block; font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .opt .nums b.warn { color: var(--warn-ink); }
+  .savers { margin-bottom: 18px; }
+  .saver { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .saver:first-of-type { border-top: 0; }
+  .saver small { display: block; color: var(--muted); }
+  .saver .gain { font-variant-numeric: tabular-nums; color: var(--ok-ink); font-weight: 500; }
+  .saver .btn { height: 28px; font-size: 12px; padding: 0 10px; }
+  .tt td small { display: block; color: var(--muted); font-size: 11.5px; }
+  .tt .stt { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-ink); white-space: nowrap; }
+  .tt .stt.miss { background: var(--warn-bg); color: var(--warn-ink); }
+  .tt tbody tr { cursor: default; }
+
+  /* Right */
+  .trow { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; }
+  .trow .ic { color: var(--ok-ink); }
+  .trow.miss .ic { color: var(--warn-ink); }
+  .trow small { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .trow.miss small { color: var(--warn-ink); }
+  .mark-miss { width: 14px; height: 14px; border-radius: 50%; background: var(--warn-bg); color: var(--warn-ink); display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+  .linkbtn { color: var(--accent); font-size: 12.5px; margin-top: 8px; display: inline-flex; align-items: center; gap: 4px; }
+  .linkbtn:hover { text-decoration: underline; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 0; }
+  .stat.total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+  .wsum { display: grid; gap: 4px; margin-bottom: 10px; }
+  .setup-banner { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 10px 10px; margin-bottom: 18px; }
+  .setup-banner .arts { display: flex; height: 52px; padding: 0 6px; border-radius: 8px; background: var(--bg); align-items: center; }
+  .setup-banner .arts { gap: 4px; }
+  .setup-banner b { font-weight: 600; } .setup-banner p { margin: 2px 0 0; color: var(--muted); line-height: 1.45; }
+  .setup-banner .acts { display: flex; gap: 6px; }
+  .ihave { margin-left: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; color: var(--accent); border: 1px solid var(--line-strong); background: var(--panel); }
+  .ihave:hover { background: var(--hover); }
+  .wood { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .wrow { display: grid; grid-template-columns: 60px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .wrow:first-of-type { border-top: 0; }
+  .wrow .mini { width: 60px; height: 32px; border-radius: 6px; background: var(--bg); display: grid; place-items: center; }
+  .wrow small { display: block; color: var(--muted); font-size: 11.5px; }
+  .wrow b { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--muted); }
+  .found { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--ok-ink); font-weight: 500; }
+  .wask { display: inline-flex; gap: 4px; }
+  .wask button { height: 24px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: 11.5px; color: var(--ink); font-weight: 400; }
+  .wask button:hover { background: var(--hover); }
+  .wmaybe { margin-top: 10px; background: var(--warn-bg); border-radius: 8px; padding: 8px 10px; line-height: 1.5; font-size: 12.5px; }
+  .wmaybe .wask { margin-left: 4px; }
+  .wlinks { display: flex; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .wlinks a { color: var(--accent); font-size: 12.5px; text-decoration: none; }
+  .wlinks a:hover { text-decoration: underline; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13px; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
+      <div class="project"><b>Hall bench</b><span id="subtitle"></span></div>
+      <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage done" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage done" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage active" href="a-planning.html"><span class="n">5</span>Planning</a>
+      <a class="stage" href="a-estimate.html"><span class="n">6</span>Estimate</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <a class="btn" href="a-workshop.html?from=planning"><i data-icon="stock" data-size="16"></i>My workshop</a>
+      <button class="btn primary" data-toast="Printing the plan with labels, tools and steps"><i data-icon="print" data-size="16"></i>Print plan</button>
+    </div>
+  </header>
+
+  <div class="body plan">
+    <aside class="left">
+      <div class="aside-head"><h2>Steps<span class="count" id="stepCount"></span></h2></div>
+      <div class="progress" id="progress"></div>
+      <div class="steps" id="steps"></div>
+    </aside>
+
+    <main class="plan-main">
+      <div class="centre-bar">
+        <div class="grp">
+          <div class="seg" id="view">
+            <button data-view="steps" class="on"><i data-icon="list" data-size="15"></i>Steps</button>
+            <button data-view="tools"><i data-icon="stock" data-size="15"></i>Tools</button>
+          </div>
+          <span class="lbl">Plan with</span>
+          <div class="seg mode" id="mode">
+            <button data-mode="mine">Only my workshop</button>
+            <button data-mode="ideal">Ideal tools</button>
+          </div>
+        </div>
+        <div class="facts" id="facts"></div>
+      </div>
+      <div class="scroll" id="scroll">
+        <div class="wrap" id="setupBanner"></div>
+        <div class="wrap" id="stepView">
+          <div id="shead"></div>
+          <div class="visual">
+            <div class="vpcard"><svg id="vp"></svg><span class="cap" id="vpcap"></span></div>
+            <div class="panel why" id="why"></div>
+          </div>
+          <div id="sbody"></div>
+        </div>
+        <div class="wrap" id="toolView" hidden></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right"></aside>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/tool-art.js"></script>
+<script src="shared/planning-data.js"></script>
+<script src="shared/stock-data.js"></script>
+<script>
+(function () {
+  "use strict";
+  const BP = BenchPlan;
+  const { PARTS, BenchView, fmtDims } = BenchModel;
+  const $ = (id) => document.getElementById(id);
+  const byId = Object.fromEntries(PARTS.map((p) => [p.id, p]));
+  const CODES = { "leg-bl": "L1", "leg-br": "L2", "leg-fl": "L3", "leg-fr": "L4", "apron-b": "A1", "apron-f": "A2", "apron-l": "A3", "apron-r": "A4", "str-b": "S1", "str-f": "S2", shelf: "P1", top: "T1" };
+  const WHERE = { "leg-bl": "back left", "leg-br": "back right", "leg-fl": "front left", "leg-fr": "front right", "apron-b": "back", "apron-f": "front", "apron-l": "left", "apron-r": "right", "str-b": "back", "str-f": "front", shelf: "", top: "" };
+  const LEVEL = ["", "Easy", "Medium", "Hard"];
+
+  let shop = BP.loadShop();
+  let plan = BP.loadPlan();
+  let built = null;
+
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => t.classList.remove("show"), 2000);
+  }
+  const save = () => { BP.savePlan(plan); render(); };
+  const rowOf = (id) => built.rows.find((r) => r.step.id === id);
+  const indexOf = (id) => BP.STEPS.findIndex((s) => s.id === id);
+  const presetName = () => {
+    const p = BP.PRESETS.find((x) => {
+      const ids = new Set([...Object.keys(x.owned), ...Object.keys(shop.owned)]);
+      return [...ids].every((id) => (x.owned[id] || 0) === (shop.owned[id] || 0));
+    });
+    return p ? p.name : "Custom";
+  };
+  const methodMinutes = (m, step) => Math.round(m.min * step.qty * BP.levelFactor(shop));
+
+  // ---------- Viewport: the whole bench with this step's parts highlighted ----------
+  const view = new BenchView($("vp"), {
+    dims: false,
+    fill: 1.12,
+    view: { azimuth: 58, elevation: 24 },
+    theme: { colors: { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" }, stroke: "rgba(60,45,30,0.4)", strokeWidth: 0.6, grid: null, shadow: "rgba(0,0,0,.12)", selectedStroke: "#d63b32", selectedWidth: 1.4 },
+    onSelect: () => {},
+  });
+  benchTheme.bind(view, { grid: null, stroke: "rgba(10,8,5,.6)" });
+
+  // ---------- Left ----------
+  function renderSteps() {
+    const doneCount = BP.STEPS.filter((s) => plan.done[s.id]).length;
+    const active = built.rows.filter((r) => !r.skipped);
+    const left = active.filter((r) => !plan.done[r.step.id]).reduce((a, r) => a + r.minutes, 0);
+    $("stepCount").textContent = active.length;
+    $("progress").innerHTML = `<div class="bar"><i style="width:${(doneCount / active.length) * 100}%"></i></div><small><span>${doneCount} of ${active.length} done</span><span>${BP.fmtH(left)} left</span></small>`;
+    let n = 0;
+    $("steps").innerHTML = BP.PHASES.map((ph) => {
+      const rows = built.rows.filter((r) => r.step.phase === ph.id);
+      const mins = rows.reduce((a, r) => a + r.minutes, 0);
+      return `<div class="group-h">${ph.name}<span>${BP.fmtH(mins)}</span></div>` + rows.map((r) => {
+        if (!r.skipped) n++;
+        const done = plan.done[r.step.id];
+        const cls = ["srow", plan.sel === r.step.id && "sel", done && "done", r.blocked && "blocked", r.skipped && "skipped"].filter(Boolean).join(" ");
+        const st = done ? icon("check", 12) : r.blocked ? "!" : r.skipped ? "–" : n;
+        const sub = r.skipped ? "Skipped · loose tenons" : r.blocked ? "Needs tools you don't have" : r.step.methods.length > 1 ? r.method.name : `${BP.fmtQty(r.step)}`;
+        return `<button class="${cls}" data-step="${r.step.id}"><span class="st">${st}</span><span class="nm"><b>${r.step.name}</b><small>${sub}</small></span><span class="tm">${r.skipped || r.blocked ? "" : BP.fmtH(r.minutes)}</span></button>`;
+      }).join("");
+    }).join("");
+  }
+
+  // ---------- Centre: facts ----------
+  function renderFacts() {
+    const parts = [`Shop time <b>${BP.fmtH(built.minutes)}</b>`, `Drying <b>${built.wait} h</b>`];
+    if (plan.mode === "mine") parts.push(built.blocked.length ? `<span class="warn"><b>${built.blocked.length}</b> step blocked</span>` : `<span>All steps possible</span>`);
+    else parts.push(`Tools to get <b>${built.toBuy.length}</b> · about <b>€${built.cost.toLocaleString("en")}</b>`);
+    $("facts").innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
+    $("subtitle").textContent = `Planning · ${built.rows.filter((r) => !r.skipped).length} steps · ${plan.mode === "mine" ? "with your workshop" : "with ideal tools"}`;
+  }
+
+  // ---------- Centre: one step ----------
+  function toolChips(m) {
+    if (!m.tools.length) return `<span class="tchip none">No tools needed</span>`;
+    const miss = new Set(BP.missing(m, shop).map((x) => x.id));
+    return m.tools.map(([id, n]) => {
+      const lack = miss.has(id);
+      const got = BP.have(shop, id);
+      const extra = lack && n > 1 && got ? ` (you have ${got})` : "";
+      return `<span class="tchip${lack ? " miss" : ""}">${lack ? "" : icon("check", 11)}${BP.toolName(id, n)}${extra}</span>`;
+    }).join("");
+  }
+
+  function renderStep() {
+    const r = rowOf(plan.sel);
+    const s = r.step;
+    const idx = indexOf(s.id);
+    const ph = BP.PHASES.find((p) => p.id === s.phase);
+    const done = plan.done[s.id];
+    const partList = s.parts.length === PARTS.length ? "All parts" : `${s.parts.length} part${s.parts.length > 1 ? "s" : ""}`;
+    $("shead").innerHTML = `<div class="shead">
+      <div><div class="eyebrow">Step ${idx + 1} of ${BP.STEPS.length} · ${ph.name}</div><h2>${s.name}</h2>
+        <div class="meta"><span><b>${BP.fmtQty(s)}</b></span><span>${partList}</span>${r.skipped || r.blocked ? "" : `<span>About <b>${BP.fmtH(r.minutes)}</b></span>`}${s.wait ? `<span>Then <b>${s.wait} h</b> drying</span>` : ""}</div></div>
+      <div class="acts">
+        <button class="iconbtn" data-nav="-1" title="Previous step"${idx === 0 ? " disabled" : ""}>${icon("chevronRight", 16, 'style="transform:rotate(180deg)"')}</button>
+        <button class="iconbtn" data-nav="1" title="Next step"${idx === BP.STEPS.length - 1 ? " disabled" : ""}><i data-icon="chevronRight" data-size="16"></i></button>
+        ${r.skipped ? "" : `<button class="btn${done ? " done-on" : ""}" data-done>${icon("check", 15)}${done ? "Done" : "Mark as done"}</button>`}
+      </div></div>`;
+
+    // Viewport highlight
+    view.theme.dimmed = s.parts.length === PARTS.length ? null : new Set(s.parts);
+    view.render();
+    $("vpcap").textContent = s.parts.length === PARTS.length ? "Whole bench" : [...new Set(s.parts.map((id) => byId[id].kind.toLowerCase()))].join(", ");
+    $("why").innerHTML = `<h4>Why now</h4><p>${s.why}</p><div class="pcodes">${s.parts.map((id) => `<span class="pcode" title="${byId[id].name} ${WHERE[id]}">${CODES[id]}</span>`).join("")}</div>`;
+
+    let html = "";
+    if (r.skipped) {
+      html += `<div class="skipbox">This step is skipped because the mortises are cut as <b>loose tenons</b> with the Domino joiner, so the rails get a mortise instead of a tenon. <a data-step="s-mortise">Change the mortise method</a> to bring it back.</div>`;
+    }
+    if (r.blocked) {
+      const fix = BP.cheapestFix(s, shop);
+      const what = fix.missing.map((x) => (x.buy > 1 ? `${x.buy} ` : "") + BP.TOOL[x.id].name.toLowerCase()).join(" and ");
+      html += `<div class="blockbox"><div><b>Your workshop can't do this step yet.</b><p>The cheapest option is <b style="color:inherit;font-weight:600">${fix.method.name.toLowerCase()}</b>. Borrow or buy ${what}, about €${fix.cost}, or switch to Ideal tools to see how a fully equipped shop would do it.</p></div>
+        <div class="acts"><button class="btn" data-mode="ideal">See ideal method</button><button class="btn primary" data-own="${fix.missing.map((x) => x.id + ":" + x.need).join(",")}">I have ${fix.missing.length > 1 || fix.missing[0].buy > 1 ? "them" : "it"} now</button></div></div>`;
+    }
+
+    if (s.labels && !r.skipped) html += labelSheet();
+    if (s.id === "s-check") html += woodList();
+
+    if (!r.skipped) {
+      const ok = s.methods.filter((m) => BP.feasible(m, shop)).length;
+      const best = BP.bestFeasible(s, shop);
+      if (s.methods.length > 1) {
+        const sub = plan.mode === "mine" ? `${ok} of ${s.methods.length} possible with your workshop` : `${s.methods.length} methods`;
+        html += `<div class="sec-h"><h3>Method</h3><span>${sub}</span></div><div class="methods" role="radiogroup">` + s.methods.map((m) => {
+          const can = BP.feasible(m, shop);
+          const locked = plan.mode === "mine" && !can;
+          const on = r.method && r.method.id === m.id;
+          const badges = [m.ideal ? `<span class="badge ideal">Ideal</span>` : "", best && best.id === m.id ? `<span class="badge best">Best with your tools</span>` : "", `<span class="badge">${LEVEL[m.level]}${m.accuracy === 3 ? " · precise" : ""}</span>`].join("");
+          return `<button class="method${on ? " on" : ""}${locked ? " locked" : ""}" role="radio" aria-checked="${on}" ${locked ? 'aria-disabled="true"' : ""} data-method="${m.id}">
+            <span class="radio"></span>
+            <span><span class="mname">${m.name}${badges}</span>${m.note ? `<div class="mnote">${m.note}</div>` : ""}<div class="tchips">${toolChips(m)}${locked ? `<span class="ihave" data-ihave="${BP.missing(m, shop).map((x) => x.id + ":" + x.need).join(",")}">I have ${BP.missing(m, shop).length > 1 ? "these" : "it"}</span>` : ""}</div></span>
+            <span class="mtime"><b>${BP.fmtH(methodMinutes(m, s))}</b><small>${m.min} min / ${s.unit.replace(/s$/, "")}</small></span></button>`;
+        }).join("") + `</div>`;
+      }
+      if (r.method) {
+        const single = s.methods.length === 1;
+        html += `<div class="sec-h"><h3>How to do it</h3><span>${single ? `${r.method.name}` : "With the chosen method"}</span></div>`;
+        if (single) html += `<div class="tchips" style="margin:-2px 2px 10px">${toolChips(r.method)}</div>`;
+        html += `<div class="how"><ol>${r.method.how.map((h) => `<li><span>${h}</span></li>`).join("")}</ol>${s.wait ? `<div class="wait">${icon("lock", 14)}Leave it for ${s.wait} hours before the next step.</div>` : ""}</div>`;
+      }
+    }
+    $("sbody").innerHTML = html;
+    hydrateIcons($("stepView"));
+  }
+
+  // The wood for this project, split into what is already in the shop and what to buy.
+  function woodList() {
+    const S = BenchStock;
+    const stock = S.loadStock();
+    const plan = S.cutPlan(S.itemsFromParts(PARTS, BenchModel.size), stock);
+    const row = (L, W, T, sp, title, sub, right) => `<div class="wrow"><span class="mini">${S.boardArt(L, W, T, sp, 58, 30)}</span><span>${title}<small>${sub}</small></span><b>${right}</b></div>`;
+    // Setting the wood aside doubles as checking the stock: "found it" or "not there".
+    const mine = plan.fromStock.map((x) => {
+      const key = x.kind === "offcut" ? "offcut:" + x.offcut.id : "stock:" + x.catalog.id;
+      const right = S.sourceConfirmed(stock, x)
+        ? `<span class="found">${icon("check", 12)}Set aside</span>`
+        : `<span class="wask"><button data-src-yes="${key}">Found it</button><button data-src-gone="${key}">Not there</button></span>`;
+      return row(x.L, x.W, x.T, x.species, `${S.SPECIES[x.species].name} ${x.L} × ${x.W} × ${x.T}`, (x.kind === "offcut" ? "Offcut from " + x.offcut.from : "In your shop") + ` · ${x.items.length} part${x.items.length > 1 ? "s" : ""}`, right);
+    }).join("");
+    const maybe = plan.maybe.map((o) => `<div class="wmaybe">You may still have a <b>${S.SPECIES[o.species].name.toLowerCase()} offcut ${o.L} × ${o.W}</b> from ${o.from} that would save buying wood. <span class="wask"><button data-off-yes="${o.id}">I have it</button><button data-off-gone="${o.id}">It's gone</button></span></div>`).join("");
+    const buy = plan.buyList.map((g) => row(g.catalog.L, g.catalog.W, g.catalog.T, g.catalog.species, `${g.qty} × ${g.catalog.name}`, S.fmtSize(g.catalog) + " mm", "€" + g.qty * g.catalog.price)).join("");
+    return `<div class="sec-h"><h3>Wood for this project</h3><span>From the cut list, using your stock first</span></div>
+      <div class="wood"><div class="panel"><h4>Set aside from your shop<span>${plan.fromStock.length}</span></h4>${mine || '<p class="note">Nothing in your shop fits.</p>'}</div>
+      <div class="panel"><h4>Buy<span>€${plan.buyCost}</span></h4>${buy || '<p class="note">You have everything.</p>'}${maybe}
+        <div class="wlinks"><a href="a-workshop-flow.html#cutlist">Open the cut list</a><a href="a-workshop.html?from=planning#stock">Manage wood stock</a></div></div></div>`;
+  }
+
+  function labelSheet() {
+    const labels = PARTS.map((p) => {
+      const where = WHERE[p.id];
+      const or = p.kind === "Legs" ? "▲ top · face out" : p.kind === "Panels" ? "▲ face up · front edge" : "▲ top edge · face out";
+      return `<div class="lab"><span class="code">${CODES[p.id]}</span><span class="pn">${p.name}${where ? ", " + where : ""}</span><span class="pd">${fmtDims(p)} mm</span><span class="or">${or}</span></div>`;
+    }).join("");
+    return `<div class="sec-h"><h3>Part labels</h3><span>Codes match the shop drawings and cut list</span></div>
+      <div class="desk"><div class="sheet">${labels}</div>
+      <div class="bar"><span>12 labels on one A4 sheet. Stick them on a hidden face after milling.</span><button class="btn" data-toast="Printing 12 part labels">${icon("print", 15)}Print labels</button></div></div>`;
+  }
+
+  // ---------- Centre: tools view ----------
+  function renderTools() {
+    const mine = BP.build(shop, "mine", plan.methods);
+    const ideal = BP.build(shop, "ideal", plan.methods);
+    const opt = (key, title, p, note) => `<button class="opt${plan.mode === key ? " on" : ""}" data-mode="${key}"><h4>${title}<span>${note}</span></h4><div class="nums">
+      <div><label>Shop time</label><b>${BP.fmtH(p.minutes)}</b></div>
+      <div><label>${key === "mine" ? "Blocked" : "Tools to get"}</label><b class="${key === "mine" && p.blocked.length ? "warn" : ""}">${key === "mine" ? p.blocked.length : p.toBuy.length}</b></div>
+      <div><label>${key === "mine" ? "To borrow" : "Tool cost"}</label><b>${key === "mine" ? (p.blocked.length ? "€" + p.blocked.reduce((a, r) => a + BP.cheapestFix(r.step, shop).cost, 0) : "€0") : "€" + p.cost.toLocaleString("en")}</b></div></div></button>`;
+    const ups = BP.upgrades(shop, plan.methods);
+    const savers = ups.length ? `<div class="panel savers"><h4>Biggest time savers for this project<span>One tool at a time</span></h4>${ups.map((u) => `<div class="saver"><div><b>${BP.toolName(u.tool.id, u.add)}</b><small>${BP.CATS.find((c) => c.id === u.tool.cat).name} · about €${u.cost.toLocaleString("en")}</small></div><span class="gain">${u.unblocks ? "Unblocks a step" : "Saves " + BP.fmtH(u.saved)}</span><button class="btn" data-own="${u.tool.id}:${BP.have(shop, u.tool.id) + u.add}">I have it</button></div>`).join("")}</div>` : "";
+
+    const tools = built.tools.slice().sort((a, b) => (b.short > 0) - (a.short > 0) || BP.CATS.findIndex((c) => c.id === BP.TOOL[a.id].cat) - BP.CATS.findIndex((c) => c.id === BP.TOOL[b.id].cat));
+    const rows = tools.map((t) => {
+      const tool = BP.TOOL[t.id];
+      const steps = t.steps.map((id) => BP.STEP[id].name);
+      const st = t.short === 0 ? `<span class="stt">${icon("check", 11)}${tool.qty ? `Have ${t.got}` : "Have"}</span>` : `<span class="stt miss">${t.got ? `Have ${t.got} of ${t.need}` : "Missing"}</span>`;
+      return `<tr><td><b style="font-weight:500">${BP.toolName(t.id, t.need)}</b><small>${BP.CATS.find((c) => c.id === tool.cat).name}</small></td><td>${steps.length} step${steps.length > 1 ? "s" : ""}<small>${steps.slice(0, 2).join(", ")}${steps.length > 2 ? "…" : ""}</small></td><td class="num">${t.short ? "€" + t.short * tool.price : ""}</td><td>${st}</td></tr>`;
+    }).join("");
+    $("toolView").innerHTML = `<div class="compare">${opt("mine", "Only my workshop", mine, presetName())}${opt("ideal", "Ideal tools", ideal, "Fastest, most precise methods")}</div>${savers}
+      <div class="sec-h"><h3>Tools for this plan</h3><span>${built.tools.length} tools · ${built.toBuy.length} to get</span></div>
+      <table class="tt"><thead><tr><th>Tool</th><th>Used in</th><th class="num">To get</th><th style="width:130px">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // ---------- Right ----------
+  function renderRight() {
+    const r = rowOf(plan.sel);
+    let stepTools = "";
+    if (r.skipped) stepTools = `<p class="note">Nothing to do in this step.</p>`;
+    else {
+      const m = r.method || BP.cheapestFix(r.step, shop).method;
+      const miss = Object.fromEntries(BP.missing(m, shop).map((x) => [x.id, x]));
+      stepTools = m.tools.length ? m.tools.map(([id, n]) => {
+        const x = miss[id];
+        return `<div class="trow${x ? " miss" : ""}">${x ? `<span class="mark-miss">!</span>` : icon("check", 14)}<span>${BP.toolName(id, n)}</span><small>${x ? (x.got ? `have ${x.got}` : "missing") : ""}</small></div>`;
+      }).join("") : `<p class="note">No tools needed.</p>`;
+      if (!r.method) stepTools = `<p class="note" style="margin-bottom:6px">For the cheapest way to do it:</p>` + stepTools;
+    }
+    const toBuy = built.toBuy;
+    const have = built.tools.length - toBuy.length;
+    const buyList = toBuy.length ? toBuy.map((t) => `<div class="trow miss"><span class="mark-miss">!</span><span>${BP.toolName(t.id, t.short)}</span><small>€${t.cost}</small></div>`).join("") + `<div class="stat total"><span>To borrow or buy</span><b>€${built.cost.toLocaleString("en")}</b></div>` : `<p class="note">You have every tool this plan needs.</p>`;
+    const lvl = BP.LEVELS.find((l) => l.id === shop.level);
+    const sty = BP.STYLES.find((s) => s.id === shop.style);
+    $("right").innerHTML = `
+      <div class="card"><h3>Tools for this step</h3>${stepTools}</div>
+      <div class="card"><h3>Tools for the project <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">${have} of ${built.tools.length} ready</span></h3>${buyList}
+        <button class="linkbtn" data-view="tools">${plan.mode === "mine" ? "Compare with ideal tools" : "Open the tool list"} ${icon("chevronRight", 13)}</button></div>
+      <div class="card"><h3>Your workshop</h3>
+        <div class="wsum"><div class="stat"><span>Tools</span><b>${presetName()} · ${Object.keys(shop.owned).length}</b></div><div class="stat"><span>Prefer</span><b>${sty.name}</b></div><div class="stat"><span>Experience</span><b>${lvl.name}</b></div></div>
+        <p class="note">Times are adjusted for your experience. The workshop is shared by every project.</p>
+        <a class="btn" href="a-workshop.html?from=planning" style="margin-top:12px;width:100%;justify-content:center">${icon("stock", 15)}Edit my workshop</a></div>`;
+  }
+
+  // ---------- Setup banner: shown until the guided workshop setup is finished ----------
+  function renderBanner() {
+    const el = $("setupBanner");
+    if (BP.hasShop() && shop.setup === "done" || plan.bannerHidden) { el.innerHTML = ""; return; }
+    const arts = ["router", "tablesaw", "jackplane"].map((id) => toolArt(id, 60)).join("");
+    el.innerHTML = `<div class="setup-banner"><span class="arts">${arts}</span><div><b>This plan assumes a small shop.</b><p>Tell BenchUp what you have in about a minute, and every step will use methods you can actually do.</p></div>
+      <div class="acts"><button class="btn" data-hide-banner>Not now</button><a class="btn primary" href="a-workshop-setup.html?from=planning">Set up my workshop</a></div></div>`;
+  }
+
+  // ---------- Render ----------
+  function render() {
+    built = BP.build(shop, plan.mode, plan.methods);
+    document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === plan.mode));
+    document.querySelectorAll("#view button").forEach((b) => b.classList.toggle("on", b.dataset.view === plan.view));
+    $("stepView").hidden = plan.view !== "steps";
+    $("toolView").hidden = plan.view !== "tools";
+    renderBanner();
+    renderSteps();
+    renderFacts();
+    if (plan.view === "steps") renderStep(); else renderTools();
+    renderRight();
+  }
+
+  function own(spec) {
+    const owned = Object.assign({}, shop.owned);
+    spec.split(",").forEach((pair) => { const [id, n] = pair.split(":"); owned[id] = Math.max(owned[id] || 0, Number(n)); });
+    shop.owned = owned;
+    BP.saveShop(shop);
+    toast("Added to your workshop");
+    render();
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const tst = t.closest("[data-toast]");
+    if (tst) { toast(tst.dataset.toast); return; }
+    const step = t.closest("[data-step]");
+    if (step) { plan.sel = step.dataset.step; plan.view = "steps"; save(); $("scroll").scrollTop = 0; return; }
+    const nav = t.closest("[data-nav]");
+    if (nav) { const i = indexOf(plan.sel) + Number(nav.dataset.nav); if (BP.STEPS[i]) { plan.sel = BP.STEPS[i].id; save(); $("scroll").scrollTop = 0; } return; }
+    // Wood checks from the "Check materials" step.
+    const sy = t.closest("[data-src-yes]"), sg = t.closest("[data-src-gone]"), oy = t.closest("[data-off-yes]"), og = t.closest("[data-off-gone]");
+    if (sy || sg || oy || og) {
+      const S = BenchStock;
+      const stock = S.loadStock();
+      const snap = JSON.parse(JSON.stringify(stock));
+      const plan = S.cutPlan(S.itemsFromParts(PARTS, BenchModel.size), stock);
+      const src = (key) => plan.fromStock.find((x) => (x.kind === "offcut" ? "offcut:" + x.offcut.id : "stock:" + x.catalog.id) === key);
+      if (sy) S.confirmSource(stock, src(sy.dataset.srcYes));
+      if (sg) S.goneSource(stock, src(sg.dataset.srcGone));
+      if (oy) { const o = stock.offcuts.find((x) => x.id === oy.dataset.offYes); if (o) o.seen = new Date().toISOString(); }
+      if (og) stock.offcuts = stock.offcuts.filter((x) => x.id !== og.dataset.offGone);
+      S.saveStock(stock);
+      render();
+      if (sg || og) S.undoToast(sg ? "Taken out of your stock; it's on the shopping list now." : "Offcut marked as gone", snap, render);
+      return;
+    }
+    if (t.closest("[data-hide-banner]")) { plan.bannerHidden = true; save(); return; }
+    const ih = t.closest("[data-ihave]");
+    if (ih) { e.stopPropagation(); own(ih.dataset.ihave); return; }
+    if (t.closest("[data-done]")) { plan.done[plan.sel] = !plan.done[plan.sel]; if (!plan.done[plan.sel]) delete plan.done[plan.sel]; save(); return; }
+    const m = t.closest("[data-method]");
+    if (m) {
+      if (m.classList.contains("locked")) { toast("Not possible with your workshop. Switch to Ideal tools to choose it."); return; }
+      plan.methods[plan.sel] = m.dataset.method;
+      save();
+      return;
+    }
+    const mode = t.closest("[data-mode]");
+    if (mode) { plan.mode = mode.dataset.mode; save(); return; }
+    const v = t.closest("[data-view]");
+    if (v) { plan.view = v.dataset.view; save(); $("scroll").scrollTop = 0; return; }
+    const o = t.closest("[data-own]");
+    if (o) { own(o.dataset.own); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input, textarea")) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const i = indexOf(plan.sel) + (e.key === "ArrowDown" ? 1 : -1);
+      if (BP.STEPS[i]) { e.preventDefault(); plan.sel = BP.STEPS[i].id; save(); }
+    }
+  });
+  window.addEventListener("storage", (e) => {
+    if (e.key === "benchup-proto-workshop") { shop = BP.loadShop(); render(); }
+    if (e.key === "benchup-proto-plan") { plan = BP.loadPlan(); render(); }
+  });
+
+  hydrateIcons();
+  render();
+})();
+</script>
+</body>
+</html>
