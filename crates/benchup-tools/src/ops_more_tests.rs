@@ -1,4 +1,4 @@
-//! Tests for the tools in `ops_more.rs` (BenchUp3D/benchup#42).
+//! Tests for the tools in `ops_more.rs` (regenova/benchup#42).
 use super::*;
 use benchup_core::router::Profile;
 use serde_json::{Value, json};

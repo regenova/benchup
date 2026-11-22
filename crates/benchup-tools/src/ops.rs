@@ -1047,7 +1047,7 @@ fn erase(model: &mut Model, a: IdsArg) -> Res {
         ));
     }
     let set = entities(model, &a.ids, true)?;
-    // The core removes the joints of the boards it erases (BenchUp3D/benchup#36).
+    // The core removes the joints of the boards it erases (regenova/benchup#36).
     let removed = model.erase(&set);
     let erased: Vec<u64> = set.iter().copied().filter(|id| !model.contains_entity(id)).collect();
     if erased.is_empty() {

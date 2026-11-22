@@ -3295,7 +3295,7 @@ impl BenchUpApp {
                                 ui.close();
                             }
                             if ui.add(Self::menu_item_button(ui, tr!("app.github"), None)).clicked() {
-                                ctx.open_url(egui::OpenUrl::new_tab("https://github.com/BenchUp3D/benchup"));
+                                ctx.open_url(egui::OpenUrl::new_tab("https://github.com/regenova/benchup"));
                                 ui.close();
                             }
                             ui.separator();

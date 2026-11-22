@@ -40,11 +40,13 @@ jobs:
           python -m unittest discover -s scripts -p 'test_desktop_release.py'
           python -m unittest discover -s scripts -p 'test_verify_update_transfer.py'
 
-      - name: Verify old updater URLs survived the repository transfer
+      - name: Verify active updater feed and report retired legacy URLs
         env:
           SOURCE_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/verify_update_transfer.py --repository "$SOURCE_REPOSITORY"
+        # The old organizations no longer provide redirects. Release notes tell
+        # affected users to install manually; the current feed must remain valid.
+        run: python scripts/verify_update_transfer.py --repository "$SOURCE_REPOSITORY" --allow-missing-legacy
 
   build:
     name: Build ${{ matrix.platform }}

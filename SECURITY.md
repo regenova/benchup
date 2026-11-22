@@ -5,7 +5,7 @@ formerly named KetchUp. It does not cover the separate Ketchup Server project.
 
 ## Supported versions
 
-Security fixes target the [latest stable release](https://github.com/BenchUp3D/benchup/releases/latest).
+Security fixes target the [latest stable release](https://github.com/regenova/benchup/releases/latest).
 Older releases do not receive security backports. Please update before checking
 whether an issue still occurs. Reports affecting development builds are also
 welcome; include the commit identifier.
@@ -15,9 +15,9 @@ welcome; include the commit identifier.
 Please report suspected vulnerabilities privately before sharing exploit details
 in a public issue, pull request, or discussion.
 
-Use GitHub's [Report a vulnerability](https://github.com/BenchUp3D/benchup/security/advisories/new)
+Use GitHub's [Report a vulnerability](https://github.com/regenova/benchup/security/advisories/new)
 form if private vulnerability reporting is available. If the form is unavailable,
-open a [public issue](https://github.com/BenchUp3D/benchup/issues/new) asking
+open a [public issue](https://github.com/regenova/benchup/issues/new) asking
 maintainers for a private security contact. Include no vulnerability details,
 sample files, credentials, or exploit code in that public request; wait for a
 private channel before sending them.
@@ -62,6 +62,6 @@ resolution deadline is guaranteed.
 
 Please allow time to investigate and make a fix available before publishing
 technical details. Confirmed vulnerabilities may be documented in
-[GitHub Security Advisories](https://github.com/BenchUp3D/benchup/security/advisories)
+[GitHub Security Advisories](https://github.com/regenova/benchup/security/advisories)
 and release notes, with affected versions and mitigations where available.
 Reporters can request credit or remain anonymous.

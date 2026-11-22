@@ -42,7 +42,7 @@ fn issue_url(report: &str) -> String {
     let body = format!(
         "Describe your feature suggestion or bug here.\n\n---\n\n## System Information\n\n{fence}text\n{report}\n{fence}\n"
     );
-    let mut url = String::from("https://github.com/BenchUp3D/benchup/issues/new?body=");
+    let mut url = String::from("https://github.com/regenova/benchup/issues/new?body=");
     // Percent-encode UTF-8 bytes as a query value, including newlines and reserved characters.
     for byte in body.bytes() {
         if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
@@ -220,7 +220,7 @@ mod tests {
         let report = "GPU: Érable & #1? 100% + / =\nDriver: ```custom```\n";
         let url = issue_url(report);
         let encoded = url
-            .strip_prefix("https://github.com/BenchUp3D/benchup/issues/new?body=")
+            .strip_prefix("https://github.com/regenova/benchup/issues/new?body=")
             .unwrap();
         assert!(!encoded.contains(['&', '#', '+', '?', '\n', ' ']));
         let mut decoded = Vec::new();

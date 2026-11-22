@@ -1,6 +1,6 @@
 # Round 7, live (16 November 2026)
 
-This round is item 3 of [#55](https://github.com/BenchUp3D/benchup/issues/55): the twelve original cases (01–12) rerun against the project open in BenchUp instead of a file, through `benchup … --live` and `benchup bridge`. Each agent got the usual prompt, prepared with `setup.py --live`, so it learned the tools only from `benchup --help`, the guide and the tool output, and was told the project was open in the app. The requests were not changed.
+This round is item 3 of [#55](https://github.com/regenova/benchup/issues/55): the twelve original cases (01–12) rerun against the project open in BenchUp instead of a file, through `benchup … --live` and `benchup bridge`. Each agent got the usual prompt, prepared with `setup.py --live`, so it learned the tools only from `benchup --help`, the guide and the tool output, and was told the project was open in the app. The requests were not changed.
 
 The cases ran one at a time on each surface, because one BenchUp serves one bridge:
 

@@ -1,6 +1,6 @@
 # Rounds 1–4 (12 November 2026)
 
-Before the tools of [#42](https://github.com/BenchUp3D/benchup/issues/42). Each cell is the number of `benchup` commands the agent ran, with the commands that returned an error in brackets. Rounds 1–4 used the 12 original cases; the fixes between rounds are in the history of PR #41.
+Before the tools of [#42](https://github.com/regenova/benchup/issues/42). Each cell is the number of `benchup` commands the agent ran, with the commands that returned an error in brackets. Rounds 1–4 used the 12 original cases; the fixes between rounds are in the history of PR #41.
 
 | # | Case | R1 | R2 | R3 | R4 | Result in R4 |
 |---|---|---|---|---|---|---|
@@ -18,4 +18,4 @@ Before the tools of [#42](https://github.com/BenchUp3D/benchup/issues/42). Each 
 | 12 | A shelf that does not fit | 8 (0) | 7 (0) | 12 (0) | 10 (0) | ✅, with `passes_through` |
 | | **Total** | **~701 (72)** | **285 (21)** | **218 (3)** | **~245 (~7)** | 11 ✅, 1 ⚠️ |
 
-What remained after round 4 became [#42](https://github.com/BenchUp3D/benchup/issues/42).
+What remained after round 4 became [#42](https://github.com/regenova/benchup/issues/42).

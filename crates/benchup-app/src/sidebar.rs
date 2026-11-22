@@ -4091,6 +4091,51 @@ mod preference_tests {
     }
 
     #[test]
+    fn release_notes_read_marker_round_trips_with_reference_volume_catalogs_in_ron() {
+        for count in [0, 1, 2] {
+            let ctx = egui::Context::default();
+            let mut app = BenchUpApp::with_document(Document::default(), None, true);
+            app.general_settings.volume.entries.clear();
+            app.general_settings.volume.selected = None;
+            for _ in 0..count {
+                app.general_settings.volume.add_entry();
+            }
+            app.release_notes.last_seen_version = Some(app.release_notes.latest_version().into());
+            let expected = app.general_settings.volume.clone();
+            let mut storage = SavedPreferences::default();
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+            assert!(eframe::get_value::<InspectorPreferences>(&storage, PREFERENCE_KEY).is_some());
+
+            // Reload repeatedly without editing a model or waiting for autosave.
+            for _ in 0..2 {
+                let ctx = egui::Context::default();
+                let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+                restored.restore_inspector_preferences(&ctx, Some(&storage));
+                assert_eq!(restored.general_settings.volume, expected);
+                restored.release_notes.open_if_unread();
+                assert!(!restored.release_notes.open);
+                assert!(!restored.release_notes.has_unread());
+                restored.persist_inspector_changes(&ctx, Some(&mut storage), false);
+                assert!(storage.get_string("benchup.inspector.unreadable-backup.v1").is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_reference_volume_preferences_restore_from_ron() {
+        let mut storage = SavedPreferences::default();
+        storage.set_string(PREFERENCE_KEY, "(general:(volume:(visible:true,size_m:(1.0,2.0,3.0))))".into());
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert!(app.general_settings.volume.visible);
+        assert_eq!(app.general_settings.volume.entries.len(), 1);
+        assert_eq!(app.general_settings.volume.entries[0].size_m, [1., 2., 3.]);
+    }
+
+    #[test]
     fn viewed_release_notes_save_immediately_and_restore_for_other_projects() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
