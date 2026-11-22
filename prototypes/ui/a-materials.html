@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Materials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  a.stage, a.btn { text-decoration: none; color: inherit; }
+  a.btn.primary { color: var(--primary-ink); }
+  :root { --none-a: #ece9e3; --none-b: #f8f7f4; --legend-bg: rgba(255,255,255,.9); }
+  :root[data-theme="dark"] { --none-a: #3a3830; --none-b: #2c2a24; --legend-bg: rgba(34,33,28,.9); }
+  .body { grid-template-columns: 268px 1fr 344px; }
+
+  /* Left: parts grouped by material */
+  .sel-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 12px 6px; color: var(--muted); font-size: 12px; min-height: 28px; }
+  .link { color: var(--accent); font-size: 12px; padding: 4px 6px; border-radius: 6px; }
+  .link:hover { background: var(--accent-soft); }
+  .link:disabled { color: var(--faint); background: none; cursor: default; }
+  .mgroup { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; padding: 12px 8px 4px; }
+  .mgroup .sw { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--swatch-edge); background-image: repeating-linear-gradient(100deg, rgba(0,0,0,.07) 0 2px, transparent 2px 6px); }
+  .mgroup b { font-size: 12px; font-weight: 600; }
+  .mgroup span { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .mgroup.unassigned b { color: var(--accent); }
+  .sw.none { background: repeating-linear-gradient(45deg, var(--none-a) 0 3px, var(--none-b) 3px 6px) !important; }
+  .row { grid-template-columns: 1fr auto; padding-left: 32px; }
+  .row .tick { display: none; }
+  .legend { position: absolute; left: 16px; bottom: 18px; background: var(--legend-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; font-size: 12px; }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--swatch-edge); }
+
+  /* Right panel */
+  .card h3 .act { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); cursor: pointer; }
+  .mat { grid-template-columns: 36px 1fr auto; }
+  .mat .meta { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mat .meta b { display: block; color: var(--ink); font-weight: 600; }
+  .brush { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--on-accent); margin-left: 6px; vertical-align: 1px; }
+  .catalog { margin-top: 8px; max-height: 168px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; }
+  .cat { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); }
+  .cat:first-child { border-top: 0; }
+  .cat .sw { width: 22px; height: 22px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); background-image: repeating-linear-gradient(100deg, rgba(0,0,0,.07) 0 2px, transparent 2px 6px); }
+  .cat small { display: block; color: var(--muted); }
+  .cat .add { height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; }
+  .cat .add:hover { background: var(--hover); }
+  .cat .add:disabled { color: var(--faint); border-color: var(--line); cursor: default; background: none; }
+  .search.inline { margin: 0; }
+  select.native { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); padding: 0 8px; background: var(--panel); width: 100%; }
+  .grits { display: flex; gap: 4px; flex-wrap: wrap; }
+  .grit { height: 26px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .grit.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.45; }
+  .total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; display: flex; margin: 6px 0 8px; }
+  .bar i { display: block; height: 100%; }
+  .stat .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: 0; box-shadow: inset 0 0 0 1px var(--swatch-edge); }
+  .warn { color: var(--accent); }
+  .tool .ic { pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <div class="project"><b>Hall bench</b><span id="projectMeta">Saved · 12 parts</span></div>
+      <button class="iconbtn" title="Undo" id="undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage active" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="left">
+      <div class="aside-head"><h2>Parts<span class="count">12</span></h2><span style="color:var(--faint);font-size:12px">by material</span></div>
+      <div class="search"><i data-icon="search" data-size="15"></i><input id="partSearch" placeholder="Find a part" /></div>
+      <div class="sel-bar"><span id="selCount">Nothing selected</span><button class="link" id="selIdentical">Select identical</button></div>
+      <div class="parts" id="parts"></div>
+    </aside>
+
+    <main>
+      <svg class="vp" id="vp"></svg>
+      <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" id="views">
+          <button class="on" data-v="persp"><i data-icon="cube" data-size="15"></i>3D</button>
+          <button data-v="front">Front</button>
+          <button data-v="side">Side</button>
+          <button data-v="top">Top</button>
+        </div>
+      </div>
+      <div class="overlay" style="right:16px;top:16px">
+        <div class="seg" id="colorBy">
+          <button class="on" data-c="material">By material</button>
+          <button data-c="part">By part</button>
+        </div>
+        <div class="seg"><button class="on" id="grainToggle"><i data-icon="grain" data-size="15"></i>Grain</button></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="toolstrip">
+        <div class="hint" id="hint"></div>
+        <div class="tools" id="tools"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right">
+      <div class="card">
+        <h3>Project materials<span class="act" id="focusCatalog">+ Add</span></h3>
+        <div id="projectMats"></div>
+      </div>
+      <div class="card" id="catalogCard">
+        <h3>Catalog<span id="catalogCount" style="text-transform:none;letter-spacing:0;font-weight:500"></span></h3>
+        <div class="search inline"><i data-icon="search" data-size="15"></i><input id="catSearch" placeholder="Species or sheet goods" /></div>
+        <div class="catalog" id="catalog"></div>
+      </div>
+      <div class="card" id="selection"></div>
+      <div class="card" id="summary"></div>
+    </aside>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/materials-extras.js"></script>
+<script>
+  const { PARTS, size, fmtDims, mm, BenchView } = BenchModel;
+  const { drawGrain, outlineSelection } = MaterialsExtras;
+
+  // Prices are illustrative: hardwood per board foot, sheet goods per square metre.
+  const CATALOG = [
+    { key: "oak", name: "White oak", kind: "Hardwood", thick: [20, 27, 34, 45], price: 9.5, unit: "bf", color: "#cfa771" },
+    { key: "walnut", name: "Black walnut", kind: "Hardwood", thick: [20, 25, 32], price: 16.0, unit: "bf", color: "#7b5338" },
+    { key: "maple", name: "Hard maple", kind: "Hardwood", thick: [20, 27, 34], price: 8.2, unit: "bf", color: "#e9d3a6" },
+    { key: "cherry", name: "American cherry", kind: "Hardwood", thick: [20, 27, 34], price: 12.5, unit: "bf", color: "#b9714e" },
+    { key: "ash", name: "European ash", kind: "Hardwood", thick: [27, 34, 52], price: 7.1, unit: "bf", color: "#dcc49c" },
+    { key: "sapele", name: "Sapele", kind: "Hardwood", thick: [27, 34], price: 10.4, unit: "bf", color: "#91503a" },
+    { key: "poplar", name: "Tulip poplar", kind: "Hardwood", thick: [20, 27], price: 5.6, unit: "bf", color: "#d6cf9e" },
+    { key: "birch", name: "Birch plywood", kind: "Sheet 2500 × 1250", thick: [12, 15, 18], price: 38, unit: "m²", color: "#e6d3a8" },
+    { key: "mdf", name: "MDF", kind: "Sheet 2440 × 1220", thick: [12, 18], price: 14, unit: "m²", color: "#c4b195" },
+    { key: "oakply", name: "Oak-veneered plywood", kind: "Sheet 2500 × 1250", thick: [18], price: 62, unit: "m²", color: "#d4ad78" },
+  ];
+  const PART_COLORS = { "Leg": "#c98f62", "Long apron": "#8ea8c6", "Short apron": "#9fc293", "Stretcher": "#d9b45f", "Lower shelf": "#c79bc9", "Top": "#e08c6f" };
+  // Unpainted parts read as neutral on either stage.
+  let UNASSIGNED = benchTheme.pick("#d9d5ce", "#7a756a");
+  const FINISHES = ["Hardwax oil, matte", "Hardwax oil, satin", "Water-based lacquer", "Shellac, French polish", "Danish oil", "No finish"];
+  const GRITS = [80, 120, 150, 180, 240, 320];
+
+  const catalogItem = (key) => CATALOG.find((m) => m.key === key);
+  const thickRange = (m) => m.thick.length > 1 ? `${m.thick[0]}–${m.thick[m.thick.length - 1]} mm` : `${m.thick[0]} mm`;
+  let projectMats = ["oak", "walnut", "birch"];
+  let brush = "oak";
+  let tool = "assign";
+  let colorBy = "material";
+  let showGrain = true;
+  let selected = new Set(["apron-f"]);
+  let shiftDown = false;
+  const history = [];
+
+  // Per-part material state. The stretchers start unassigned to show the gap.
+  const state = {};
+  for (const p of PARTS) {
+    state[p.id] = {
+      material: p.id.startsWith("str-") ? null : ({ plywood: "birch" }[p.material] || p.material),
+      grain: "length",
+      sanding: [120, 180, 240],
+      finish: p.id === "shelf" ? "Water-based lacquer" : "Hardwax oil, matte",
+      coats: 2,
+    };
+  }
+
+  const parts = PARTS.map((p) => ({ ...p }));
+  const view = new BenchView(document.getElementById("vp"), {
+    parts,
+    theme: {
+      colors: {},
+      stroke: "rgba(60,45,30,0.45)",
+      strokeWidth: 0.7,
+      selectedStroke: "#d63b32",
+      hoverStroke: "rgba(214,59,50,.6)",
+      grid: { minor: "rgba(40,40,40,.06)", major: "rgba(40,40,40,.12)" },
+      shadow: "rgba(60,50,40,.22)",
+    },
+    dims: false,
+    view: { azimuth: 62, elevation: 24, pan: [0, -30] },
+    onSelect: (id) => onPartClick(id, shiftDown),
+    onRender: (v) => {
+      if (showGrain) {
+        drawGrain(v, {
+          prefix: "vp",
+          direction: (part) => state[part.id].grain,
+          color: (part) => v.theme.colors[part.material] || UNASSIGNED,
+        });
+      }
+      outlineSelection(v, selected, benchTheme.accent());
+    },
+  });
+  document.getElementById("vp").addEventListener("pointerdown", (e) => (shiftDown = e.shiftKey), true);
+  benchTheme.bind(view);
+  window.addEventListener("themechange", () => {
+    UNASSIGNED = benchTheme.pick("#d9d5ce", "#7a756a");
+    syncModel();
+    renderLegend();
+  });
+
+  function syncModel() {
+    const colors = { unassigned: UNASSIGNED };
+    for (const m of CATALOG) colors[m.key] = m.color;
+    for (const [name, c] of Object.entries(PART_COLORS)) colors["part:" + name] = c;
+    for (const p of parts) {
+      const mat = state[p.id].material;
+      p.material = colorBy === "part" ? "part:" + p.name : mat || "unassigned";
+    }
+    view.theme.colors = colors;
+    view.selectedId = null;
+    view.render();
+  }
+
+  const identicalTo = (id) => {
+    const p = PARTS.find((q) => q.id === id);
+    return PARTS.filter((q) => q.name === p.name).map((q) => q.id);
+  };
+
+  function remember() {
+    history.push(JSON.stringify(state));
+    if (history.length > 50) history.shift();
+  }
+
+  function assign(ids, key) {
+    remember();
+    for (const id of ids) state[id].material = key;
+  }
+
+  function onPartClick(id, shift) {
+    if (!id) {
+      if (tool === "select") selected = new Set();
+      refresh();
+      return;
+    }
+    const ids = shift ? identicalTo(id) : [id];
+    if (tool === "assign") {
+      assign(ids, brush);
+      selected = new Set(ids);
+    } else if (tool === "grain") {
+      remember();
+      const next = state[id].grain === "length" ? "across" : "length";
+      for (const i of ids) state[i].grain = next;
+      selected = new Set(ids);
+    } else if (shift) {
+      for (const i of ids) selected.add(i);
+    } else {
+      selected = new Set(ids);
+    }
+    refresh();
+  }
+
+  function renderParts() {
+    const q = document.getElementById("partSearch").value.toLowerCase();
+    const groups = [...projectMats.map((k) => ({ key: k, item: catalogItem(k) })), { key: null }];
+    const host = document.getElementById("parts");
+    host.innerHTML = groups.map(({ key, item }) => {
+      const items = PARTS.filter((p) => state[p.id].material === key && p.name.toLowerCase().includes(q));
+      if (!items.length && (key === null || q)) return "";
+      const head = key === null
+        ? `<div class="mgroup unassigned"><span class="sw none"></span><b>Unassigned</b><span>${items.length}</span></div>`
+        : `<div class="mgroup"><span class="sw" style="background-color:${item.color}"></span><b>${item.name}</b><span>${items.length}</span></div>`;
+      const rows = items.length
+        ? items.map((p) => `<div class="row ${selected.has(p.id) ? "sel" : ""}" data-id="${p.id}"><span class="nm">${p.name}</span><span class="dm">${fmtDims(p)}</span></div>`).join("")
+        : `<div class="row" style="cursor:default;color:var(--faint)"><span class="nm">No parts yet</span></div>`;
+      return head + rows;
+    }).join("");
+    host.querySelectorAll(".row[data-id]").forEach((r) => (r.onclick = (e) => {
+      const id = r.dataset.id;
+      if (e.metaKey || e.ctrlKey) {
+        selected.has(id) ? selected.delete(id) : selected.add(id);
+        refresh();
+      } else if (tool === "assign" || tool === "grain") {
+        onPartClick(id, e.shiftKey);
+      } else {
+        selected = e.shiftKey ? new Set(identicalTo(id)) : new Set([id]);
+        refresh();
+      }
+    }));
+    const n = selected.size;
+    const names = [...new Set([...selected].map((id) => PARTS.find((p) => p.id === id).name))];
+    document.getElementById("selCount").textContent = n ? `${n} selected${names.length === 1 ? " · " + names[0] : ""}` : "Nothing selected";
+    const ident = document.getElementById("selIdentical");
+    ident.disabled = n === 0 || names.every((nm) => PARTS.filter((p) => p.name === nm).every((p) => selected.has(p.id)));
+  }
+
+  const TOOLS = [
+    ["select", "select", "Select"],
+    "|",
+    ["assign", "paint", "Assign"],
+    ["grain", "grain", "Grain"],
+    ["finish", "finish", "Finish"],
+    ["stock", "stock", "Stock"],
+  ];
+  const HINTS = {
+    select: "Click parts to select · <kbd>⌘</kbd> click adds · <kbd>⇧</kbd> selects identical parts",
+    assign: () => `Pick a material, then click parts · <kbd>⇧</kbd> fills identical parts · Brush: <b>${catalogItem(brush).name}</b>`,
+    grain: "Click a part to turn its grain between length and across · <kbd>⇧</kbd> turns identical parts",
+    finish: "Select parts to edit their sanding and finish on the right",
+    stock: "Select parts to choose the stock thickness they are milled from",
+  };
+
+  function renderTools() {
+    document.getElementById("tools").innerHTML = TOOLS.map((t) => t === "|" ? '<span class="tool-sep"></span>' :
+      `<button class="tool ${t[0] === tool ? "on" : ""}" data-tool="${t[0]}">${icon(t[1], 20)}<span>${t[2]}</span></button>`).join("");
+    document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => { tool = b.dataset.tool; refresh(); }));
+    const h = HINTS[tool];
+    document.getElementById("hint").innerHTML = typeof h === "function" ? h() : h;
+  }
+
+  // Quantities: hardwood in board feet with 15 % milling waste, sheets in m² with 10 %.
+  function quantities() {
+    const out = {};
+    for (const p of PARTS) {
+      const key = state[p.id].material;
+      if (!key) continue;
+      const item = catalogItem(key);
+      const s = size(p);
+      const qty = item.unit === "bf"
+        ? (s.length * 10 * s.width * 10 * stockThickness(p.id) / 2359737) * 1.15
+        : (s.length * 10 * s.width * 10 / 1e6) * 1.1;
+      out[key] = (out[key] || 0) + qty;
+    }
+    return out;
+  }
+
+  function stockThickness(id) {
+    const p = PARTS.find((q) => q.id === id);
+    const item = catalogItem(state[id].material);
+    if (!item) return Math.round(size(p).thickness * 10);
+    const need = Math.round(size(p).thickness * 10) + (item.unit === "bf" ? 2 : 0);
+    return state[id].stock && item.thick.includes(state[id].stock) ? state[id].stock : (item.thick.find((t) => t >= need) || item.thick[item.thick.length - 1]);
+  }
+
+  function renderProjectMats() {
+    const qty = quantities();
+    document.getElementById("projectMats").innerHTML = projectMats.map((k) => {
+      const m = catalogItem(k);
+      const count = PARTS.filter((p) => state[p.id].material === k).length;
+      const amount = qty[k] ? `${qty[k].toFixed(qty[k] < 10 ? 2 : 1)} ${m.unit}` : "unused";
+      return `<div class="mat ${k === brush ? "on" : ""}" data-key="${k}" title="Use as brush">
+        <span class="big" style="background-color:${m.color}"></span>
+        <div>${m.name}${k === brush ? '<span class="brush">Brush</span>' : ""}<small>${thickRange(m)} · € ${m.price.toFixed(2)}/${m.unit}</small></div>
+        <div class="meta"><b>${count} part${count === 1 ? "" : "s"}</b>${amount}</div></div>`;
+    }).join("");
+    document.querySelectorAll("#projectMats .mat").forEach((n) => (n.onclick = () => {
+      brush = n.dataset.key;
+      tool = "assign";
+      refresh();
+    }));
+  }
+
+  function renderCatalog() {
+    const q = document.getElementById("catSearch").value.toLowerCase();
+    const list = CATALOG.filter((m) => (m.name + " " + m.kind).toLowerCase().includes(q));
+    document.getElementById("catalogCount").textContent = `${list.length} of ${CATALOG.length}`;
+    document.getElementById("catalog").innerHTML = list.map((m) => {
+      const added = projectMats.includes(m.key);
+      return `<div class="cat"><span class="sw" style="background-color:${m.color}"></span>
+        <div>${m.name}<small>${m.kind} · ${thickRange(m)} · € ${m.price.toFixed(2)}/${m.unit}</small></div>
+        <button class="add" data-key="${m.key}" ${added ? "disabled" : ""}>${added ? "Added" : "Add"}</button></div>`;
+    }).join("") || '<div class="cat"><span></span><div style="color:var(--muted)">No matching material</div><span></span></div>';
+    document.querySelectorAll("#catalog .add").forEach((b) => (b.onclick = () => {
+      projectMats.push(b.dataset.key);
+      brush = b.dataset.key;
+      tool = "assign";
+      refresh();
+    }));
+  }
+
+  function common(ids, key) {
+    const values = [...new Set(ids.map((id) => JSON.stringify(key(id))))];
+    return values.length === 1 ? JSON.parse(values[0]) : undefined;
+  }
+
+  function renderSelection() {
+    const host = document.getElementById("selection");
+    const ids = [...selected];
+    if (!ids.length) {
+      host.innerHTML = `<h3>Selection</h3><div class="note" style="margin:0">Select parts in the model or the list to set their material, stock, grain and finish. With the Assign tool, clicking a part applies the brush directly.</div>`;
+      return;
+    }
+    const names = [...new Set(ids.map((id) => PARTS.find((p) => p.id === id).name))];
+    const title = names.length === 1 ? `${names[0]}${ids.length > 1 ? " × " + ids.length : ""}` : `${ids.length} parts`;
+    const mat = common(ids, (id) => state[id].material);
+    const item = mat ? catalogItem(mat) : null;
+    const grain = common(ids, (id) => state[id].grain);
+    const finish = common(ids, (id) => state[id].finish);
+    const coats = common(ids, (id) => state[id].coats);
+    const sanding = common(ids, (id) => state[id].sanding);
+    const stock = common(ids, (id) => stockThickness(id));
+    const thin = item && ids.some((id) => Math.round(size(PARTS.find((p) => p.id === id)).thickness * 10) > stockThickness(id));
+    const allIdentical = names.every((nm) => PARTS.filter((p) => p.name === nm).every((p) => selected.has(p.id)));
+    host.innerHTML = `
+      <h3>Selection<span style="text-transform:none;letter-spacing:0;font-weight:500">${names.length === 1 ? fmtDims(PARTS.find((p) => p.id === ids[0])) : ""}</span></h3>
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">${title}</div>
+      <div class="field"><label>Material</label>
+        <select class="native" id="selMat">
+          ${mat === undefined ? '<option value="" selected>Mixed</option>' : ""}
+          <option value="none" ${mat === null ? "selected" : ""}>Unassigned</option>
+          ${projectMats.map((k) => `<option value="${k}" ${k === mat ? "selected" : ""}>${catalogItem(k).name}</option>`).join("")}
+        </select></div>
+      <div class="field"><label>Stock, mm</label>
+        ${item ? `<div class="segs" id="selStock">${item.thick.map((t) => `<button data-t="${t}" class="${t === stock ? "on" : ""}">${t}</button>`).join("")}</div>` : '<div style="color:var(--faint)">Choose a material first</div>'}</div>
+      ${thin ? '<div class="note warn">The stock is thinner than the finished part. Choose a thicker board or laminate.</div>' : ""}
+      <div class="field"><label>Grain</label>
+        <div class="segs" id="selGrain"><button data-g="length" class="${grain === "length" ? "on" : ""}">Along length</button><button data-g="across" class="${grain === "across" ? "on" : ""}">Across</button></div></div>
+      <div class="field"><label>Sanding</label>
+        <div class="grits" id="selGrits">${GRITS.map((g) => `<button class="grit ${sanding && sanding.includes(g) ? "on" : ""}" data-g="${g}">${g}</button>`).join("")}</div></div>
+      <div class="field"><label>Finish</label>
+        <select class="native" id="selFinish">${finish === undefined ? '<option selected>Mixed</option>' : ""}${FINISHES.map((f) => `<option ${f === finish ? "selected" : ""}>${f}</option>`).join("")}</select></div>
+      <div class="field"><label>Coats</label>
+        <div class="segs" id="selCoats">${[1, 2, 3].map((c) => `<button data-c="${c}" class="${c === coats ? "on" : ""}">${c}</button>`).join("")}</div></div>
+      <button class="btn" id="applyIdentical" style="width:100%;justify-content:center;margin-top:14px" ${allIdentical ? "disabled" : ""}>
+        ${icon("copy", 15)}${allIdentical ? "All identical parts included" : "Apply to all identical parts"}</button>`;
+
+    const apply = (fn) => { remember(); ids.forEach(fn); refresh(); };
+    host.querySelector("#selMat").onchange = (e) => {
+      const v = e.target.value;
+      if (v) apply((id) => { state[id].material = v === "none" ? null : v; state[id].stock = null; });
+    };
+    host.querySelectorAll("#selStock button").forEach((b) => (b.onclick = () => apply((id) => (state[id].stock = Number(b.dataset.t)))));
+    host.querySelectorAll("#selGrain button").forEach((b) => (b.onclick = () => apply((id) => (state[id].grain = b.dataset.g))));
+    host.querySelectorAll("#selGrits button").forEach((b) => (b.onclick = () => {
+      const g = Number(b.dataset.g);
+      const on = !(sanding && sanding.includes(g));
+      apply((id) => {
+        const s = new Set(state[id].sanding);
+        on ? s.add(g) : s.delete(g);
+        state[id].sanding = [...s].sort((a, b) => a - b);
+      });
+    }));
+    host.querySelector("#selFinish").onchange = (e) => { if (FINISHES.includes(e.target.value)) apply((id) => (state[id].finish = e.target.value)); };
+    host.querySelectorAll("#selCoats button").forEach((b) => (b.onclick = () => apply((id) => (state[id].coats = Number(b.dataset.c)))));
+    host.querySelector("#applyIdentical").onclick = () => {
+      const source = state[ids[0]];
+      remember();
+      for (const nm of names) for (const p of PARTS.filter((q) => q.name === nm)) {
+        Object.assign(state[p.id], JSON.parse(JSON.stringify(state[ids.find((id) => PARTS.find((q) => q.id === id).name === nm)] || source)));
+        selected.add(p.id);
+      }
+      refresh();
+    };
+  }
+
+  function renderSummary() {
+    const qty = quantities();
+    const rows = projectMats.filter((k) => qty[k]).map((k) => ({ m: catalogItem(k), q: qty[k], cost: qty[k] * catalogItem(k).price }));
+    const total = rows.reduce((a, r) => a + r.cost, 0);
+    const missing = PARTS.filter((p) => !state[p.id].material).length;
+    document.getElementById("summary").innerHTML = `
+      <h3>Material estimate<span style="text-transform:none;letter-spacing:0;font-weight:500">incl. waste</span></h3>
+      <div class="bar">${rows.map((r) => `<i style="width:${(r.cost / total) * 100}%;background:${r.m.color}"></i>`).join("")}</div>
+      ${rows.map((r) => `<div class="stat"><span><i class="sw" style="background:${r.m.color}"></i>${r.m.name}</span><b>${r.q.toFixed(2)} ${r.m.unit} · € ${r.cost.toFixed(0)}</b></div>`).join("")}
+      <div class="stat total"><span>Estimated cost</span><b>€ ${total.toFixed(0)}</b></div>
+      ${missing ? `<div class="note warn">${missing} part${missing > 1 ? "s have" : " has"} no material and ${missing > 1 ? "are" : "is"} left out of the estimate and the cut list.</div>` : '<div class="note">Every part has a material. The cut list uses these stock sizes.</div>'}`;
+  }
+
+  function renderLegend() {
+    const entries = colorBy === "part"
+      ? Object.entries(PART_COLORS).map(([n, c]) => [n, c])
+      : [...projectMats.filter((k) => PARTS.some((p) => state[p.id].material === k)).map((k) => [catalogItem(k).name, catalogItem(k).color]),
+         ...(PARTS.some((p) => !state[p.id].material) ? [["Unassigned", UNASSIGNED]] : [])];
+    document.getElementById("legend").innerHTML = entries.map(([n, c]) => `<div><i style="background:${c}"></i>${n}</div>`).join("");
+  }
+
+  function refresh() {
+    const assigned = PARTS.filter((p) => state[p.id].material).length;
+    document.getElementById("projectMeta").textContent = `Saved · ${assigned} of 12 parts have a material`;
+    syncModel();
+    renderParts();
+    renderTools();
+    renderProjectMats();
+    renderCatalog();
+    renderSelection();
+    renderSummary();
+    renderLegend();
+  }
+
+  document.getElementById("partSearch").oninput = renderParts;
+  document.getElementById("catSearch").oninput = renderCatalog;
+  document.getElementById("focusCatalog").onclick = () => document.getElementById("catSearch").focus();
+  document.getElementById("selIdentical").onclick = () => {
+    for (const id of [...selected]) identicalTo(id).forEach((i) => selected.add(i));
+    refresh();
+  };
+  document.getElementById("grainToggle").onclick = (e) => {
+    showGrain = !showGrain;
+    e.currentTarget.classList.toggle("on", showGrain);
+    view.render();
+  };
+  document.querySelectorAll("#colorBy button").forEach((b) => (b.onclick = () => {
+    colorBy = b.dataset.c;
+    document.querySelectorAll("#colorBy button").forEach((x) => x.classList.toggle("on", x === b));
+    refresh();
+  }));
+  const VIEWS = { persp: { azimuth: 62, elevation: 24 }, front: { azimuth: 90, elevation: 0.5 }, side: { azimuth: 0.5, elevation: 0.5 }, top: { azimuth: 90, elevation: 89.5 } };
+  document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b));
+    view.animateTo(VIEWS[b.dataset.v]);
+  }));
+  document.getElementById("undo").onclick = () => {
+    const last = history.pop();
+    if (last) { Object.assign(state, JSON.parse(last)); refresh(); }
+  };
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    const keys = { v: "select", a: "assign", g: "grain", f: "finish", s: "stock" };
+    if (keys[e.key]) { tool = keys[e.key]; refresh(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === "z") { e.preventDefault(); document.getElementById("undo").click(); }
+    if (e.key === "Escape") { selected = new Set(); refresh(); }
+  });
+
+  hydrateIcons();
+  refresh();
+</script>
+</body>
+</html>
