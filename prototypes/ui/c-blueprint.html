@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype C · Blueprint</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --desk: #e4dfd3;
+    --paper: #f6f3eb;
+    --ink: #22314f;
+    --ink-soft: rgba(34, 49, 79, 0.62);
+    --ink-faint: rgba(34, 49, 79, 0.18);
+    --pencil: #c8432b;
+    --pencil-soft: rgba(200, 67, 43, 0.1);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--desk); }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+  .ic { display: block; flex: none; }
+
+  .app { display: grid; grid-template-rows: 48px 1fr; height: 100vh; }
+
+  header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 0 20px; }
+  .word { letter-spacing: .32em; font-weight: 700; font-size: 12px; }
+  .word span { color: var(--pencil); }
+  .proj { font-family: var(--serif); font-style: italic; font-size: 17px; margin-left: 14px; color: var(--ink-soft); }
+  .toolwords { display: flex; justify-content: center; gap: 4px; }
+  .tw { height: 30px; padding: 0 10px; letter-spacing: .14em; text-transform: uppercase; font-size: 11px; color: var(--ink-soft); position: relative; }
+  .tw:hover { color: var(--ink); }
+  .tw.on { color: var(--ink); }
+  .tw.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; background: var(--pencil); }
+  .tw u { text-decoration: none; border-bottom: 1px solid currentColor; }
+  .tabs { display: flex; border: 1px solid var(--ink); }
+  .tab { height: 28px; padding: 0 12px; text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; }
+  .tab + .tab { border-left: 1px solid var(--ink); }
+  .tab.on { background: var(--ink); color: var(--paper); }
+
+  .desk { padding: 6px 20px 20px; min-height: 0; }
+  .sheet {
+    height: 100%; background-color: var(--paper);
+    box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 18px 40px rgba(60,50,30,.16);
+    padding: 14px; position: relative;
+  }
+  .frame { height: 100%; border: 1.5px solid var(--ink); outline: 0.5px solid var(--ink); outline-offset: 3px; display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 1fr 176px; min-height: 0; }
+  .cell { position: relative; min-width: 0; min-height: 0; }
+  .iso { border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+    background-image: linear-gradient(rgba(34,49,79,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(34,49,79,.06) 1px, transparent 1px);
+    background-size: 24px 24px; }
+  .orthos { border-bottom: 1px solid var(--ink); display: grid; grid-template-rows: 1fr 1fr 1fr; }
+  .ortho { position: relative; border-bottom: 1px solid var(--ink-faint); }
+  .ortho:last-child { border-bottom: 0; }
+  svg.vp { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  .label { position: absolute; left: 12px; bottom: 10px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .label .bub { width: 22px; height: 22px; border: 1px solid var(--ink); border-radius: 50%; display: grid; place-items: center; font-size: 11px; }
+  .label b { letter-spacing: .14em; font-weight: 600; font-size: 10.5px; }
+  .label span { color: var(--ink-soft); font-size: 10.5px; }
+  .corner { position: absolute; right: 12px; top: 10px; display: flex; gap: 2px; }
+  .corner button { height: 24px; padding: 0 8px; border: 1px solid var(--ink-faint); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); background: var(--paper); }
+  .corner button:hover { border-color: var(--ink); color: var(--ink); }
+  .corner button.on { border-color: var(--ink); color: var(--ink); }
+  .note { position: absolute; left: 14px; top: 12px; font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--ink-soft); max-width: 300px; line-height: 1.4; pointer-events: none; }
+
+  /* Bill of materials doubles as the outliner */
+  .bom { border-right: 1px solid var(--ink); overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0 10px; height: 24px; border-bottom: 1px solid var(--ink-faint); text-align: left; vertical-align: middle; white-space: nowrap; }
+  th { font-weight: 600; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid var(--ink); position: sticky; top: 0; background: var(--paper); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: rgba(34,49,79,.05); }
+  tbody tr.sel td { background: var(--pencil-soft); color: var(--pencil); }
+  .bubble { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; }
+
+  /* Title block doubles as the property editor */
+  .title { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(4, 1fr); }
+  .tb { border-right: 1px solid var(--ink-faint); border-bottom: 1px solid var(--ink-faint); padding: 5px 10px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .tb:nth-child(2n) { border-right: 0; }
+  .tb label { font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+  .tb input, .tb .v { border: 0; outline: none; background: none; padding: 0; font-size: 13px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tb input:focus { color: var(--pencil); }
+  .tb.wide { grid-column: span 2; border-right: 0; }
+  .tb.wide .v { font-family: var(--serif); font-size: 18px; }
+  .tb.dims .row { display: flex; gap: 6px; align-items: baseline; }
+  .tb.dims input { width: 52px; font-weight: 600; border-bottom: 1px dashed var(--ink-faint); }
+  .tb.dims span { color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div style="display:flex;align-items:baseline"><span class="word">BENCH<span>UP</span></span><span class="proj">Hall bench</span></div>
+    <nav class="toolwords" id="tools"></nav>
+    <div class="tabs"><button class="tab on">Model</button><button class="tab">Drawings</button><button class="tab">Cut list</button></div>
+  </header>
+  <div class="desk">
+    <div class="sheet">
+      <div class="frame">
+        <div class="cell iso">
+          <svg class="vp" id="iso"></svg>
+          <div class="note">Drag to turn the model. Click a part, a row or any view to select it; type a value in the title block to resize.</div>
+          <div class="corner" id="isoViews"><button class="on" data-v="iso">Iso</button><button data-v="persp">¾ front</button><button data-v="under">Below</button></div>
+          <div class="label"><span class="bub">A</span><b>ISOMETRIC</b><span>NTS</span></div>
+        </div>
+        <div class="cell orthos">
+          <div class="ortho"><svg class="vp" id="front"></svg><div class="label"><span class="bub">B</span><b>FRONT</b><span>1:10</span></div></div>
+          <div class="ortho"><svg class="vp" id="top"></svg><div class="label"><span class="bub">C</span><b>PLAN</b><span>1:10</span></div></div>
+          <div class="ortho"><svg class="vp" id="side"></svg><div class="label"><span class="bub">D</span><b>SIDE</b><span>1:10</span></div></div>
+        </div>
+        <div class="cell bom"><table><thead><tr><th>Item</th><th>Part</th><th class="n">Qty</th><th class="n">L</th><th class="n">W</th><th class="n">T</th><th>Material</th><th>Joints</th></tr></thead><tbody id="bom"></tbody></table></div>
+        <div class="cell title" id="title"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script>
+  const { PARTS, MATERIALS, size, mm, BenchView } = BenchModel;
+  const HATCH = `<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="5" height="5" fill="#f8e6df"/><line x1="0" y1="0" x2="0" y2="5" stroke="#c8432b" stroke-width="0.9"/></pattern>`;
+  const theme = {
+    colors: { oak: "#f7f4ec", walnut: "#efe9dc", plywood: "#f3efe4" },
+    ambient: 0.9,
+    diffuse: 0.12,
+    stroke: "#22314f",
+    strokeWidth: 1.1,
+    selectedStroke: "#c8432b",
+    selectedWidth: 1.6,
+    selectedFill: "url(#hatch)",
+    hoverStroke: "#c8432b",
+    dimColor: "#c8432b",
+    dimText: "#c8432b",
+    dimBg: "#f6f3eb",
+    dimFont: "11px ui-monospace, SFMono-Regular, Menlo, monospace",
+    grid: null,
+    shadow: null,
+  };
+
+  // Item numbers group identical parts, as on a real bill of materials.
+  const ITEMS = [];
+  for (const p of PARTS) {
+    let it = ITEMS.find((i) => i.name === p.name && i.material === p.material);
+    if (!it) ITEMS.push((it = { no: ITEMS.length + 1, name: p.name, material: p.material, ids: [], part: p }));
+    it.ids.push(p.id);
+  }
+  const itemOf = (id) => ITEMS.find((i) => i.ids.includes(id));
+  const touching = (A, B) => [0, 1, 2].every((k) => A.min[k] <= B.max[k] + 1e-6 && B.min[k] <= A.max[k] + 1e-6);
+  const jointsOf = (p) => {
+    const set = new Set();
+    for (const q of PARTS) if (q !== p && touching(p, q)) {
+      const k = [p.kind, q.kind].sort().join("+");
+      const j = k === "Aprons+Legs" || k === "Legs+Stretchers" ? "M&T" : k === "Aprons+Panels" ? "Fig-8" : k === "Panels+Stretchers" ? "Groove" : k === "Legs+Panels" && p.kind === "Panels" && p.name !== "Top" ? "Notch" : null;
+      if (j) set.add(j);
+    }
+    return [...set].join(", ");
+  };
+
+  let selected = "apron-f";
+  const views = [];
+  const onSelect = (id) => select(id);
+
+  const iso = new BenchView(document.getElementById("iso"), {
+    theme, defs: HATCH, selectedId: selected, view: { azimuth: 45, elevation: 35.26 }, fill: 0.8, onSelect,
+    onRender: (v) => balloon(v),
+  });
+  views.push(iso);
+  const ortho = (id, dir) => new BenchView(document.getElementById(id), { theme, defs: HATCH, direction: dir, interactive: false, selectedId: selected, fill: 0.92, onSelect });
+  views.push(ortho("front", [0, 1, 0]), ortho("top", [0, 0, 1]), ortho("side", [1, 0, 0]));
+
+  // Leader line with item balloon for the selected part on the iso view.
+  function balloon(v) {
+    if (!selected) return;
+    const it = itemOf(selected);
+    const c = v.partCenterScreen(selected);
+    if (!c || !it) return;
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("pointer-events", "none");
+    const bx = c[0] - 110, by = c[1] - 150;
+    g.innerHTML = `<circle cx="${c[0]}" cy="${c[1]}" r="2.5" fill="#c8432b"/>
+      <path d="M${c[0]},${c[1]} L${bx + 14},${by + 10}" stroke="#c8432b" fill="none"/>
+      <circle cx="${bx}" cy="${by}" r="14" fill="#f6f3eb" stroke="#c8432b" stroke-width="1.2"/>
+      <text x="${bx}" y="${by + 4}" text-anchor="middle" fill="#c8432b" style="font:12px ui-monospace,Menlo,monospace">${it.no}</text>
+      <text x="${bx - 22}" y="${by + 4}" text-anchor="end" fill="#c8432b" style="font:italic 15px 'Iowan Old Style',Palatino,Georgia,serif">${it.name}${it.ids.length > 1 ? " ×" + it.ids.length : ""}</text>`;
+    v.svg.appendChild(g);
+  }
+
+  function renderBom() {
+    const body = document.getElementById("bom");
+    const sel = itemOf(selected);
+    body.innerHTML = ITEMS.map((it) => {
+      const s = size(it.part);
+      return `<tr class="${sel === it ? "sel" : ""}" data-id="${it.ids.includes(selected) ? selected : it.ids[0]}">
+        <td><span class="bubble">${it.no}</span></td><td>${it.name}</td><td class="n">${it.ids.length}</td>
+        <td class="n">${mm(s.length)}</td><td class="n">${mm(s.width)}</td><td class="n">${mm(s.thickness)}</td>
+        <td>${MATERIALS[it.material].name}</td><td>${jointsOf(it.part)}</td></tr>`;
+    }).join("");
+    body.querySelectorAll("tr").forEach((r) => (r.onclick = () => select(r.dataset.id)));
+  }
+
+  function renderTitle() {
+    const host = document.getElementById("title");
+    const p = PARTS.find((q) => q.id === selected);
+    const it = p && itemOf(p.id);
+    const s = p && size(p);
+    host.innerHTML = `
+      <div class="tb wide"><label>Part ${it ? "· item " + it.no : ""}</label><div class="v">${p ? p.name + (it.ids.length > 1 ? " ×" + it.ids.length : "") : "Hall bench — assembly"}</div></div>
+      <div class="tb wide dims"><label>Finished size · mm</label>
+        ${p ? `<div class="row"><input value="${mm(s.length)}"/><span>×</span><input value="${mm(s.width)}"/><span>×</span><input value="${mm(s.thickness)}"/><span style="margin-left:auto">L × W × T</span></div>` : `<div class="v">900 × 350 × 450</div>`}</div>
+      <div class="tb"><label>Material</label><input value="${p ? MATERIALS[p.material].name : "Mixed"}"/></div>
+      <div class="tb"><label>Grain</label><div class="v">${p ? "Along length ↔" : "—"}</div></div>
+      <div class="tb"><label>Drawn</label><div class="v">BenchUp · 19.11.26</div></div>
+      <div class="tb"><label>Sheet</label><div class="v">1 / 3 · A3</div></div>`;
+  }
+
+  function select(id) {
+    selected = id;
+    views.forEach((v) => v.setSelected(id));
+    renderBom();
+    renderTitle();
+  }
+
+  const TOOLS = [["Select", "S"], ["Board", "B"], ["Panel", "P"], ["Join", "J"], ["Extrude", "E"], ["Move", "M"], ["Measure", "T"], ["Section", "X"], ["Annotate", "N"]];
+  let tool = "Select";
+  function renderTools() {
+    document.getElementById("tools").innerHTML = TOOLS.map(([n, k]) => {
+      const i = n.toUpperCase().indexOf(k);
+      const label = i >= 0 ? n.slice(0, i) + `<u>${n[i]}</u>` + n.slice(i + 1) : n;
+      return `<button class="tw ${n === tool ? "on" : ""}" data-t="${n}">${label}</button>`;
+    }).join("");
+    document.querySelectorAll(".tw").forEach((b) => (b.onclick = () => { tool = b.dataset.t; renderTools(); }));
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    const t = TOOLS.find(([, k]) => k.toLowerCase() === e.key.toLowerCase());
+    if (t) { tool = t[0]; renderTools(); }
+    if (e.key === "Escape") select(null);
+  });
+
+  const ISO_VIEWS = { iso: { azimuth: 45, elevation: 35.26 }, persp: { azimuth: 68, elevation: 18 }, under: { azimuth: 40, elevation: 6 } };
+  document.querySelectorAll("#isoViews button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#isoViews button").forEach((x) => x.classList.toggle("on", x === b));
+    iso.animateTo(ISO_VIEWS[b.dataset.v]);
+  }));
+
+  renderTools();
+  renderBom();
+  renderTitle();
+</script>
+</body>
+</html>

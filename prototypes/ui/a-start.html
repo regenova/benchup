@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Start</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  .home { overflow: auto; min-height: 0; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
+  .wordmark { font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
+
+  .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+  .intro h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -.015em; }
+  .intro p { margin: 0; color: var(--muted); font-size: 14px; }
+  .intro .acts { display: flex; gap: 8px; position: relative; }
+
+  .units { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin-bottom: 22px; }
+  .units .txt { flex: 1; color: var(--muted); }
+  .units .txt b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .units .segs { width: 260px; }
+  .units .ok { color: var(--muted); font-size: 12px; display: none; align-items: center; gap: 4px; }
+  .units.chosen .ok { display: inline-flex; }
+
+  .sec-h { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 10px; }
+  .sec-h h2 { margin: 0; font-size: 13px; font-weight: 600; }
+  .sec-h span { color: var(--faint); font-size: 12px; }
+
+  .templates { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .tpl { display: flex; flex-direction: column; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; cursor: pointer; transition: box-shadow .15s, transform .15s, border-color .15s; }
+  .tpl:hover { box-shadow: 0 10px 26px rgba(0,0,0,.08); transform: translateY(-2px); border-color: var(--line-strong); }
+  .tpl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tpl .thumb { position: relative; height: 140px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .tpl .thumb > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tpl .meta { padding: 10px 12px 12px; }
+  .tpl .meta b { display: block; font-weight: 600; font-size: 13.5px; }
+  .tpl .meta small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tpl .meta .size { color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 8px; font-size: 12px; white-space: nowrap; }
+  .tpl .meta .facts { color: var(--faint); font-size: 11.5px; margin-top: 2px; }
+  .tpl.blank .thumb { display: grid; place-items: center; color: var(--faint); }
+  .tpl.blank .plus { width: 54px; height: 54px; border-radius: 14px; border: 1.5px dashed var(--line-strong); display: grid; place-items: center; }
+  .tpl.blank:hover .plus { border-color: var(--accent); color: var(--accent); }
+
+  .how { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin-bottom: 26px; }
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 14px 16px; }
+  .step + .step { border-left: 1px solid var(--line); }
+  .step .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; border: 1px solid var(--line-strong); color: var(--muted); background: var(--panel); }
+  .step b { display: block; font-weight: 600; margin-bottom: 2px; }
+  .step p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 12.5px; }
+
+  .bottom { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+  .recent { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .rrow { display: grid; grid-template-columns: 72px 1fr 150px 210px 64px; align-items: center; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); cursor: pointer; }
+  .rrow:first-child { border-top: 0; }
+  .rrow:hover { background: var(--hover); }
+  .rrow .rthumb { position: relative; width: 72px; height: 48px; border-radius: 8px; background: var(--bg); overflow: hidden; }
+  .rrow .rthumb svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .rrow b { font-weight: 600; display: block; }
+  .rrow small { color: var(--muted); font-size: 12px; }
+  .rrow .when, .rrow .where { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .rrow .where span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rrow .parts-n { color: var(--faint); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .side-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px 16px; margin-bottom: 14px; }
+  .side-card h3 { margin: 0 0 10px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .fmt { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 7px 6px; border-radius: 8px; cursor: pointer; width: 100%; text-align: left; }
+  .fmt:hover { background: var(--hover); }
+  .fmt .badge { height: 26px; border-radius: 6px; background: var(--bg); color: var(--muted); display: grid; place-items: center; font: 600 10.5px ui-monospace, Menlo, monospace; }
+  .fmt small { display: block; color: var(--muted); font-size: 12px; }
+  .drop { margin-top: 8px; border: 1.5px dashed var(--line-strong); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .drop.over { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  .menu { position: absolute; right: 0; top: 40px; z-index: 20; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.14); display: none; }
+  .menu.open { display: block; }
+
+  .start-toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 12px); background: var(--ink); color: var(--panel); padding: 9px 14px; border-radius: 10px; font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; }
+  .start-toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark">B</div>
+      <span class="wordmark">BenchUp</span>
+    </div>
+    <div></div>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search projects"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <button class="btn" id="settingsBtn"><i data-icon="more" data-size="16"></i>Settings</button>
+    </div>
+  </header>
+
+  <div class="home">
+    <div class="wrap">
+      <div class="intro">
+        <div>
+          <h1>Start a project</h1>
+          <p>Begin from a proven piece of furniture and adapt it, or start with an empty bench.</p>
+        </div>
+        <div class="acts">
+          <button class="btn" id="openBtn"></button>
+          <button class="btn" id="importBtn"></button>
+          <div class="menu" id="importMenu"></div>
+        </div>
+      </div>
+
+      <div class="units" id="units">
+        <div class="txt"><b>How do you measure?</b>Lengths, stock sizes and cut lists use this unit. You can change it later in Settings.</div>
+        <span class="ok" id="unitsOk"></span>
+        <div class="segs" id="unitSegs">
+          <button data-u="mm">Millimetres</button>
+          <button data-u="in">Inches</button>
+        </div>
+      </div>
+
+      <div class="sec-h"><h2>New project</h2><span>Templates include parts, joints and materials</span></div>
+      <div class="templates" id="templates"></div>
+
+      <div class="sec-h"><h2>How BenchUp works</h2><span>Every project moves through five stages</span></div>
+      <div class="how">
+        <div class="step"><span class="n">1</span><div><b>Design</b><p>Add boards from your stock or draw parts, and size them exactly.</p></div></div>
+        <div class="step"><span class="n">2</span><div><b>Joinery</b><p>Join touching parts with mortises, dowels or dovetails and check every fit.</p></div></div>
+        <div class="step"><span class="n">3</span><div><b>Materials</b><p>Assign species and sheet goods, grain direction and the finish.</p></div></div>
+        <div class="step"><span class="n">4</span><div><b>Cut list</b><p>Get cut sizes, board layouts and shop drawings for the workshop.</p></div></div>
+        <div class="step"><span class="n">5</span><div><b>Estimate</b><p>Price the work and materials, then send the client a quote.</p></div></div>
+      </div>
+
+      <div class="bottom">
+        <div>
+          <div class="sec-h"><h2>Recent projects</h2><span id="recentCount"></span></div>
+          <div class="recent" id="recent"></div>
+        </div>
+        <div>
+          <div class="side-card">
+            <h3>Import a model</h3>
+            <div id="formats"></div>
+            <div class="drop" id="drop">Drop a .bup project or a model file here</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/start-extras.js"></script>
+<script>
+  const { BenchView } = BenchModel;
+  const X = StartExtras;
+  const WOOD = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" };
+
+  const FORMATS = [
+    ["SKP", "SketchUp", "Groups, components and colours"],
+    ["STL", "STL", "Mesh in millimetres"],
+    ["OBJ", "Wavefront OBJ", "Faces and lines in metres"],
+    ["DXF", "DXF", "2D outlines to extrude"],
+  ];
+
+  const RECENT = [
+    { tpl: "hall-bench", name: "Hall bench", when: "Today, 10:42", where: "This device", device: true },
+    { tpl: "bookshelf", name: "Living room bookshelf", when: "Yesterday, 18:05", where: "~/Documents/Workshop/bookshelf.bup" },
+    { tpl: "box", name: "Toy box for Leo", when: "12 Nov 2026", where: "This device", device: true },
+    { tpl: "workbench", name: "Garage workbench", when: "3 Nov 2026", where: "~/Documents/Workshop/garage-bench.bup" },
+  ];
+
+  const views = [];
+  function thumbView(svg, parts, opts = {}) {
+    const vt = X.viewportTheme();
+    const view = new BenchView(svg, {
+      parts,
+      interactive: false,
+      dims: false,
+      fill: opts.fill || 0.86,
+      view: { azimuth: opts.azimuth || 56, elevation: 24 },
+      theme: { colors: WOOD, stroke: vt.stroke, strokeWidth: 0.6, grid: null, shadow: null },
+      onSelect: () => {},
+    });
+    X.fit(view);
+    // Thumbnails have no ground, so dark mode only changes edges and lighting.
+    if (window.benchTheme) benchTheme.bind(view, { grid: null, shadow: null });
+    views.push(view);
+    return view;
+  }
+
+  function renderTemplates() {
+    const host = document.getElementById("templates");
+    host.innerHTML =
+      X.TEMPLATES.map((t) => `
+        <button class="tpl" data-id="${t.id}">
+          <div class="thumb"><svg></svg></div>
+          <div class="meta"><b>${t.name}</b><small>${t.note}</small>
+            <div class="size">${X.overall(t.parts)}</div><div class="facts">${t.parts.length} parts · ${t.level}</div></div>
+        </button>`).join("") +
+      `<button class="tpl blank" data-id="blank">
+          <div class="thumb"><span class="plus">${icon("plus", 22)}</span></div>
+          <div class="meta"><b>Blank project</b><small>Start from an empty bench</small>
+            <div class="size">Any size</div><div class="facts">Add parts from stock</div></div>
+        </button>`;
+    host.querySelectorAll(".tpl").forEach((card) => {
+      const t = X.TEMPLATES.find((x) => x.id === card.dataset.id);
+      if (t) {
+        const view = thumbView(card.querySelector("svg"), t.parts);
+        card.addEventListener("mouseenter", () => view.animateTo({ azimuth: 56 + 28 }, 600));
+        card.addEventListener("mouseleave", () => view.animateTo({ azimuth: 56 }, 600));
+      }
+      card.onclick = () => openTemplate(card.dataset.id);
+    });
+  }
+
+  function openTemplate(id) {
+    if (id === "hall-bench") location.href = "a-workshop-flow.html";
+    else if (id === "blank") location.href = "a-empty.html";
+    else X.toast("In this prototype, only Hall bench and Blank project open.");
+  }
+
+  function renderRecent() {
+    const host = document.getElementById("recent");
+    document.getElementById("recentCount").textContent = `${RECENT.length} projects`;
+    host.innerHTML = RECENT.map((r, i) => {
+      const t = X.TEMPLATES.find((x) => x.id === r.tpl);
+      return `<div class="rrow" data-i="${i}">
+        <div class="rthumb"><svg></svg></div>
+        <div><b>${r.name}</b><small>${X.overall(t.parts)}</small></div>
+        <div class="when">${X.icon("clock", 14)}${r.when}</div>
+        <div class="where">${X.icon(r.device ? "device" : "folder", 14)}<span>${r.where}</span></div>
+        <div class="parts-n">${t.parts.length} parts</div>
+      </div>`;
+    }).join("");
+    host.querySelectorAll(".rrow").forEach((row) => {
+      const r = RECENT[row.dataset.i];
+      thumbView(row.querySelector("svg"), X.TEMPLATES.find((x) => x.id === r.tpl).parts, { fill: 0.92 });
+      row.onclick = () => openTemplate(r.tpl);
+    });
+  }
+
+  function renderFormats() {
+    const rows = FORMATS.map(([ext, name, help]) =>
+      `<button class="fmt" data-ext="${ext}"><span class="badge">.${ext.toLowerCase()}</span><span>${name}<small>${help}</small></span></button>`).join("");
+    document.getElementById("formats").innerHTML = rows;
+    document.getElementById("importMenu").innerHTML = rows;
+    document.querySelectorAll(".fmt").forEach((b) => (b.onclick = () => {
+      document.getElementById("importMenu").classList.remove("open");
+      X.toast(`Choose a .${b.dataset.ext.toLowerCase()} file to import (not available in this prototype).`);
+    }));
+  }
+
+  function renderUnits() {
+    const u = X.units.get();
+    document.querySelectorAll("#unitSegs button").forEach((b) => b.classList.toggle("on", b.dataset.u === u));
+    const box = document.getElementById("units");
+    box.classList.toggle("chosen", X.units.chosen());
+    document.getElementById("unitsOk").innerHTML = `${icon("check", 14)}Saved`;
+  }
+  document.querySelectorAll("#unitSegs button").forEach((b) => (b.onclick = () => {
+    X.units.set(b.dataset.u);
+    renderUnits();
+    // Sizes shown on cards and recent projects follow the unit.
+    document.querySelectorAll(".tpl").forEach((card) => {
+      const t = X.TEMPLATES.find((x) => x.id === card.dataset.id);
+      if (t) card.querySelector(".size").textContent = X.overall(t.parts);
+    });
+    document.querySelectorAll(".rrow").forEach((row) => {
+      const t = X.TEMPLATES.find((x) => x.id === RECENT[row.dataset.i].tpl);
+      row.querySelector("small").textContent = X.overall(t.parts);
+    });
+  }));
+
+  document.getElementById("openBtn").innerHTML = `${X.icon("folder", 16)}Open file…`;
+  document.getElementById("importBtn").innerHTML = `${X.icon("import", 16)}Import${icon("chevronDown", 14)}`;
+  document.getElementById("openBtn").onclick = () => X.toast("Choose a .bup project (not available in this prototype).");
+  document.getElementById("importBtn").onclick = (e) => {
+    e.stopPropagation();
+    document.getElementById("importMenu").classList.toggle("open");
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#importMenu")) document.getElementById("importMenu").classList.remove("open");
+  });
+  document.getElementById("settingsBtn").onclick = () => X.toast("Settings open from here before a project is loaded.");
+
+  const drop = document.getElementById("drop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", () => X.toast("Importing files is not available in this prototype."));
+
+
+  hydrateIcons();
+  renderTemplates();
+  renderRecent();
+  renderFormats();
+  renderUnits();
+</script>
+</body>
+</html>
