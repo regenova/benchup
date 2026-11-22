@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.7.6",
+    "date": "2026-11-21",
+    "title": "Remembered release notes and updated repository links",
+    "sections": [
+      {
+        "title": "Preferences and release notes",
+        "changes": [
+          "Fix saved preferences failing to load because of reference-volume settings, so release notes stay marked as read across reloads and app restarts.",
+          "Preserve empty reference-volume catalogs and compatibility with older single-volume settings."
+        ]
+      },
+      {
+        "title": "Downloads and updates",
+        "changes": [
+          "Update application, documentation, website, download, and issue links to the new regenova/benchup GitHub repository.",
+          "Point desktop update checks to the new repository, including builds configured with earlier repository names.",
+          "If your installed version cannot check for updates because its old repository URL is unavailable, download and install the latest release manually."
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.7.5",
     "date": "2026-11-21",
     "title": "French translations and more reliable releases",

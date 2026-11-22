@@ -6,11 +6,11 @@
 
 ## Download for desktop
 
-[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
-[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
-[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
-[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
-[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/BenchUp3D/benchup/releases/latest)
+[![Download for Windows x64](https://img.shields.io/badge/Windows_x64-0078D4?style=for-the-badge)](https://github.com/regenova/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-win-x64-Setup.exe)
+[![Download for macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-6E40C9?style=for-the-badge)](https://github.com/regenova/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-arm64-Setup.pkg)
+[![Download for macOS Intel](https://img.shields.io/badge/macOS_Intel-6E40C9?style=for-the-badge)](https://github.com/regenova/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-osx-x64-Setup.pkg)
+[![Download for Linux x64](https://img.shields.io/badge/Linux_x64-E95420?style=for-the-badge)](https://github.com/regenova/benchup/releases/latest/download/io.github.BenchUp3D.BenchUp-linux-x64.AppImage)
+[![See all downloads](https://img.shields.io/badge/All_downloads-555555?style=for-the-badge)](https://github.com/regenova/benchup/releases/latest)
 
 A free, open-source 3D modeling app for woodworking and furniture design, written in Rust. Plan individual boards, wood joints, and complete assemblies with exact measurements before heading to the workshop. The same editor runs as a native Windows, macOS, or Linux application and in a desktop browser through WebAssembly.
 

@@ -1,4 +1,4 @@
-//! Tools from the second round of agent testing (BenchUp3D/benchup#42):
+//! Tools from the second round of agent testing (regenova/benchup#42):
 //! router profiles, joint settings and trimming, finishes and estimates,
 //! boards from an outline with arcs, face operations, layout helpers and
 //! queries that spare agents probing the model one entity at a time.

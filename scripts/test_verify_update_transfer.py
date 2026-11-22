@@ -17,9 +17,13 @@ class TransferTests(unittest.TestCase):
         ])
 
     def test_transferred_repository_retains_numeric_identity_and_public_release_access(self):
-        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor", "BenchUp3D/editor", "benchup3d/BENCHUP"]:
+        for source in [migration.LEGACY, migration.CURRENT, "BenchUp3D/app", "Ketchup3D/editor", "BenchUp3D/editor", "benchup3d/BENCHUP", "BenchUp3D/benchup", "REGENOVA/BENCHUP"]:
             fetch = self.fetch()
             self.assertIn("Verified", migration.verify(source, fetch))
+            self.assertEqual(fetch.call_args_list[1].args[0],
+                             migration.API + "regenova/benchup")
+            self.assertEqual(fetch.call_args_list[3].args[0],
+                             migration.API + "regenova/benchup/releases?per_page=10&page=1")
             self.assertEqual(fetch.call_args_list[2].args[0],
                              migration.API + migration.LEGACY + "/releases?per_page=10&page=1")
         self.assertIn("Verified", migration.verify(migration.CURRENT, self.fetch(old_releases=[], new_releases=[])))
@@ -47,6 +51,35 @@ class TransferTests(unittest.TestCase):
         fetch.assert_not_called()
         with self.assertRaises(ValueError):
             migration.verify("../invalid/repository", fetch)
+
+    def test_explicit_retirement_warns_and_still_validates_the_active_public_feed(self):
+        missing = HTTPError("url", 404, "missing", {}, None)
+        self.addCleanup(missing.close)
+        repo = {"id": 1234, "full_name": migration.CURRENT, "private": False}
+        fetch = Mock(side_effect=[missing, repo, [{"id": 42}]])
+        result = migration.verify(migration.CURRENT, fetch, allow_missing_legacy=True)
+        self.assertIn("WARNING", result)
+        self.assertIn("manual update", result)
+        self.assertEqual(fetch.call_args_list[2].args[0],
+                         migration.API + migration.CURRENT + "/releases?per_page=10&page=1")
+        for invalid_repo in [{}, [], dict(repo, private=True), dict(repo, full_name="someone/else")]:
+            with self.subTest(repo=invalid_repo), self.assertRaises(ValueError):
+                migration.verify(migration.CURRENT, Mock(side_effect=[missing, invalid_repo]),
+                                 allow_missing_legacy=True)
+        for invalid_releases in [{}, [{}]]:
+            with self.subTest(releases=invalid_releases), self.assertRaises(ValueError):
+                migration.verify(migration.CURRENT, Mock(side_effect=[missing, repo, invalid_releases]),
+                                 allow_missing_legacy=True)
+
+    def test_retirement_does_not_ignore_other_errors_or_recreated_legacy_repositories(self):
+        for status in [403, 429, 500]:
+            error = HTTPError("url", status, "failure", {}, None)
+            self.addCleanup(error.close)
+            with self.subTest(status=status), self.assertRaises(HTTPError):
+                migration.verify(migration.CURRENT, Mock(side_effect=error), allow_missing_legacy=True)
+        for old in [{"id": 999, "full_name": migration.LEGACY}, [], {}]:
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                migration.verify(migration.CURRENT, self.fetch(old=old), allow_missing_legacy=True)
 
     def test_authenticated_fallback_drafts_are_not_public_releases(self):
         fetch = self.fetch(old_releases=[{"id": 42}, {"id": 99, "draft": True}])

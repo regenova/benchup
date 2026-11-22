@@ -518,7 +518,7 @@ fn joint_json(model: &Model, id: u64) -> Option<Value> {
     if !missing.is_empty() {
         // Erase, explode, solid operations and component edits remove or
         // relink the joints of boards they replace, but projects saved before
-        // that (BenchUp3D/benchup#36) and edits that cannot match a board to a
+        // that (regenova/benchup#36) and edits that cannot match a board to a
         // replacement can still leave one. Keep reporting it.
         joint["missing_boards"] = json!(missing);
     }

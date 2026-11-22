@@ -1,7 +1,7 @@
 # Contributing to BenchUp
 
 Submit changes through a pull request to
-[BenchUp3D/benchup](https://github.com/BenchUp3D/benchup). Describe the problem,
+[regenova/benchup](https://github.com/regenova/benchup). Describe the problem,
 the change, and any verification you performed. Keep unrelated changes separate.
 
 ## Licensing

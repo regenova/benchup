@@ -1,5 +1,5 @@
 //! Build-time update source normalization, shared with the regression tests.
-pub const REPOSITORY: &str = "BenchUp3D/benchup";
+pub const REPOSITORY: &str = "regenova/benchup";
 
 pub fn url(value: &str) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/').trim_end_matches(".git");
@@ -21,9 +21,9 @@ pub fn url(value: &str) -> Result<String, String> {
     {
         return Err("Set BENCHUP_UPDATE_REPOSITORY to a GitHub owner/repository".into());
     }
-    // Accept either order of the organization transfer and repository rename.
+    // Normalize historical owners and names after repository transfers and renames.
     // Unrelated forks must continue to use their own release source.
-    let official_owner = ["Ketchup3D", "BenchUp3D"]
+    let official_owner = ["Ketchup3D", "BenchUp3D", "regenova"]
         .iter()
         .any(|owner| parts[0].eq_ignore_ascii_case(owner));
     let official_name = ["app", "editor", "benchup"]
@@ -43,7 +43,9 @@ mod tests {
 
     #[test]
     fn transfer_and_rename_in_either_order_resolve_to_the_new_official_feed() {
-        for owner in ["Ketchup3D", "BenchUp3D", "ketchup3d", "benchup3d"] {
+        for owner in [
+            "Ketchup3D", "BenchUp3D", "ketchup3d", "benchup3d", "regenova", "REGENOVA",
+        ] {
             for name in ["app", "editor", "benchup", "BENCHUP"] {
                 for input in [
                     format!("{owner}/{name}"),
@@ -51,13 +53,13 @@ mod tests {
                     format!("git@github.com:{owner}/{name}.git"),
                     format!("ssh://git@github.com/{owner}/{name}.git"),
                 ] {
-                    assert_eq!(url(&input).unwrap(), "https://github.com/BenchUp3D/benchup");
+                    assert_eq!(url(&input).unwrap(), "https://github.com/regenova/benchup");
                 }
             }
         }
         assert_eq!(
             url(REPOSITORY).unwrap(),
-            "https://github.com/BenchUp3D/benchup"
+            "https://github.com/regenova/benchup"
         );
     }
 
@@ -70,6 +72,10 @@ mod tests {
         assert_eq!(
             url("BenchUp3D/other").unwrap(),
             "https://github.com/BenchUp3D/other"
+        );
+        assert_eq!(
+            url("regenova/other").unwrap(),
+            "https://github.com/regenova/other"
         );
         for input in [
             "",

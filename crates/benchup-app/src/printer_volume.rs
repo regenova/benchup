@@ -63,10 +63,21 @@ pub(super) struct Settings {
 struct SavedSettings {
     visible: bool,
     size_m: [f64; 3],
+    #[serde(deserialize_with = "deserialize_entries")]
     entries: Option<Vec<Entry>>,
     selected: Option<u64>,
     next_id: u64,
     hotkey: Option<String>,
+}
+
+fn deserialize_entries<'de, D>(deserializer: D) -> Result<Option<Vec<Entry>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Settings writes a plain list. Only an absent field means legacy settings;
+    // a present empty list must stay empty. RON requires explicit Option syntax,
+    // so deserializing Option<Vec<Entry>> directly rejects our own saved lists.
+    <Vec<Entry> as serde::Deserialize>::deserialize(deserializer).map(Some)
 }
 
 impl Default for SavedSettings {

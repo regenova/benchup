@@ -99,18 +99,23 @@ impl Server {
                         "{server_base}/api/v3/repos/BenchUp3D/benchup/{tail}"
                     ));
                     ("301 Moved Permanently", b"")
-                } else if path.starts_with("/api/v3/repos/BenchUp3D/benchup/releases?") {
+                } else if let Some(tail) = path.strip_prefix("/api/v3/repos/BenchUp3D/benchup/") {
+                    location = Some(format!(
+                        "{server_base}/api/v3/repos/regenova/benchup/{tail}"
+                    ));
+                    ("301 Moved Permanently", b"")
+                } else if path.starts_with("/api/v3/repos/regenova/benchup/releases?") {
                     ("200 OK", &releases)
                 } else if let Some(tail) = path.strip_prefix("/Ketchup3D/app/releases/download/") {
                     location = Some(format!(
-                        "{server_base}/BenchUp3D/benchup/releases/download/{tail}"
+                        "{server_base}/regenova/benchup/releases/download/{tail}"
                     ));
                     ("302 Found", b"")
-                } else if path == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{feed_name}")
+                } else if path == format!("/regenova/benchup/releases/download/v0.6.6/{feed_name}")
                 {
                     ("200 OK", &feed)
                 } else if path
-                    == format!("/BenchUp3D/benchup/releases/download/v0.6.6/{package_name}")
+                    == format!("/regenova/benchup/releases/download/v0.6.6/{package_name}")
                 {
                     ("200 OK", &package)
                 } else {
@@ -235,7 +240,7 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
         );
         std::fs::write(&config.ManifestPath, new_manifest).unwrap();
         let new_manager = UpdateManager::new(
-            GithubSource::new(&format!("{}/BenchUp3D/benchup", server.base), None, false),
+            GithubSource::new(&format!("{}/regenova/benchup", server.base), None, false),
             None,
             Some(config),
         )
@@ -254,13 +259,18 @@ fn shipped_065_updater_follows_transfer_and_rename_then_downloads_benchup_on_all
             seen.iter()
                 .any(|path| path.starts_with("/api/v3/repos/BenchUp3D/app/releases?"))
         );
+        for repository in ["BenchUp3D/benchup", "regenova/benchup"] {
+            assert!(seen.iter().any(|path| {
+                path.starts_with(&format!("/api/v3/repos/{repository}/releases?"))
+            }));
+        }
         assert!(
             seen.iter()
                 .any(|path| path.starts_with("/Ketchup3D/app/releases/download/")
                     && path.ends_with(".nupkg"))
         );
         assert!(seen.iter().any(
-            |path| path.starts_with("/BenchUp3D/benchup/releases/download/")
+            |path| path.starts_with("/regenova/benchup/releases/download/")
                 && path.ends_with(".nupkg")
         ));
     }

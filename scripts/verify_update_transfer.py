@@ -10,7 +10,7 @@ import re
 import urllib.error
 import urllib.request
 
-CURRENT = "BenchUp3D/benchup"
+CURRENT = "regenova/benchup"
 LEGACY = "Ketchup3D/app"
 API = "https://api.github.com/repos/"
 
@@ -43,23 +43,35 @@ def fetch_json(url):
     return json.loads(payload)
 
 
-def verify(repository, fetch=fetch_json):
+def verify(repository, fetch=fetch_json, *, allow_missing_legacy=False):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Repository must be owner/repository")
     owner, name = repository.lower().split("/")
-    if owner not in ("ketchup3d", "benchup3d") or name not in ("app", "editor", "benchup"):
+    if owner not in ("ketchup3d", "benchup3d", "regenova") or name not in ("app", "editor", "benchup"):
         return "Skipped official KetchUp transfer check for a fork."
-    old = fetch(API + LEGACY)
+    missing_legacy = False
+    try:
+        old = fetch(API + LEGACY)
+    except urllib.error.HTTPError as error:
+        # An explicit release decision may retire missing legacy URLs, but must
+        # still verify the active public feed. Never ignore other HTTP failures.
+        if not allow_missing_legacy or error.code != 404 or repository.lower() != CURRENT.lower():
+            raise
+        error.close()
+        missing_legacy = True
+        old = None
     new = fetch(API + CURRENT)
-    if (not isinstance(old, dict) or not isinstance(new, dict)
-            or not isinstance(new.get("id"), int) or old.get("id") != new["id"]
-            or old.get("private") is not False or new.get("private") is not False
-            or old.get("full_name", "").lower() != CURRENT.lower()
+    if (not isinstance(new, dict) or not isinstance(new.get("id"), int)
+            or new.get("private") is not False
             or new.get("full_name", "").lower() != CURRENT.lower()):
+        raise ValueError(f"{CURRENT} must be the active public update repository.")
+    if not missing_legacy and (not isinstance(old, dict) or old.get("id") != new["id"]
+            or old.get("private") is not False
+            or old.get("full_name", "").lower() != CURRENT.lower()):
         raise ValueError(f"{LEGACY} must redirect to the same repository as {CURRENT}. "
                          "Transfer/rename the original repository; do not recreate its old location.")
     query = "/releases?per_page=10&page=1"  # Exact path used by the 0.6.5 GithubSource.
-    old_releases = fetch(API + LEGACY + query)
+    old_releases = fetch(API + LEGACY + query) if not missing_legacy else []
     new_releases = fetch(API + CURRENT + query)
     if not isinstance(old_releases, list) or not isinstance(new_releases, list):
         raise ValueError("The old and new public releases endpoints must return release lists")
@@ -73,7 +85,11 @@ def verify(repository, fetch=fetch_json):
                 raise ValueError("Invalid public release metadata")
             ids.append(release["id"])
         return set(ids)
-    if release_ids(old_releases) != release_ids(new_releases):
+    current_ids = release_ids(new_releases)
+    if missing_legacy:
+        return (f"WARNING: {LEGACY} is unavailable (HTTP 404). Verified the public "
+                f"{CURRENT} update feed; affected older installations require a manual update.")
+    if release_ids(old_releases) != current_ids:
         raise ValueError("The old releases endpoint does not expose the current repository's releases")
     return f"Verified public updater migration: {LEGACY} -> {CURRENT} (repository {new['id']})."
 
@@ -81,9 +97,11 @@ def verify(repository, fetch=fetch_json):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
+    parser.add_argument("--allow-missing-legacy", action="store_true",
+                        help="Allow a retired legacy repository returning 404; verify the active feed and warn about manual updates.")
     args = parser.parse_args()
     try:
-        print(verify(args.repository))
+        print(verify(args.repository, allow_missing_legacy=args.allow_missing_legacy))
     except (ValueError, OSError, urllib.error.URLError) as error:
         parser.exit(1, f"Update migration verification failed: {error}\n")
 

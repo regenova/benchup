@@ -1,6 +1,6 @@
 # Round 5 (14 November 2026)
 
-First round with the tools of [#42](https://github.com/BenchUp3D/benchup/issues/42) (router profiles, joint trimming and `set_joint`, finishes and `get_estimate`, `create_profile_board`, `split_face`/`merge_faces`, `distribute`, `change_thickness`, scene filters, `measure_space`/`find_surfaces`, joint geometry, `check_model only_new`, `render`/`render_view`) and with five new cases (13–17). Each cell is the number of commands the agent ran (MCP calls for case 17), with those that returned an error in brackets. Results were checked independently with `check_model` and an iso render of each final file.
+First round with the tools of [#42](https://github.com/regenova/benchup/issues/42) (router profiles, joint trimming and `set_joint`, finishes and `get_estimate`, `create_profile_board`, `split_face`/`merge_faces`, `distribute`, `change_thickness`, scene filters, `measure_space`/`find_surfaces`, joint geometry, `check_model only_new`, `render`/`render_view`) and with five new cases (13–17). Each cell is the number of commands the agent ran (MCP calls for case 17), with those that returned an error in brackets. Results were checked independently with `check_model` and an iso render of each final file.
 
 | # | Case | R4 | R5 | Result in R5 | `focus` tools used |
 |---|---|---|---|---|---|
