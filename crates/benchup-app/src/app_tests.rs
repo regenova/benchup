@@ -6207,16 +6207,14 @@ fn library_placement_creates_linked_instance_supports_cancel_and_undo() {
 }
 
 #[test]
-fn view_sidebar_buttons_set_projection_and_all_standard_views_without_resizing() {
+fn view_sidebar_buttons_set_projection_without_resizing() {
     let mut h = Harness::new();
     h.ctx.style_mut_of(h.ctx.theme(), |s| s.animation_time = 0.);
     h.size.y = 4000.;
     h.frame(vec![], egui::Modifiers::NONE);
     let width = h.app.viewport.right();
-    for title in ["Camera", "Standard views"] {
-        let output = h.frame(vec![], egui::Modifiers::NONE);
-        h.click(text_position(&output, title));
-    }
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Camera"));
     for (label, projection) in [
         ("Parallel", benchup_core::Projection::Parallel),
         ("Perspective", benchup_core::Projection::Perspective),
@@ -6225,16 +6223,7 @@ fn view_sidebar_buttons_set_projection_and_all_standard_views_without_resizing()
         h.click(text_position(&output, label));
         assert_eq!(h.app.doc.camera.projection, projection);
     }
-    let target = h.app.doc.camera.target;
-    let distance = h.app.doc.camera.distance;
-    for view in benchup_core::StandardView::ALL {
-        let output = h.frame(vec![], egui::Modifiers::NONE);
-        h.click(text_position(&output, view.label()));
-        assert_eq!(h.app.doc.camera.standard_view(), Some(view));
-        assert_eq!(h.app.doc.camera.target, target);
-        assert_eq!(h.app.doc.camera.distance, distance);
-        assert!((h.app.viewport.right() - width).abs() < 0.1);
-    }
+    assert!((h.app.viewport.right() - width).abs() < 0.1);
     assert!(h.app.project.modified);
 }
 

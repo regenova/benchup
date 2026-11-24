@@ -353,7 +353,6 @@ impl BenchUpApp {
         // Navigation/display/selection are local. Only project content is replicated.
         doc.camera = self.doc.camera.clone();
         doc.display = self.doc.display.clone();
-        doc.viewport_cameras = self.doc.viewport_cameras.clone();
         doc.selection.clear();
         doc.selection_context = None;
         doc.shared_project = Some(benchup_core::SharedProject {
@@ -378,6 +377,8 @@ impl BenchUpApp {
         self.doc.model = doc.model;
         if other_project {
             self.doc_epoch += 1;
+            self.view_transition = None;
+            self.touch_zoom = Default::default();
         }
         self.doc.model.edit_context =
             edit_context.filter(|id| self.doc.model.objects.contains_key(id));

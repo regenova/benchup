@@ -54,7 +54,6 @@ fn compressed_and_plain_projects_preserve_the_document_and_undo_redo_history() {
     }
     assert!(doc.history.undo(&mut doc.model));
     doc.camera.yaw += 0.4;
-    doc.viewport_cameras.insert(1, doc.camera.clone());
     doc.display.grid = false;
     let json = serde_json::to_string(&doc).unwrap();
     let compressed = encode(&json).unwrap();

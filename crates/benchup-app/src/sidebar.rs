@@ -85,7 +85,6 @@ pub(super) struct InspectorPreferences {
     last_seen_release_notes: Option<String>,
     display: Option<DisplaySettings>,
     camera: Option<CameraPreferences>,
-    viewports: viewports::Preferences,
     screenshot: crate::screenshots::Settings,
     recent_projects: Vec<projects::RecentProject>,
     import_format: String,
@@ -134,7 +133,6 @@ impl Default for InspectorPreferences {
             last_seen_release_notes: None,
             display: None,
             camera: None,
-            viewports: viewports::Preferences::default(),
             screenshot: Default::default(),
             recent_projects: Vec::new(),
             import_format: "skp".into(),
@@ -1108,11 +1106,6 @@ impl BenchUpApp {
         if let Some(camera) = &preferences.camera {
             camera.restore(&mut self.doc.camera);
         }
-        self.viewports = viewports::Workspace::restore(
-            &preferences.viewports,
-            &mut self.doc.camera,
-            &self.doc.viewport_cameras,
-        );
         if self.tool == Tool::Walk {
             self.walk.original_camera = Some(self.doc.camera.clone());
         }
@@ -1195,7 +1188,6 @@ impl BenchUpApp {
             last_seen_release_notes: self.release_notes.last_seen_version.clone(),
             display: Some(self.doc.display.clone()),
             camera: Some(CameraPreferences::capture(&self.doc.camera)),
-            viewports: self.viewports.capture(&self.doc.camera),
             screenshot: self.screenshot.settings.clone(),
             recent_projects: self.project.recent.clone(),
             import_format: self.project.import_format.clone(),
@@ -1257,8 +1249,7 @@ impl BenchUpApp {
         {
             self.save_inspector_preferences(storage);
         }
-        // Selection alone must survive an immediate reload, without marking
-        // the model modified or waiting for the document autosave delay.
+        // Preserve selection changes immediately, even without a model edit.
         if self.sync_selection() {
             if self.dirty_since.is_some() || self.storage_recovery {self.persist();}
             else {match storage::save_selection(&self.doc) {Ok(())=>self.save_error=None,Err(error)=>self.save_error=Some(error)}}
@@ -4056,7 +4047,6 @@ mod preference_tests {
             ("fog", true),
             ("view", false),
             ("view_camera", true),
-            ("view_standard_views", true),
             ("outliner_object/42", true),
         ] {
             let id = egui::Id::unique(key);
@@ -4987,6 +4977,29 @@ mod preference_tests {
     }
 
     #[test]
+    fn preferences_with_retired_view_layout_keep_the_camera_and_inspector_width() {
+        let mut storage = SavedPreferences::default();
+        storage.set_string(PREFERENCE_KEY, r#"(
+            width: 372.0,
+            camera: Some((yaw: 0.5, pitch: 0.25)),
+            viewports: (
+                layout: Split(id: 2, horizontal: true, ratio: 0.5,
+                    first: Pane(id: 0, tabs: [0], selected: 0),
+                    second: Pane(id: 1, tabs: [1], selected: 1)),
+                active: 1,
+                names: {1: "Plan"},
+            ),
+        )"#.into());
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let ctx = egui::Context::default();
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert_eq!(app.inspector_width, 372.);
+        assert_eq!((app.doc.camera.yaw, app.doc.camera.pitch), (0.5, 0.25));
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(!storage.get_string(PREFERENCE_KEY).unwrap().contains("viewports:"));
+    }
+
+    #[test]
     fn view_preferences_restore_groups_without_copying_another_models_framing() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
@@ -5000,7 +5013,6 @@ mod preference_tests {
         for (key, open) in [
             ("view", false),
             ("view_camera", true),
-            ("view_standard_views", true),
         ] {
             set_section_open(&ctx, key, open);
         }
@@ -5024,10 +5036,6 @@ mod preference_tests {
             ui.push_id("floating_view", |ui| {
                 assert_eq!(restored_header_open(ui, "view", true), Some(false));
                 assert_eq!(restored_header_open(ui, "view_camera", false), Some(true));
-                assert_eq!(
-                    restored_header_open(ui, "view_standard_views", false),
-                    Some(true)
-                );
             });
         });
         let mut preferences = refreshed.current_inspector_preferences(&refreshed_ctx);
@@ -5264,7 +5272,6 @@ fn inspector_icon_color(ui: &egui::Ui, id: &str) -> Color32 {
         "tags" => ([160, 111, 22], [230, 190, 104]),
         "display" => ([198, 76, 58], [246, 142, 125]),
         "view" | "view_camera" => ([48, 111, 173], [131, 185, 239]),
-        "view_standard_views" => ([17, 129, 133], [103, 207, 211]),
         "edge_style" | "connections/fasteners" => ([88, 109, 135], [159, 181, 209]),
         "sections" => ([176, 67, 113], [237, 142, 181]),
         "shadows" => ([183, 92, 19], [242, 170, 100]),

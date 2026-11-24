@@ -38,7 +38,6 @@ let boxDocument;
 if(mode==='box-select'){
  boxDocument=structuredClone(eraseSetup?.document??projectData);
  boxDocument.camera.distance*=2.5;
- boxDocument.viewport_cameras={"0":boxDocument.camera};
  boxDocument.selection=[];
  if(scope==='root')boxDocument.selection_context=null;
  if(args.includes('--flatten')){
@@ -779,8 +778,10 @@ async function benchmarkBoxSelection(call,evaluate,seconds) {
  await call('Emulation.setFocusEmulationEnabled',{enabled:true});
  await move(38,110);await button('mousePressed',38,110);await button('mouseReleased',38,110);await frames();
  const initial=await state();
- const from=args.includes('--reverse-box')?[1040,740]:[96,132];
- const to=args.includes('--reverse-box')?[96,132]:[1118,836];
+ // Start inside the canvas below the camera view buttons.
+ const topLeft=[96,162];
+ const from=args.includes('--reverse-box')?[1040,740]:topLeft;
+ const to=args.includes('--reverse-box')?topLeft:[1118,836];
  const samples=[];
  for(let attempt=0;attempt<3;attempt++){
   // A new replacement marquee clears/replaces the preceding selection on release.

@@ -30,7 +30,6 @@ impl UiHarness {
             },
             |ui| {
                 self.app.viewport_panel(ui);
-                self.app.rename_viewport_window(&self.ctx);
             },
         )
     }
@@ -133,20 +132,17 @@ fn three_fingers_do_nothing_and_count_changes_rebase_without_tool_actions() {
     ]);
     assert!(h.app.line_start.is_none());
     h.frame(vec![touch(0, End, points[0] + delta)]);
-    assert!(!h.app.viewports.touch_zoom.captured);
+    assert!(!h.app.touch_zoom.captured);
     assert_eq!(h.app.tool, Tool::Line);
 }
 
 #[test]
-fn contacts_in_different_panes_do_not_navigate() {
+fn a_contact_on_the_view_buttons_does_not_navigate() {
     use egui::TouchPhase::*;
     let mut h = UiHarness::new();
-    let tab = h.app.viewports.add(0, &h.app.doc.camera);
-    h.app.viewports.dock(tab, 0, DropSide::Right);
-    h.frame(vec![]);
     let before = h.app.doc.camera.clone();
-    let a = egui::pos2(250., h.app.viewport.center().y);
-    let b = egui::pos2(650., a.y);
+    let a = h.app.viewport.center();
+    let b = h.app.viewport.left_top() + egui::vec2(25., 23.);
     h.frame(vec![touch(0, Start, a), touch(1, Start, b)]);
     h.frame(vec![
         touch(0, Move, a - egui::vec2(20., 0.)),
@@ -160,16 +156,16 @@ fn pair_state() -> TouchZoom {
         contacts: [
             (
                 (egui::TouchDeviceId(0), egui::TouchId(0)),
-                (egui::pos2(0., 0.), Some(0)),
+                (egui::pos2(0., 0.), true),
             ),
             (
                 (egui::TouchDeviceId(0), egui::TouchId(1)),
-                (egui::pos2(100., 0.), Some(0)),
+                (egui::pos2(100., 0.), true),
             ),
         ]
         .into_iter()
         .collect(),
-        owner: Some(0),
+        started_in_viewport: true,
         captured: true,
         baseline: Some((100., egui::pos2(50., 0.))),
     }

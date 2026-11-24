@@ -651,10 +651,6 @@ pub struct Document {
     /// User-picked orbit pivot, scoped to this project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orbit_focus: Option<DVec3>,
-    /// Per-viewport framing belongs to this project, unlike reusable layout preferences.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(deserialize_with = "deserialize_map_or_empty_sequence")]
-    pub viewport_cameras: BTreeMap<u64, Camera>,
     /// Selection belongs to this project, including the object open for editing.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub selection: BTreeSet<u64>,
@@ -682,7 +678,6 @@ impl Default for Document {
             history: History::default(),
             camera: Camera::default(),
             orbit_focus: None,
-            viewport_cameras: BTreeMap::new(),
             selection: BTreeSet::new(),
             selection_context: None,
             snap_to_geometry: true,
@@ -705,7 +700,6 @@ impl Document {
             history: History::default(),
             camera: self.camera.clone(),
             orbit_focus: self.orbit_focus,
-            viewport_cameras: self.viewport_cameras.clone(),
             selection: self.selection.clone(),
             selection_context: self.selection_context,
             snap_to_geometry: self.snap_to_geometry,
@@ -741,7 +735,7 @@ impl Document {
         if !doc.display.valid() {
             return Err(tr!("core.document.invalid_display_settings").into());
         }
-        if !doc.camera.valid() || doc.viewport_cameras.values().any(|camera| !camera.valid()) {
+        if !doc.camera.valid() {
             return Err(tr!("core.document.invalid_camera").into());
         }
         Ok(())
@@ -773,6 +767,23 @@ impl DocumentCheckpoint {
 #[cfg(test)]
 mod legacy_json_map_tests {
     use super::*;
+
+    #[test]
+    fn projects_with_retired_view_fields_keep_the_main_camera_and_model() {
+        let mut doc = Document::default();
+        doc.camera.set_standard_view(crate::StandardView::Front);
+        doc.model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+        let mut json = serde_json::to_value(&doc).unwrap();
+        json["viewport_cameras"] = serde_json::json!({"0": Camera::default()});
+        json["custom_views"] = serde_json::json!({"Worktop": Camera::default()});
+        let restored = Document::from_json(&json.to_string()).unwrap();
+        assert_eq!(restored.camera, doc.camera);
+        assert_eq!(restored.model, doc.model);
+        let saved = serde_json::to_value(&restored).unwrap();
+        assert!(saved.get("viewport_cameras").is_none());
+        assert!(saved.get("custom_views").is_none());
+    }
+
     #[test]
     fn php_empty_maps_load_and_are_saved_as_objects() {
         let mut json = serde_json::to_value(Document::default()).unwrap();
@@ -793,7 +804,6 @@ mod legacy_json_map_tests {
         ] {
             json["model"][field] = serde_json::json!([]);
         }
-        json["viewport_cameras"] = serde_json::json!([]);
         let loaded = Document::from_json(&json.to_string()).unwrap();
         let saved = serde_json::to_value(loaded).unwrap();
         for field in [

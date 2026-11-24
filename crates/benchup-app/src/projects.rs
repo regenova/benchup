@@ -238,8 +238,8 @@ impl BenchUpApp {
         storage::invalidate_selection_source();
         self.doc = doc;
         self.doc_epoch += 1;
-        self.viewports
-            .reframe_project(&self.doc.camera, &self.doc.viewport_cameras);
+        self.view_transition = None;
+        self.touch_zoom = Default::default();
         self.selected = Self::restore_document_selection(&mut self.doc);
         self.outliner_anchor = None;
         self.hover = None;
@@ -444,7 +444,6 @@ impl BenchUpApp {
             return;
         }
         self.sync_stock_materials(ctx);
-        self.sync_viewport_cameras();
         self.sync_selection();
         if let Some(link) = &mut self.doc.shared_project {
             link.file_updated_at = sharing::now_timestamp();
@@ -473,7 +472,7 @@ impl BenchUpApp {
                 && self.doc.model.connections.is_empty()
                 && self.history_preview.is_none() && self.modeling.is_none()
                 && self.joint_highlight_preview_key().is_none())
-                .then(|| self.viewports.capture_resident(
+                .then(|| self.scene_cache.capture_resident(
                     &super::screenshot_dialog::capture_display(&self.doc, ctx.global_style().visuals.dark_mode),
                     self.render_model.shared(), self.render_model.revision(),
                 )).flatten().map(|scene| (scene, crate::screenshots::visible_points_with_entities(&self.doc.model, &self.entity_cache)));
@@ -606,9 +605,7 @@ impl BenchUpApp {
                 #[cfg(target_arch = "wasm32")]
                 let reloading = false;
                 if reloading {
-                    self.sync_viewport_cameras();
                     doc.camera = self.doc.camera.clone();
-                    doc.viewport_cameras = self.doc.viewport_cameras.clone();
                 }
                 self.replace_project(*doc, path, ctx);
                 if !reloading {

@@ -206,7 +206,7 @@ impl BenchUpApp {
                         && self.history_preview.is_none()
                         && self.modeling.is_none()
                         && self.joint_highlight_preview_key().is_none())
-                        .then(|| self.viewports.capture_resident(
+                        .then(|| self.scene_cache.capture_resident(
                             &capture_display(source, ctx.global_style().visuals.dark_mode),
                             self.render_model.shared(), self.render_model.revision(),
                         )).flatten()
@@ -438,8 +438,7 @@ fn screenshot_preview(
 // Preserve the viewport's effective shadows, materials, theme and fog colors.
 // Export hides editing aids without silently choosing a different render style.
 fn capture_document(doc: &Document, dark: bool) -> Document {
-    // Rendering needs the current scene, not the undo/import history or the
-    // other viewport cameras. Large imports can have more history than geometry.
+    // Large imports can have more undo history than geometry. Capture only the scene.
     let mut source = Document {
         name: doc.name.clone(),
         model: doc.model.clone(),
@@ -772,19 +771,16 @@ mod tests {
 
 
     #[test]
-    fn capture_omits_history_and_other_viewports() {
+    fn capture_omits_history() {
         let mut doc = Document::default();
         let before = doc.model.clone();
         doc.model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
         doc.history.record("Import", before, &doc.model);
-        doc.viewport_cameras.insert(8, Camera::default());
         let captured = capture_document(&doc, false);
         assert_eq!(captured.model, doc.model);
         assert_eq!(captured.camera, doc.camera);
         assert!(captured.history.is_empty());
-        assert!(captured.viewport_cameras.is_empty());
         assert!(!doc.history.is_empty());
-        assert_eq!(doc.viewport_cameras.len(), 1);
     }
 
     #[test]

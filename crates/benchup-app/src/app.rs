@@ -185,23 +185,10 @@ impl CompassAxis {
             (Axis::Z, true) => "−Z",
         }
     }
-
-    fn view(self) -> benchup_core::StandardView {
-        use benchup_core::StandardView;
-        match (self.axis, self.negative) {
-            (Axis::X, false) => StandardView::Right,
-            (Axis::Y, false) => StandardView::Back,
-            (Axis::Z, false) => StandardView::Top,
-            (Axis::X, true) => StandardView::Left,
-            (Axis::Y, true) => StandardView::Front,
-            (Axis::Z, true) => StandardView::Bottom,
-        }
-    }
 }
 
 enum GestureKind {
     Compass {
-        axis: Option<CompassAxis>,
         pivot: Option<DVec3>,
         dragged: bool,
     },
@@ -459,7 +446,8 @@ pub struct BenchUpApp {
     orbit_key_transitions: Vec<egui::Event>,
     viewport_pointer: Option<Pos2>,
     viewport: Rect,
-    viewports: viewports::Workspace,
+    touch_zoom: viewports::TouchZoom,
+    view_transition: Option<viewports::ViewTransition>,
     inspector: bool,
     inspector_width: f32,
     tool_rail_width: f32,
@@ -663,7 +651,8 @@ impl BenchUpApp {
             orbit_key_transitions: Vec::new(),
             viewport_pointer: None,
             viewport: Rect::NOTHING,
-            viewports: viewports::Workspace::default(),
+            touch_zoom: Default::default(),
+            view_transition: None,
             inspector: true,
             inspector_width: 300.,
             tool_rail_width: 76.,
@@ -2516,7 +2505,6 @@ impl BenchUpApp {
         }
         if self.object_creation.is_none()
             && self.object_rename.is_none()
-            && self.viewports.renaming.is_none()
             && self.text_editor.is_none()
             && ctx.input_mut(|i| {
                 i.consume_key(egui::Modifiers::COMMAND, Key::F)
@@ -2553,7 +2541,7 @@ impl BenchUpApp {
                 return;
             }
             if self.joinery.open && self.object_creation.is_none()
-                && self.object_rename.is_none() && self.viewports.renaming.is_none()
+                && self.object_rename.is_none()
                 && self.text_editor.is_none()
             {
                 self.joinery.open = false;
@@ -2565,7 +2553,7 @@ impl BenchUpApp {
                 return;
             }
             if self.tool == Tool::Router && self.inspector && self.object_creation.is_none()
-                && self.object_rename.is_none() && self.viewports.renaming.is_none()
+                && self.object_rename.is_none()
                 && self.text_editor.is_none()
             {
                 self.close_router();
@@ -2586,7 +2574,6 @@ impl BenchUpApp {
                 || self.paste_preview.is_some()
                 || self.object_creation.is_some()
                 || self.object_rename.is_some()
-                || self.viewports.renaming.is_some()
                 || self.text_editor.is_some()
                 || self.help
                 || ctx.egui_wants_keyboard_input();
@@ -2604,7 +2591,6 @@ impl BenchUpApp {
             self.paste_preview = None;
             self.object_creation = None;
             self.object_rename = None;
-            self.viewports.renaming = None;
             self.text_editor = None;
             ctx.memory_mut(|m| {
                 if let Some(id) = m.focused() {
@@ -2634,7 +2620,6 @@ impl BenchUpApp {
             || self.help
             || self.object_creation.is_some()
             || self.object_rename.is_some()
-            || self.viewports.renaming.is_some()
             || self.text_editor.is_some()
         {
             let modifiers = ctx.input(|i| i.modifiers);
@@ -5153,7 +5138,6 @@ impl BenchUpApp {
         ) {
             return;
         }
-        // Once a drag starts, returning to its start must not align an axis.
         if !*dragged && gesture.start.distance(pos) < 5. {
             return;
         }
@@ -5239,7 +5223,6 @@ impl BenchUpApp {
             || self.release_notes.open
             || self.object_creation.is_some()
             || self.object_rename.is_some()
-            || self.viewports.renaming.is_some()
             || self.text_editor.is_some()
         {
             self.drawing_orbit_down = false;
@@ -5350,9 +5333,6 @@ impl BenchUpApp {
                                 start: pos,
                                 last: pos,
                                 kind: GestureKind::Compass {
-                                    axis: (button == egui::PointerButton::Primary)
-                                        .then(|| self.compass_axis_at(pos))
-                                        .flatten(),
                                     pivot: None,
                                     dragged: false,
                                 },
@@ -5539,18 +5519,7 @@ impl BenchUpApp {
                         let mut gesture = self.gesture.take().unwrap();
                         self.update_compass_orbit(ctx, &mut gesture, pos);
                         match gesture.kind {
-                            GestureKind::Compass {
-                                axis: Some(axis),
-                                dragged: false,
-                                ..
-                            } if gesture.start.distance(pos) < 5.
-                                && self.compass_axis_at(pos) == Some(axis) =>
-                            {
-                                self.doc.camera.set_standard_view(axis.view());
-                                self.changed(ctx);
-                                ctx.request_repaint();
-                            }
-                            GestureKind::Navigate { .. } | GestureKind::DrawingNavigate => {}
+                            GestureKind::Compass { .. } | GestureKind::Navigate { .. } | GestureKind::DrawingNavigate => {}
                             GestureKind::Select { additive } => {
                                 let dragged = gesture.start.distance(pos) > 4.;
                                 let mut hits = if dragged {
@@ -7102,7 +7071,16 @@ impl BenchUpApp {
         let colors = Palette::for_ui(ui);
         let path = self.doc.model.edit_path();
         let mut destination = None;
-        ui.horizontal_centered(|ui| {
+        let key = "model-breadcrumb";
+        let scroll = sidebar::restored_scroll_area(
+            ui,
+            key,
+            egui::ScrollArea::horizontal()
+                .id_salt(key)
+                .auto_shrink([false, true])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden),
+        )
+        .show(ui, |ui| ui.horizontal_centered(|ui| {
             if path.is_empty() {
                 ui.text_label(RichText::new(tr!("app.model")).size(13.).strong());
                 ui.text_label(RichText::new("/").color(colors.border));
@@ -7127,7 +7105,8 @@ impl BenchUpApp {
                     );
                 }
             }
-        });
+        }));
+        sidebar::remember_scroll(ui.ctx(), key, scroll.state.clamped_offset());
         if let Some(context) = destination {
             self.navigate_context(context, ui.ctx());
         }
@@ -7263,17 +7242,6 @@ impl BenchUpApp {
         })
     }
 
-    fn compass_axis_at(&self, pos: Pos2) -> Option<CompassAxis> {
-        let center = Self::compass_center(self.viewport)?;
-        // Positive tips win overlaps; ties keep the frontmost painted tip.
-        self.compass_axes(center)
-            .into_iter()
-            .rev()
-            .filter(|(_, end)| end.distance(pos) <= COMPASS_TIP_RADIUS)
-            .min_by_key(|(axis, _)| axis.negative)
-            .map(|(axis, _)| axis)
-    }
-
     fn paint_compass(&self, ui: &egui::Ui, response: &egui::Response) {
         let Some(center) = Self::compass_center(self.viewport) else {
             return;
@@ -7286,13 +7254,10 @@ impl BenchUpApp {
         if pointer.is_some_and(|pos| self.compass_contains(pos)) {
             p.circle_filled(center, COMPASS_RADIUS, colors.paper.gamma_multiply(0.45));
         }
-        let hovered_axis = pointer.and_then(|pos| self.compass_axis_at(pos));
         if self.gesture.as_ref().is_some_and(|gesture| {
             matches!(gesture.kind, GestureKind::Compass { dragged: true, .. })
         }) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        } else if hovered_axis.is_some() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         } else if pointer.is_some_and(|pos| self.compass_contains(pos)) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
@@ -7307,11 +7272,10 @@ impl BenchUpApp {
         }
         for (axis, end) in axes {
             let color = self.axis_color(axis.axis);
-            let hovered = hovered_axis == Some(axis);
             p.circle(
                 end,
                 COMPASS_TIP_RADIUS,
-                if axis.negative && !hovered {
+                if axis.negative {
                     color.gamma_multiply(0.2)
                 } else {
                     color
@@ -7322,14 +7286,7 @@ impl BenchUpApp {
                     Stroke::NONE
                 },
             );
-            if hovered {
-                p.circle_stroke(
-                    end,
-                    8.5 * COMPASS_SCALE,
-                    Stroke::new(COMPASS_SCALE, colors.ink),
-                );
-            }
-            if !axis.negative || hovered {
+            if !axis.negative {
                 p.text(
                     end,
                     Align2::CENTER_CENTER,
@@ -7409,7 +7366,7 @@ impl BenchUpApp {
                                         ui.available_size(),
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            self.viewport_tabs(ui);
+                                            self.edit_context_bar(ui);
                                         },
                                     );
                                 },
@@ -7494,7 +7451,6 @@ impl BenchUpApp {
 
     fn persist_edit(&mut self) {
         self.sync_selection();
-        self.sync_viewport_cameras();
         match storage::save_edits(&self.doc) {
             Ok(()) => {
                 self.dirty_since = None;
@@ -7511,7 +7467,6 @@ impl BenchUpApp {
     }
     fn persist(&mut self) {
         self.sync_selection();
-        self.sync_viewport_cameras();
         match storage::save(&self.doc) {
             Ok(()) => {
                 self.dirty_since = None;
@@ -7604,7 +7559,6 @@ impl eframe::App for BenchUpApp {
         self.object_creation_window(&ctx);
         self.rename_object_window(&ctx);
         self.connection_sidebar_selection(&ctx);
-        self.rename_viewport_window(&ctx);
         self.text_editor_window(&ctx);
         if self.help {
             self.help_window(&ctx);

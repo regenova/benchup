@@ -1391,23 +1391,6 @@ fn paint_line_icon(p: &egui::Painter, c: Pos2, kind: &str, color: Color32) {
             p.circle_stroke(c, 3., s);
             p.line_segment([c + egui::vec2(-4., -6.), c + egui::vec2(1., -6.)], s);
         }
-        "view_standard_views" => {
-            let at = |x: f32, y: f32| c + egui::vec2(x, y);
-            p.add(egui::Shape::closed_line(
-                vec![
-                    at(0., -8.),
-                    at(7., -4.),
-                    at(7., 4.),
-                    at(0., 8.),
-                    at(-7., 4.),
-                    at(-7., -4.),
-                ],
-                s,
-            ));
-            for end in [at(-7., -4.), at(7., -4.), at(0., 8.)] {
-                p.line_segment([c, end], s);
-            }
-        }
         "display" => {
             p.rect_stroke(
                 Rect::from_center_size(c + egui::vec2(0., -2.), egui::vec2(16., 11.)),

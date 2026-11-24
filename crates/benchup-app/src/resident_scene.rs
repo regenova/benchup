@@ -686,7 +686,7 @@ impl SceneCache {
                     .as_vec4()
                     .to_array(),
                 light: light.extend(0.).as_vec4().to_array(),
-                direction: toward_eye.extend(0.).as_vec4().to_array(),
+                direction: toward_eye.extend(key.camera.distance).as_vec4().to_array(),
                 viewport: [
                     key.size.x as f32,
                     key.size.y as f32,
@@ -728,11 +728,10 @@ impl SceneCache {
                     (high - geometry.origin).extend(0.).as_vec4().to_array()),
                 flags: [
                     0.,
-                    if key.camera.projection == benchup_core::Projection::Parallel {
-                        1.
-                    } else {
-                        0.
-                    },
+                    key.camera.projection_blend.map_or_else(
+                        || f32::from(u8::from(key.camera.projection == benchup_core::Projection::Parallel)),
+                        |weight| (1. - weight) as f32,
+                    ),
                     0.,
                     0.,
                 ],
@@ -757,7 +756,7 @@ pub(super) fn clip_planes(camera: &Camera, bounds: (DVec3, DVec3)) -> (f64, f64)
     let depth = (center - camera.eye()).dot(forward);
     let radius = half.dot(forward.abs());
     let near = ((depth - radius) * 0.5).max(0.005);
-    let far = if camera.projection == benchup_core::Projection::Parallel {
+    let far = if camera.projection == benchup_core::Projection::Parallel || camera.projection_blend.is_some() {
         (depth + radius + camera.distance * 2.).max(near + 1.)
     } else {
         1e8_f64.max((depth + radius) * 2.).max(near * 2.)

@@ -155,7 +155,7 @@ pub(super) fn tick(app: &mut BenchUpApp, ctx: &egui::Context) {
                 "faces": app.doc.model.faces.len(), "edges": app.doc.model.edges.len(),
                 "camera": bench.camera, "draws": bench.draws, "resident_frames": bench.resident_frames,"selected_frames":bench.selected_frames,"group_frames":bench.group_frames,"scopes":bench.scopes,"measurements_ready":app.selection_measurements.ready_count(),"measurement_errors":app.selection_measurements.error_count(),"measurement_error":app.selection_measurements.first_error(),
                 "yaw_range": bench.yaw_range, "pitch_range": bench.pitch_range,
-                "edges_visible": app.doc.display.edges, "shadows":app.doc.display.shadows,"shadow_builds":app.viewports.resident_shadow_builds(),"resident_builds": app.viewports.resident_builds(), "size": [ctx.viewport_rect().width(), ctx.viewport_rect().height()] });
+                "edges_visible": app.doc.display.edges, "shadows":app.doc.display.shadows,"shadow_builds":app.scene_cache.resident_shadow_builds(),"resident_builds": app.scene_cache.resident_builds(), "size": [ctx.viewport_rect().width(), ctx.viewport_rect().height()] });
             let _ = js_sys::Reflect::set(&web_sys::window().unwrap(),
                 &JsValue::from_str("benchupViewportBenchmarkResult"),
                 &js_sys::JSON::parse(&result.to_string()).unwrap());
@@ -204,7 +204,7 @@ fn publish_state(app: &BenchUpApp) {
             "history_position": app.doc.history.position(), "screenshot": app.screenshot.benchmark_state(),
             "measurement_points": app.measurement_points(), "guides": app.doc.model.guides.len(),
             "camera": app.doc.camera, "walk_feet": app.walk.person.as_ref().map(|p|p.feet),
-            "shadows":app.doc.display.shadows,"shadow_builds":app.viewports.resident_shadow_builds(),"resident_builds": app.viewports.resident_builds()});
+            "shadows":app.doc.display.shadows,"shadow_builds":app.scene_cache.resident_shadow_builds(),"resident_builds": app.scene_cache.resident_builds()});
     let _ = js_sys::Reflect::set(
         &web_sys::window().unwrap(),
         &JsValue::from_str("benchupViewportBenchmarkState"),
