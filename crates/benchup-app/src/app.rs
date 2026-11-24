@@ -38,6 +38,9 @@ fn dot(ui: &mut egui::Ui, color: Color32) {
     ui.painter().circle_filled(r.center(), 2.5, color);
 }
 
+#[path = "app_menu.rs"]
+mod app_menu;
+use app_menu::{AppBarMenus, MenuItemResponse, MenuPress};
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "app_updates.rs"]
 mod app_updates;
@@ -2958,43 +2961,6 @@ impl BenchUpApp {
         }
     }
 
-    fn app_bar_menu(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
-        let response = ui.add(egui::Button::new(title).stroke(Stroke::NONE));
-        let popup_id = egui::Popup::default_response_id(&response);
-        let active_id = ui.scope_id().with("main_menu_active_popup");
-        let hover_id = response.id.with("main_menu_hover_started");
-        let active = ui.data(|data| data.get_temp::<egui::Id>(active_id));
-        let can_switch = active.is_some_and(|id| {
-            id != popup_id && egui::Popup::is_id_open(ui.ctx(), id)
-        });
-        if can_switch && response.hovered() && !response.clicked() {
-            let now = ui.input(|input| input.time);
-            let started = ui.data_mut(|data| {
-                *data.get_temp_mut_or_insert_with(hover_id, || now)
-            });
-            let remaining = 0.5 - (now - started);
-            if remaining <= 0.0 {
-                egui::Popup::open_id(ui.ctx(), popup_id);
-            } else {
-                ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(remaining));
-            }
-        } else {
-            ui.data_mut(|data| data.remove::<f64>(hover_id));
-        }
-
-        // Carry the same padding and behavior into nested submenus.
-        let config = egui::menu::MenuConfig::new().style(Self::menu_style);
-        let inner = egui::Popup::menu(&response)
-            .close_behavior(config.close_behavior)
-            .style(config.style.clone())
-            .info(egui::UiStackInfo::new(egui::UiKind::Menu)
-                .with_tag_value(egui::menu::MenuConfig::MENU_CONFIG_TAG, config))
-            .show(content);
-        if inner.is_some() {
-            ui.data_mut(|data| data.insert_temp(active_id, popup_id));
-        }
-    }
-
     fn project_heading(&self, ui: &mut egui::Ui, colors: Palette, foreground: Color32) {
         const MAX_WIDTH: f32 = 174.;
         const LOGO_SIZE: f32 = 35.;
@@ -3151,7 +3117,8 @@ impl BenchUpApp {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         self.project_heading(ui, colors, foreground);
                         ui.add_space(8.);
-                        Self::app_bar_menu(ui, tr!("app.file"), |ui| {
+                        let mut menus = AppBarMenus::new(ui);
+                        menus.show(ui, tr!("app.file"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
                             for (label, icon, modifiers, key, action) in [
                                 (tr!("app.new_project"), "new", egui::Modifiers::COMMAND, Key::N, 0),
@@ -3160,7 +3127,7 @@ impl BenchUpApp {
                                 (tr!("app.save_as"), "save", egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, Key::S, 3),
                             ] {
                                 let shortcut = ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, key));
-                                if ui.add(Self::menu_item_button(ui, label, Some(icon)).shortcut_text(shortcut)).clicked() {
+                                if ui.add(Self::menu_item_button(ui, label, Some(icon)).shortcut_text(shortcut)).menu_activated() {
                                     match action {
                                         0 => self.request_project(projects::Action::New, &ctx),
                                         1 => self.request_project(projects::Action::Open, &ctx),
@@ -3174,7 +3141,7 @@ impl BenchUpApp {
                                     self.recent_projects_menu(ui, &ctx);
                                 }
                             }
-                            if self.account.sharing_available() && ui.add(Self::menu_item_button(ui, self.share_menu_label(), Some("share"))).clicked() { self.start_sharing(&ctx); ui.close(); }
+                            if self.account.sharing_available() && ui.add(Self::menu_item_button(ui, self.share_menu_label(), Some("share"))).menu_activated() { self.start_sharing(&ctx); ui.close(); }
                             ui.separator();
                             Self::menu_submenu(ui, tr!("app.import"), None, |ui| {
                                 for (extension, label, help) in [
@@ -3183,7 +3150,7 @@ impl BenchUpApp {
                                     ("obj", tr!("app.wavefront_obj_obj_metres"), tr!("app.faces_and_lines_including_negative_vertex_indices_metres")),
                                     ("dxf", tr!("app.dxf_2d_dxf"), tr!("app.text_dxf_line_straight_lwpolyline_arc_and_circle")),
                                 ] {
-                                    if ui.add(Self::menu_item_button(ui, label, None)).on_hover_text(help).clicked() && !self.project.blocked() {
+                                    if ui.add(Self::menu_item_button(ui, label, None)).on_hover_text(help).menu_activated() && !self.project.blocked() {
                                         self.project.import_format = extension.into();
                                         self.import_model(&ctx);
                                         ui.close();
@@ -3195,7 +3162,7 @@ impl BenchUpApp {
                                     (false, tr!("app.wavefront_obj_obj"), tr!("app.visible_edges_and_triangulated_faces_in_metres_z")),
                                     (true, tr!("app.stl_stl_millimetres"), tr!("app.binary_stl_of_visible_faces_in_millimetres_z")),
                                 ] {
-                                    if ui.add(Self::menu_item_button(ui, label, None)).on_hover_text(help).clicked() && !self.project.blocked() {
+                                    if ui.add(Self::menu_item_button(ui, label, None)).on_hover_text(help).menu_activated() && !self.project.blocked() {
                                         self.project.export_stl = stl;
                                         self.export_model(&ctx);
                                         ui.close();
@@ -3203,20 +3170,20 @@ impl BenchUpApp {
                                 }
                             });
                             ui.separator();
-                            if ui.add(Self::menu_item_button(ui, tr!("app.settings"), Some("settings"))).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.settings"), Some("settings"))).menu_activated() {
                                 self.settings_open = true;
                                 ui.close();
                             }
                             #[cfg(not(target_arch = "wasm32"))]
                             {
                                 ui.separator();
-                                if ui.add(Self::menu_item_button(ui, tr!("app.quit"), None)).clicked() {
+                                if ui.add(Self::menu_item_button(ui, tr!("app.quit"), None)).menu_activated() {
                                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                                     ui.close();
                                 }
                             }
                         });
-                        Self::app_bar_menu(ui, tr!("app.edit"), |ui| {
+                        menus.show(ui, tr!("app.edit"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
                             Self::configure_entity_menu(ui);
                             for (redo, action, label, modifiers) in [
@@ -3226,7 +3193,7 @@ impl BenchUpApp {
                                 let enabled = label.is_some();
                                 let label = label.map(|label| tr!("app.history_menu_action", action = action, label = label)).unwrap_or_else(|| action.to_owned());
                                 let shortcut = ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, Key::Z));
-                                if ui.add_enabled(enabled, Self::menu_item_button(ui, label, Some(if redo { "redo" } else { "undo" })).shortcut_text(shortcut)).clicked() {
+                                if ui.add_enabled(enabled, Self::menu_item_button(ui, label, Some(if redo { "redo" } else { "undo" })).shortcut_text(shortcut)).menu_activated() {
                                     self.undo(&ctx, redo);
                                     ui.close();
                                 }
@@ -3235,18 +3202,18 @@ impl BenchUpApp {
                             self.context_position = None;
                             self.entity_menu(ui, |_, _| {});
                             ui.separator();
-                            if ui.add_enabled(!self.doc.model.guides.is_empty() && !self.project.blocked(), Self::menu_item_button(ui, tr!("app.delete_guides"), None)).clicked() {
+                            if ui.add_enabled(!self.doc.model.guides.is_empty() && !self.project.blocked(), Self::menu_item_button(ui, tr!("app.delete_guides"), None)).menu_activated() {
                                 self.delete_construction_guides(&ctx);
                                 ui.close();
                             }
                         });
-                        Self::app_bar_menu(ui, tr!("app.view"), |ui| {
+                        menus.show(ui, tr!("app.view"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
                             self.view_menu(ui);
                         });
-                        Self::app_bar_menu(ui, tr!("app.tools"), |ui| {
+                        menus.show(ui, tr!("app.tools"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
-                            if ui.add_enabled(self.selected_fastener_pair(&ctx).is_some(), Self::menu_item_button(ui, tr!("app.wood_joinery"), Some("connections/wood_joinery"))).clicked() {
+                            if ui.add_enabled(self.selected_fastener_pair(&ctx).is_some(), Self::menu_item_button(ui, tr!("app.wood_joinery"), Some("connections/wood_joinery"))).menu_activated() {
                                 self.context_action(&ctx, context_menu::ContextAction::WoodJoinery);
                                 ui.close();
                             }
@@ -3255,75 +3222,76 @@ impl BenchUpApp {
                                 && self.selected.len() >= 2;
                             if ui.add_enabled(glue_enabled, Self::menu_item_button(ui, tr!("wood_glue.automatic"), Some("wood_glue")))
                                 .on_hover_text(tr!("wood_glue.automatic_hint"))
-                                .clicked() {
+                                .menu_activated() {
                                 self.glue_selection(&ctx);
                                 ui.close();
                             }
                             ui.separator();
                             if ui.add_enabled(!self.project.blocked(), Self::menu_item_button(ui, tr!("app.generate_time_cost_estimates"), Some("export_pdf")))
                                 .on_hover_text(tr!("app.export_time_and_cost_estimates_as_pdf"))
-                                .clicked() {
+                                .menu_activated() {
                                 self.export_time_estimates(&ctx);
                                 ui.close();
                             }
                             if ui.add_enabled(!self.project.blocked(), Self::menu_item_button(ui, tr!("app.print_workshop_labels"), Some("export_pdf")))
                                 .on_hover_text(tr!("app.create_a_printable_label_for_each_piece_in"))
-                                .clicked() {
+                                .menu_activated() {
                                 self.prepare_cut_report(CutReport::WorkshopLabels);
                                 ui.close();
                             }
                             if ui.add_enabled(!self.project.blocked(), Self::menu_item_button(ui, tr!("app.prepare_cutting_plan"), Some("dimension")))
                                 .on_hover_text(tr!("app.summarize_matching_parts_and_export_finished_cutting_dimensions"))
-                                .clicked() {
+                                .menu_activated() {
                                 self.prepare_cut_report(CutReport::CuttingPlan);
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.add_enabled(!self.project.blocked(), Self::menu_item_button(ui, tr!("app.screenshot"), Some("screenshot"))).clicked() {
+                            if ui.add_enabled(!self.project.blocked(), Self::menu_item_button(ui, tr!("app.screenshot"), Some("screenshot"))).menu_activated() {
                                 self.screenshot.open = true;
                                 ui.close();
                             }
                         });
-                        Self::app_bar_menu(ui, tr!("app.help"), |ui| {
+                        menus.show(ui, tr!("app.help"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
-                            if ui.add(Self::menu_item_button(ui, tr!("app.keyboard_shortcuts"), None)).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.keyboard_shortcuts"), None)).menu_activated() {
                                 self.help = true;
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.add(Self::menu_item_button(ui, tr!("app.report_a_bug"), None)).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.report_a_bug"), None)).menu_activated() {
                                 crate::system_info::request_issue(&ctx);
                                 ui.close();
                             }
-                            if ui.add(Self::menu_item_button(ui, tr!("app.github"), None)).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.github"), None)).menu_activated() {
                                 ctx.open_url(egui::OpenUrl::new_tab("https://github.com/regenova/benchup"));
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.add(Self::menu_item_button(ui, tr!("app.download_desktop_app"), Some("import"))).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.download_desktop_app"), Some("import"))).menu_activated() {
                                 ctx.open_url(egui::OpenUrl::new_tab("https://benchup3d.github.io/benchup/"));
                                 ui.close();
                             }
-                            if ui.add(Self::menu_item_button(ui, tr!("app.release_notes"), None)).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.release_notes"), None)).menu_activated() {
                                 self.release_notes.open();
                                 ui.close();
                             }
                             #[cfg(not(target_arch = "wasm32"))]
-                            if ui.add(Self::menu_item_button(ui, tr!("app.check_for_updates"), Some("import"))).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.check_for_updates"), Some("import"))).menu_activated() {
                                 self.updates.open = true;
                                 self.updates.check(&ctx, false);
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.add(Self::menu_item_button(ui, tr!("app.system_information"), None)).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.system_information"), None)).menu_activated() {
                                 crate::system_info::open(&ctx);
                                 ui.close();
                             }
-                            if ui.add(Self::menu_item_button(ui, tr!("app.about_benchup"), Some("info"))).clicked() {
+                            if ui.add(Self::menu_item_button(ui, tr!("app.about_benchup"), Some("info"))).menu_activated() {
                                 self.about = true;
                                 ui.close();
                             }
                         });
+                        menus.finish(ui);
                         let (separator, _) = ui.allocate_exact_size(egui::vec2(32., 24.), Sense::hover());
                         ui.painter().vline(
                             separator.center().x,

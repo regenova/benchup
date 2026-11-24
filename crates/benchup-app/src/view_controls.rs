@@ -218,11 +218,8 @@ impl BenchUpApp {
         let button = egui::Button::new((Self::menu_item_icon(ui, Some("sections")), tr!("view_controls.sections")))
             .gap(ui.spacing().icon_spacing)
             .right_text(egui::menu::SubMenuButton::arrow_atom(None));
-        egui::menu::SubMenuButton::from_button(button)
-            .config(
-                egui::menu::MenuConfig::new()
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
-            )
+        let response = egui::menu::SubMenuButton::from_button(button)
+            .config(MenuPress::submenu_config(ui))
             .ui(ui, |ui| {
                 Self::menu_style(ui.style_mut());
                 ui.set_width(208.);
@@ -245,13 +242,16 @@ impl BenchUpApp {
                         {
                             table.row(ui, ("section_axis", axis), |column, cell| {
                                 if column == 0 {
-                                    if cell
+                                    let response = cell
                                         .checkbox(&mut d.section_axes[axis], label)
                                         .on_hover_text(
                                             tr!("view_controls.keeps_geometry_on_the_negative_side_of_this"),
-                                        )
-                                        .changed()
-                                    {
+                                        );
+                                    let released = response.menu_press_target() == Some(MenuPress::Released);
+                                    if released && !response.changed() {
+                                        d.section_axes[axis] = !d.section_axes[axis];
+                                    }
+                                    if released || response.changed() {
                                         d.section_planes =
                                             d.section_axes.iter().any(|&enabled| enabled);
                                     }
@@ -274,6 +274,7 @@ impl BenchUpApp {
             })
             .0
             .on_hover_text(tr!("view_controls.configure_section_planes_cuts_fill_and_axis_positions"));
+        response.menu_press_target();
         if self.doc.display != before {
             self.changed(ui.ctx());
         }

@@ -3374,6 +3374,81 @@ fn open_context_menu(h: &mut Harness, point: Pos2) -> egui::FullOutput {
 }
 
 #[test]
+fn clicking_the_open_app_bar_menu_keeps_it_open() {
+    let mut h = Harness::new();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let file = text_position(&output, tr!("app.file"));
+
+    h.click(file);
+    h.frame(vec![], egui::Modifiers::NONE);
+    h.click(file);
+    let menu = h.frame(vec![], egui::Modifiers::NONE);
+    let import = menu_text_position(&menu, tr!("app.import"));
+
+    h.frame(vec![egui::Event::PointerMoved(import)], egui::Modifiers::NONE);
+    let submenu = h.frame(vec![], egui::Modifiers::NONE);
+    menu_text_position(&submenu, tr!("app.sketchup_skp"));
+
+    h.click(file);
+    let submenu = h.frame(vec![], egui::Modifiers::NONE);
+    menu_text_position(&submenu, tr!("app.sketchup_skp"));
+
+    h.click(h.app.viewport.center());
+    assert!(!egui::Popup::is_any_open(&h.ctx));
+}
+
+#[test]
+fn dragging_from_an_app_bar_title_opens_the_menu_and_activates_on_release() {
+    for switch_menu in [false, true] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let help = text_position(&output, tr!("app.help"));
+        let title = if switch_menu {
+            text_position(&output, tr!("app.file"))
+        } else {
+            help
+        };
+
+        h.pointer(title, egui::PointerButton::Primary, true, false);
+        assert!(egui::Popup::is_any_open(&h.ctx));
+        if switch_menu {
+            h.frame(vec![egui::Event::PointerMoved(help)], egui::Modifiers::NONE);
+        }
+        let menu = h.frame(vec![], egui::Modifiers::NONE);
+        let shortcuts = menu_text_position(&menu, tr!("app.keyboard_shortcuts"));
+        h.frame(vec![egui::Event::PointerMoved(shortcuts)], egui::Modifiers::NONE);
+        assert!(!h.app.help);
+        h.pointer(shortcuts, egui::PointerButton::Primary, false, false);
+        assert!(h.app.help);
+        assert!(!egui::Popup::is_any_open(&h.ctx));
+    }
+}
+
+#[test]
+fn app_bar_press_can_select_in_a_submenu_or_release_outside() {
+    for select_item in [false, true] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let view = text_position(&output, tr!("app.view"));
+        let initial_cuts = h.app.doc.display.section_cuts;
+
+        h.pointer(view, egui::PointerButton::Primary, true, false);
+        let menu = h.frame(vec![], egui::Modifiers::NONE);
+        let sections = menu_text_position(&menu, tr!("view_controls.sections"));
+        h.frame(vec![egui::Event::PointerMoved(sections)], egui::Modifiers::NONE);
+        let submenu = h.frame(vec![], egui::Modifiers::NONE);
+        let cuts = menu_text_position(&submenu, tr!("view_controls.section_cuts"));
+        let target = if select_item { cuts } else { h.app.viewport.center() };
+
+        h.frame(vec![egui::Event::PointerMoved(target)], egui::Modifiers::NONE);
+        assert_eq!(h.app.doc.display.section_cuts, initial_cuts);
+        h.pointer(target, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.doc.display.section_cuts, initial_cuts ^ select_item);
+        assert_eq!(egui::Popup::is_any_open(&h.ctx), select_item);
+    }
+}
+
+#[test]
 fn menus_block_background_hover_and_restore_it_after_closing() {
     for context_menu in [true, false] {
         let mut h = Harness::new();

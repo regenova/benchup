@@ -187,12 +187,12 @@ impl BenchUpApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(tr!("common.remove"))
                             .on_hover_text(tr!("projects.remove_from_recent_projects"))
-                            .clicked()
+                            .menu_activated()
                         {
                             remove = Some(index);
                         }
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            if ui.add(Self::menu_item_button(ui, label, None).wrap()).on_hover_text(detail).clicked() {
+                            if ui.add(Self::menu_item_button(ui, label, None).wrap()).on_hover_text(detail).menu_activated() {
                                 chosen = Some(index);
                             }
                         });
@@ -202,6 +202,7 @@ impl BenchUpApp {
             if let Some(index) = remove {
                 self.project.recent.remove(index);
                 ctx.request_repaint();
+                ui.close();
             } else if let Some(index) = chosen {
                 self.request_project(Action::Recent(index), ctx);
                 ui.close();
