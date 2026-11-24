@@ -2995,6 +2995,71 @@ impl BenchUpApp {
         }
     }
 
+    fn project_heading(&self, ui: &mut egui::Ui, colors: Palette, foreground: Color32) {
+        const MAX_WIDTH: f32 = 174.;
+        const LOGO_SIZE: f32 = 35.;
+        const LINE_SPACING: f32 = 1.;
+
+        let text_width = ((ui.available_width() * 0.225).min(MAX_WIDTH)
+            - LOGO_SIZE
+            - ui.spacing().item_spacing.x)
+            .max(0.);
+        let (logo, _) = ui.allocate_exact_size(egui::Vec2::splat(LOGO_SIZE), Sense::hover());
+        icons::logo(ui.painter(), logo);
+
+        let status = if self.save_error.is_some() {
+            tr!("app.unsaved")
+        } else if self.dirty_since.is_some() || storage::is_pending() {
+            tr!("app.saving")
+        } else if self.storage_recovery {
+            tr!("app.new_workspace")
+        } else if self.project.modified {
+            tr!("app.modified_saved_locally")
+        } else {
+            tr!("app.saved_locally")
+        };
+        let dark = ui.visuals().dark_mode;
+        let status_color = match (dark, self.save_error.is_some()) {
+            (true, true) => Color32::from_rgb(243, 177, 145),
+            (true, false) => Color32::from_rgb(190, 202, 188),
+            (false, true) => colors.accent,
+            (false, false) => colors.muted,
+        };
+        let status_help = self.save_error.as_deref().unwrap_or_else(|| {
+            if self.project.modified {
+                tr!("app.autosaved_on_this_device_use_file_save_to")
+            } else {
+                tr!("app.your_model_stays_on_this_device")
+            }
+        });
+        let title_font = FontId::new(16., project_title_font());
+        let status_font = FontId::proportional(12.);
+        let text_height = ui.fonts_mut(|fonts| {
+            fonts.row_height(&title_font) + LINE_SPACING + fonts.row_height(&status_font)
+        });
+        ui.allocate_ui_with_layout(
+            egui::vec2(text_width, text_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_width(text_width);
+                ui.spacing_mut().item_spacing.y = LINE_SPACING;
+                ui.add(
+                    crate::natural_text::Label::new(
+                        RichText::new(&self.doc.name).font(title_font).color(foreground),
+                    )
+                    .truncate(),
+                );
+                ui.add(
+                    crate::natural_text::Label::new(
+                        RichText::new(status).font(status_font).color(status_color),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(status_help);
+            },
+        );
+    }
+
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let colors = Palette::for_ui(ui);
         let dark = ui.visuals().dark_mode;
@@ -3023,7 +3088,6 @@ impl BenchUpApp {
                         ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                     }
                 }
-                let compact = ui.available_width() < 1000.;
                 ui.visuals_mut().override_text_color = Some(foreground);
                 ui.visuals_mut().widgets.inactive.fg_stroke = Stroke::new(1., foreground);
                 ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -3084,57 +3148,9 @@ impl BenchUpApp {
                     });
                     // This row flows right to left, placing the divider left of the theme toggle.
                     ui.add(egui::Separator::default().vertical().spacing(16.));
-                    let (text, color) = if self.save_error.is_some() {
-                        (tr!("app.unsaved"), Color32::from_rgb(243, 177, 145))
-                    } else if self.dirty_since.is_some() || storage::is_pending() {
-                        (tr!("app.saving"), Color32::from_rgb(190, 202, 188))
-                    } else if self.storage_recovery {
-                        (tr!("app.new_workspace"), Color32::from_rgb(190, 202, 188))
-                    } else if self.project.modified {
-                        (tr!("app.modified_saved_locally"), Color32::from_rgb(190, 202, 188))
-                    } else {
-                        (tr!("app.saved_locally"), Color32::from_rgb(190, 202, 188))
-                    };
-                    let color = if dark {
-                        color
-                    } else if self.save_error.is_some() {
-                        colors.accent
-                    } else {
-                        colors.muted
-                    };
-                    if !compact {
-                        let saved = ui.text_label(RichText::new(text).size(12.).color(color));
-                        if let Some(error) = &self.save_error {
-                            saved.on_hover_text(error);
-                        } else {
-                            saved.on_hover_text(if self.project.modified {
-                                tr!("app.autosaved_on_this_device_use_file_save_to")
-                            } else {
-                                tr!("app.your_model_stays_on_this_device")
-                            });
-                        }
-                    }
-                    ui.scope(|ui| {
-                        dot(
-                            ui,
-                            if self.save_error.is_some() {
-                                ACCENT
-                            } else {
-                                Color32::from_rgb(152, 183, 142)
-                            },
-                        );
-                    })
-                    .response
-                    .on_hover_text(self.save_error.as_deref().unwrap_or(text));
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        let (logo, _) =
-                            ui.allocate_exact_size(egui::vec2(35., 35.), Sense::hover());
-                        icons::logo(ui.painter(), logo);
-                        ui.add_space(4.);
-                        if !compact {
-                            ui.text_label(RichText::new("BenchUp").size(23.).strong().color(foreground));
-                        }
-                        ui.add_space(18.);
+                        self.project_heading(ui, colors, foreground);
+                        ui.add_space(8.);
                         Self::app_bar_menu(ui, tr!("app.file"), |ui| {
                             ui.visuals_mut().override_text_color = Some(colors.ink);
                             for (label, icon, modifiers, key, action) in [
@@ -3343,14 +3359,6 @@ impl BenchUpApp {
                                 }
                             }
                         });
-                        let (separator, _) = ui.allocate_exact_size(egui::vec2(32., 24.), Sense::hover());
-                        ui.painter().vline(
-                            separator.center().x,
-                            separator.y_range(),
-                            Stroke::new(1., if dark { colors.border } else { colors.muted.gamma_multiply(0.8) }),
-                        );
-                        ui.add(crate::natural_text::Label::new(RichText::new(&self.doc.name).size(18.).family(project_title_font()).color(foreground)).truncate())
-                            .on_hover_text(&self.doc.name);
                     });
                 });
             });
