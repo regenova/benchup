@@ -61,7 +61,6 @@ pub(super) struct InspectorPreferences {
     general: settings::GeneralSettings,
     visible: bool,
     width: f32,
-    tool_rail_width: f32,
     docking: Option<docking::DockLayout>,
     component_filter: String,
     outliner_filter: String,
@@ -109,7 +108,6 @@ impl Default for InspectorPreferences {
             general: Default::default(),
             visible: true,
             width: 300.,
-            tool_rail_width: 76.,
             docking: None,
             component_filter: String::new(),
             outliner_filter: String::new(),
@@ -121,7 +119,7 @@ impl Default for InspectorPreferences {
             orbit_origin: OrbitOrigin::default(),
             tool_rail_order: Tool::RAIL.to_vec(),
             tool_rail_order_revision: 0,
-            tool_rail_separators: Vec::new(),
+            tool_rail_separators: tool_rail::DEFAULT_SEPARATORS.to_vec(),
             snapping: None,
             cutting_plan: CuttingPlanPreferences::default(),
             time_estimates: Default::default(),
@@ -247,7 +245,10 @@ mod guide_preference_tests {
     #[test]
     fn tool_rail_separators_default_and_restore_without_model_edits() {
         let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
-        assert!(legacy.tool_rail_separators.is_empty());
+        assert_eq!(legacy.tool_rail_separators, tool_rail::DEFAULT_SEPARATORS);
+        let legacy_with_width: InspectorPreferences =
+            serde_json::from_str(r#"{"tool_rail_width":148,"tool_rail_separators":[]}"#).unwrap();
+        assert!(legacy_with_width.tool_rail_separators.is_empty());
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
@@ -308,22 +309,6 @@ mod guide_preference_tests {
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         app.restore_inspector_preferences(&ctx, Some(&storage));
         assert_eq!(app.tool_rail_separators, vec![0, 2]);
-    }
-
-    #[test]
-    fn tool_rail_width_defaults_and_saves_without_model_edits() {
-        let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(legacy.tool_rail_width, 76.);
-        let ctx = egui::Context::default();
-        let mut app = BenchUpApp::with_document(Document::default(), None, true);
-        let mut storage = Storage::default();
-        app.tool_rail_width = 148.;
-        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
-        assert!(storage.flushed);
-        assert!(!app.project.modified);
-        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
-        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
-        assert_eq!(restored.tool_rail_width, 148.);
     }
 
     #[test]
@@ -1061,11 +1046,6 @@ impl BenchUpApp {
         } else {
             300.
         };
-        self.tool_rail_width = if preferences.tool_rail_width.is_finite() {
-            preferences.tool_rail_width.clamp(76., 320.)
-        } else {
-            76.
-        };
         self.component_filter = preferences.component_filter.clone();
         self.outliner_filter = preferences.outliner_filter.clone();
         self.shortcut_filter = preferences.shortcut_filter.clone();
@@ -1146,7 +1126,6 @@ impl BenchUpApp {
             general: self.general_settings.clone(),
             visible: self.inspector,
             width: self.inspector_width,
-            tool_rail_width: self.tool_rail_width,
             // Capture the effective layout even before the inspector first renders.
             docking: InspectorLayout::restore(
                 self.inspector_layout.dock.as_ref(),

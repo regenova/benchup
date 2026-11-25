@@ -19,7 +19,7 @@ fn compass_shift_matches_orbit_pan_and_can_toggle_during_drag() {
                 h.app.general_settings.middle_mouse_pan = middle_mouse_pan;
             }
             orbit.app.set_tool(Tool::Orbit);
-            let start = BenchUpApp::compass_center(compass.app.viewport).unwrap();
+            let start = compass.app.compass_center().unwrap();
             let orbit_start = orbit.app.viewport.center();
             let pan_shift = !(button == egui::PointerButton::Middle && middle_mouse_pan);
             let pan_modifiers = egui::Modifiers { shift: pan_shift, ..Default::default() };
@@ -89,7 +89,7 @@ fn compass_axis_hover_offers_drag_and_click_does_not_switch_views() {
     for theme in [egui::Theme::Light, egui::Theme::Dark] {
         let mut h = Harness::new();
         h.ctx.set_theme(theme);
-        let center = BenchUpApp::compass_center(h.app.viewport).unwrap();
+        let center = h.app.compass_center().unwrap();
         let outside = h.app.viewport.center();
         let output = h.frame(
             vec![egui::Event::PointerMoved(outside)],
@@ -111,7 +111,7 @@ fn compass_axis_hover_offers_drag_and_click_does_not_switch_views() {
 fn compass_has_six_larger_tips_and_only_connects_positive_axes() {
     let mut h = Harness::new();
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    let center = BenchUpApp::compass_center(h.app.viewport).unwrap();
+    let center = h.app.compass_center().unwrap();
     let tips = output.shapes.iter().filter(|shape| {
         matches!(&shape.shape, egui::Shape::Circle(circle)
             if (circle.radius - 9.1).abs() < 1e-5 && circle.center.distance(center) < 40.)
@@ -169,7 +169,7 @@ fn compass_background_click_leaves_camera_and_model_unchanged() {
     let mut h = Harness::new();
     h.app.set_tool(Tool::Line);
     h.frame(vec![], egui::Modifiers::NONE);
-    let center = BenchUpApp::compass_center(h.app.viewport).unwrap();
+    let center = h.app.compass_center().unwrap();
     let camera = h.app.doc.camera.clone();
     let model = h.app.doc.model.clone();
     h.click(center + egui::vec2(0., 40.));
@@ -200,7 +200,7 @@ fn compass_drag_orbits_from_background_and_axis_without_editing_the_model() {
         h.app.doc.camera.target = DVec3::new(4., 2., 1.);
         let model = h.app.doc.model.clone();
         let output = h.frame(vec![], egui::Modifiers::NONE);
-        let center = BenchUpApp::compass_center(h.app.viewport).unwrap();
+        let center = h.app.compass_center().unwrap();
         let start = label.map_or(center + egui::vec2(0., 40.), |label| {
             axis_position(&output, center, label)
         });
@@ -239,7 +239,7 @@ fn compass_drag_orbits_from_background_and_axis_without_editing_the_model() {
 fn compass_drag_returning_to_axis_does_not_align_on_release() {
     let mut h = Harness::new();
     let output = h.frame(vec![], egui::Modifiers::NONE);
-    let center = BenchUpApp::compass_center(h.app.viewport).unwrap();
+    let center = h.app.compass_center().unwrap();
     let x = axis_position(&output, center, "X");
     let before = h.app.doc.camera.clone();
     h.pointer(x, egui::PointerButton::Primary, true, false);
@@ -257,7 +257,7 @@ fn compass_drag_returning_to_axis_does_not_align_on_release() {
 #[test]
 fn compass_orbits_when_release_has_no_pointer_motion_event() {
     let mut h = Harness::new();
-    let start = BenchUpApp::compass_center(h.app.viewport).unwrap();
+    let start = h.app.compass_center().unwrap();
     let end = start + egui::vec2(-60., -20.);
     let mut expected = h.app.doc.camera.clone();
     expected.orbit_around(dv(end - start), h.app.orbit_center());

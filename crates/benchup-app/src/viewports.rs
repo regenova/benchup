@@ -242,6 +242,7 @@ impl BenchUpApp {
         if rect.width() <= 1. || rect.height() <= 1. {
             return;
         }
+        let rail = self.tool_rail(ui, rect);
         let view_bar = self.quick_view_bar(ui, rect);
         self.viewport_navigation_options(&ctx, rect, view_bar);
         let touch_navigation = self.touch_viewport_zoom(&ctx, &response);
@@ -277,6 +278,10 @@ impl BenchUpApp {
             && self.tool != Tool::Walk
         {
             self.context_menu(&response);
+        }
+
+        if let Some(rail) = rail {
+            self.show_tool_hint(ui, rect, rail);
         }
 
         // Only the rendered frame uses the interpolated camera. The document

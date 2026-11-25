@@ -1,8 +1,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
 use benchup_core::{Axis, Tool};
 
-// Every icon uses the same theme palette in the rail, flyouts, and cursor.
-// Selection is indicated by the button background and label.
+// Flyout and cursor icons use the same theme palette.
 const OUTLINE: Color32 = Color32::from_rgb(63, 70, 76);
 
 #[derive(Clone, Copy)]
@@ -136,6 +135,7 @@ struct IconMeshCache {
 #[derive(Clone, PartialEq)]
 enum IconKind {
     Tool(Tool),
+    ToolbarTool(Tool, Color32),
     PaintBucket(Color32),
     Line(String, Color32),
     Logo,
@@ -159,6 +159,25 @@ pub(crate) fn tool_vectors(p: &egui::Painter, rect: Rect, tool: Tool) {
 pub fn ui_tool(p: &egui::Painter, rect: Rect, tool: Tool) {
     cached_icon(p, rect, IconKind::Tool(tool), |p, rect| {
         tool_vectors(p, rect, tool);
+    });
+}
+
+pub fn toolbar_tool(p: &egui::Painter, rect: Rect, tool: Tool, color: Color32) {
+    cached_icon(p, rect, IconKind::ToolbarTool(tool, color), |p, rect| {
+        let tint = color.gamma_multiply(0.18);
+        paint_tool(p, rect, tool, ToolPalette {
+            outline: color,
+            red: color,
+            blue: color,
+            gold: color,
+            yellow: tint,
+            pink: tint,
+            pink_edge: color,
+            face: tint,
+            metal: tint,
+            warm_face: tint,
+            paint_fill: None,
+        });
     });
 }
 
