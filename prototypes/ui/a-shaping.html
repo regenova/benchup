@@ -106,7 +106,7 @@
   <header>
     <div class="brand">
       <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
-      <div class="project"><b>Hall bench</b><span id="projectMeta">Saved · 12 parts</span></div>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
       <button class="iconbtn" title="Undo" id="undo"><i data-icon="undo"></i></button>
       <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
     </div>
@@ -118,11 +118,11 @@
       <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
       <a class="stage" href="a-planning.html"><span class="n">6</span>Planning</a>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
-      <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
   </header>
 
@@ -959,7 +959,7 @@
     renderAll();
   }
   function renderMeta() {
-    document.getElementById("projectMeta").textContent = `Saved · 12 parts · ${features.length} shaping feature${features.length === 1 ? "" : "s"}`;
+    // The header is the same on every screen; the feature count lives in the list.
   }
   function renderAll() {
     renderList();

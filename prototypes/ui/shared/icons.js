@@ -58,6 +58,7 @@
     curve: '<path d="M3 7h18v10h-3c0-4-3-6-6-6s-6 2-6 6H3z"/>',
     hole: '<rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="12" r="3.5"/><path d="M12 7v1.5M12 15.5V17"/>',
     carve: '<path d="M4 20l7-7"/><path d="M11 13l6-8 2 2-8 6z"/><path d="M14 19c2-1 4-1 6 0"/>',
+    estimate: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   };
 

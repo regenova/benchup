@@ -84,11 +84,11 @@
       <button class="stage" data-stage="estimate"><span class="n">5</span>Estimate</button>
       <button class="stage" data-stage="planning"><span class="n">6</span>Planning</button>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
-      <a class="btn primary" href="a-shop-drawings.html" style="text-decoration:none"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
   </header>
 
@@ -286,7 +286,7 @@
         <div class="stat"><span>Offcuts to keep</span><b>${plan.leftovers}</b></div>
         <div class="stat"><span>Material cost</span><b>€ ${plan.buyCost + stockCost}</b></div>
         <p class="note" style="margin:6px 0 0">${stock.costing === "free" ? "Wood from your shop counts at no cost." : `Includes €${plan.stockValue} for wood you already have, at purchase price.`}</p></div>
-        <div class="actions" style="flex-wrap:wrap"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button>
+        <div class="actions sticky" style="flex-wrap:wrap"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button>
           <button class="btn primary" id="built" style="flex-basis:100%">${icon("check", 15)}Mark as built</button></div>`;
       host.querySelector("#built").onclick = () => openBuilt();
       return;

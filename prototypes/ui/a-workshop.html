@@ -216,6 +216,8 @@
         <div class="field stack" style="margin-top:0"><label>Prefer methods with</label><div class="segs" id="style"></div></div>
         <div class="field stack" style="margin-top:14px"><label>Experience</label><div class="segs" id="level"></div></div>
         <p class="note">When several methods are possible, BenchUp prefers the ones that match how you work. Experience adjusts the time of each step.</p>
+        <div class="field stack" style="margin-top:14px"><label>Do you price your projects?</label><div class="segs" id="pricing"><button data-pricing="1">Yes, I sell my work</button><button data-pricing="0">No</button></div></div>
+        <p class="note">Projects show the Estimate stage only when you price your work. You can change this at any time.</p>
       </div>
       <div class="card">
         <h3>What you can do <span id="capCount"></span></h3>
@@ -297,6 +299,12 @@
       return [...ids].every((id) => (p.owned[id] || 0) === (shop.owned[id] || 0));
     });
   }
+  // Shared with the stage bar (shared/stages.js), which hides Estimate when this is "0".
+  function renderPricing() {
+    let v = null;
+    try { v = localStorage.getItem("benchup-proto-show-estimate"); } catch (_) {}
+    document.querySelectorAll("[data-pricing]").forEach((b) => b.classList.toggle("on", b.dataset.pricing === (v === "0" ? "0" : "1")));
+  }
   const ownedCount = (cat) => BP.TOOLS.filter((t) => (!cat || t.cat === cat) && BP.have(shop, t.id)).length;
 
   function save() {
@@ -348,6 +356,7 @@
   ];
   function renderRight(ups) {
     $("style").innerHTML = BP.STYLES.map((s) => `<button data-style="${s.id}" class="${shop.style === s.id ? "on" : ""}">${s.name}</button>`).join("");
+    renderPricing();
     $("level").innerHTML = BP.LEVELS.map((l) => `<button data-level="${l.id}" class="${shop.level === l.id ? "on" : ""}">${l.name}</button>`).join("");
     let okCount = 0;
     $("caps").innerHTML = CAPS.map((c) => {
@@ -414,6 +423,8 @@
     if (st) { shop.style = st.dataset.style; save(); return; }
     const lv = t.closest("[data-level]");
     if (lv) { shop.level = lv.dataset.level; save(); return; }
+    const pr = t.closest("[data-pricing]");
+    if (pr) { try { localStorage.setItem("benchup-proto-show-estimate", pr.dataset.pricing); } catch (_) {} renderPricing(); return; }
     const f = t.closest("[data-f]");
     if (f) {
       filter = f.dataset.f;
