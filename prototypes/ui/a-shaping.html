@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BenchUp prototype A · Shaping</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/workshop.css" />
+<style>
+  .body { grid-template-columns: 284px 1fr 364px; }
+  a.stage, a.btn { text-decoration: none; color: inherit; }
+  a.btn.primary { color: var(--primary-ink); }
+  :root { --chip-bg: rgba(255,255,255,.9); }
+  :root[data-theme="dark"] { --chip-bg: rgba(34,33,28,.9); }
+
+  /* Left: features list */
+  .flist { overflow: auto; flex: 1; padding: 0 8px 8px; }
+  .frow { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+  .frow:hover { background: var(--hover); }
+  .frow.sel { background: var(--accent-soft); }
+  .frow .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow small { display: block; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow .time { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .st { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .st.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .st.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .list-empty { color: var(--muted); padding: 20px 10px; line-height: 1.5; }
+  .list-empty .btn { margin-top: 12px; }
+  .sharp { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
+  .sharp-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink); }
+  .sharp-toggle:hover { background: var(--hover); }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .pill.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .sharp-body { padding: 6px 8px 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 500; color: var(--ink); font-size: 13px; margin-bottom: 6px; }
+  .switch input { position: absolute; opacity: 0; }
+  .switch span { width: 30px; height: 18px; border-radius: 9px; background: var(--line-strong); position: relative; transition: background .15s; flex: none; }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(12px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Viewport overlays */
+  .featchip { background: var(--chip-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; font-size: 12px; color: var(--muted); }
+  .featchip b { color: var(--ink); font-weight: 600; }
+  .inset { position: absolute; left: 16px; top: 68px; width: 248px; height: 184px; background: var(--chip-bg); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--card-shadow); }
+  .inset.hidden { display: none; }
+  .inset svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .inset .lbl { position: absolute; left: 10px; top: 8px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; pointer-events: none; }
+
+  /* Right: editor */
+  .card h3 a { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); text-decoration: none; }
+  .card h3 a:hover { text-decoration: underline; }
+  .types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .type { border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px 4px 7px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.15; min-height: 62px; }
+  .type:hover { background: var(--hover); color: var(--ink); }
+  .type.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .dims.two { grid-template-columns: repeat(2, 1fr); }
+  .dims + .dims { margin-top: 8px; }
+  .dim.ro { background: var(--bg); }
+  .dim.ro input { color: var(--muted); }
+  .dim.text input { font-size: 15px; }
+  .field { grid-template-columns: 104px 1fr; }
+  .check { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); line-height: 1.4; }
+  .check:first-of-type { border-top: 0; padding-top: 0; }
+  .check .ico { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
+  .check.ok .ico { background: var(--ok-bg); color: var(--ok-ink); }
+  .check.warn .ico { background: var(--warn-bg); color: var(--warn-ink); }
+  .check.info .ico { background: var(--info-bg); color: var(--info-ink); }
+  .check .fixes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .check .fix { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; background: var(--panel); }
+  .check .fix:hover { background: var(--hover); }
+  .methods { display: grid; gap: 6px; }
+  .radio { display: grid; grid-template-columns: 14px 1fr auto; align-items: start; gap: 10px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 9px; cursor: pointer; text-align: left; width: 100%; }
+  .radio:hover { background: var(--hover); }
+  .radio .dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; margin-top: 2px; }
+  .radio.on { border-color: var(--ink); }
+  .radio.on .dot { border-color: var(--ink); }
+  .radio.on .dot::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+  .radio small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; line-height: 1.4; }
+  .radio small .miss { color: var(--warn-ink); }
+  .radio .mins { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .notes { margin: 12px 0 0; padding: 0; list-style: none; }
+  .notes li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 4px 0; line-height: 1.4; }
+  .notes li .n { width: 18px; height: 18px; border-radius: 50%; background: var(--bg); color: var(--muted); font-size: 11px; display: grid; place-items: center; font-weight: 600; }
+  .prow { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .prow:first-of-type { border-top: 0; padding-top: 0; }
+  .prow .sw { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--swatch-edge); }
+  .prow small { color: var(--muted); }
+  .prow .x { width: 24px; height: 24px; border-radius: 6px; color: var(--faint); display: grid; place-items: center; font-size: 15px; }
+  .prow .x:hover { background: var(--hover); color: var(--ink); }
+  .linkbtn { color: var(--accent); font-size: 12px; margin-top: 8px; padding: 0; }
+  .linkbtn:hover { text-decoration: underline; }
+  .editor-actions { display: flex; gap: 8px; padding: 16px; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); }
+  .editor-actions .btn { flex: 1; justify-content: center; }
+  .trow { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .trow:first-of-type { border-top: 0; padding-top: 0; }
+  .trow small { color: var(--muted); display: block; font-size: 11.5px; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 0; }
+  .tool.on { background: var(--accent-soft); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
+      <div class="project"><b>Hall bench</b><span id="projectMeta">Saved · 12 parts</span></div>
+      <button class="iconbtn" title="Undo" id="undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
+    </div>
+    <nav class="stages">
+      <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
+      <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
+      <a class="stage active" href="a-shaping.html"><span class="n">3</span>Shaping</a>
+      <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+      <a class="stage" href="a-planning.html"><span class="n">6</span>Planning</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
+      <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
+      <a class="btn primary" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="left">
+      <div class="aside-head"><h2>Shaping<span class="count" id="fcount"></span></h2><span style="color:var(--faint);font-size:12px">optional</span></div>
+      <div class="search"><i data-icon="search" data-size="15"></i><input placeholder="Find a feature or part" id="fsearch" /></div>
+      <div class="flist" id="flist"></div>
+      <div class="sharp" id="sharp"></div>
+    </aside>
+
+    <main id="main">
+      <svg class="vp" id="vp"></svg>
+      <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" id="views">
+          <button class="on" data-v="persp"><i data-icon="cube" data-size="15"></i>3D</button>
+          <button data-v="front">Front</button>
+          <button data-v="side">Side</button>
+          <button data-v="below">Below</button>
+        </div>
+      </div>
+      <div class="overlay" style="right:16px;top:16px"><div class="featchip" id="featchip"></div></div>
+      <div class="inset" id="insetBox"><svg id="inset"></svg><div class="lbl" id="insetLbl">Section</div></div>
+      <div class="toolstrip">
+        <div class="hint" id="hint"></div>
+        <div class="tools" id="tools"></div>
+      </div>
+    </main>
+
+    <aside class="right" id="right"></aside>
+  </div>
+</div>
+
+<script src="shared/icons.js"></script>
+<script src="shared/model.js"></script>
+<script src="shared/planning-data.js"></script>
+<script>
+  const { PARTS, BenchView } = BenchModel;
+  const BP = BenchPlan;
+  const shop = BP.loadShop();
+  const byId = Object.fromEntries(PARTS.map((p) => [p.id, p]));
+  const COLORS = { oak: "#cfa771", walnut: "#7b5338", plywood: "#e6d3a8" };
+  const LEGS = ["leg-bl", "leg-br", "leg-fl", "leg-fr"];
+  const LOC = { "leg-bl": "back left", "leg-br": "back right", "leg-fl": "front left", "leg-fr": "front right", "apron-b": "back", "apron-f": "front", "apron-l": "left", "apron-r": "right", "str-b": "back", "str-f": "front" };
+  // Overlay colours, which SVG attributes cannot take from CSS variables.
+  const INK = () => benchTheme.pick(
+    { accent: "#d63b32", ink: "#3a3f45", muted: "#7d838a", cut: "#f4f2ee", dimBg: "rgba(255,255,255,.95)", steel: "#8d949b", chip: "rgba(70,45,20,.38)" },
+    { accent: "#ff7d61", ink: "#ece7dc", muted: "#aaa497", cut: "#1f1e1a", dimBg: "rgba(30,29,24,.95)", steel: "#b4bcc6", chip: "rgba(20,12,5,.55)" },
+  );
+
+  // ---------- Feature catalogue ----------
+  const CATS = [
+    { id: "edge", name: "Edge profiles", types: ["roundover", "chamfer", "cove", "ogee"] },
+    { id: "cutout", name: "Curves and cutouts", types: ["arch", "cyma"] },
+    { id: "hole", name: "Holes", types: ["insert", "blind", "through"] },
+    { id: "carve", name: "Carving", types: ["rosette", "lettering"] },
+  ];
+  const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
+  const INSERT = { M6: { d: 10, len: 13 }, M8: { d: 12, len: 17 }, M10: { d: 14, len: 20 } };
+  const TYPES = {
+    roundover: { cat: "edge", name: "Round-over", icon: "roundover", defaults: { r: 6, edges: "upper" }, title: (p) => `Round-over R${p.r}`, size: (p) => p.r },
+    chamfer: { cat: "edge", name: "Chamfer", icon: "chamfer", defaults: { s: 3, edges: "upper" }, title: (p) => `Chamfer ${p.s} mm`, size: (p) => p.s },
+    cove: { cat: "edge", name: "Cove", icon: "profile", defaults: { r: 6, edges: "lower" }, title: (p) => `Cove R${p.r}`, size: (p) => p.r },
+    ogee: { cat: "edge", name: "Ogee", icon: "profile", defaults: { r: 10, edges: "upper" }, title: (p) => `Ogee ${p.r} mm`, size: (p) => p.r },
+    arch: { cat: "cutout", name: "Arch", icon: "curve", defaults: { rise: 25, margin: 60 }, title: (p) => `Arch, rise ${p.rise} mm` },
+    cyma: { cat: "cutout", name: "Ogee curve", icon: "curve", defaults: { rise: 20, margin: 60 }, title: (p) => `Ogee curve, rise ${p.rise} mm` },
+    insert: { cat: "hole", name: "Threaded insert", short: "Insert", icon: "hole", defaults: { thread: "M8", d: 12, depth: 22 }, title: (p) => `Threaded insert ${p.thread}` },
+    blind: { cat: "hole", name: "Blind hole", icon: "hole", defaults: { d: 10, depth: 15 }, title: (p) => `Blind hole Ø${p.d}` },
+    through: { cat: "hole", name: "Through hole", icon: "hole", defaults: { d: 10 }, title: (p) => `Through hole Ø${p.d}` },
+    rosette: { cat: "carve", name: "Chip-carved rosette", short: "Rosette", icon: "carve", defaults: { dia: 50, depth: 3 }, title: (p) => `Chip-carved rosette Ø${p.dia}` },
+    lettering: { cat: "carve", name: "Carved lettering", short: "Lettering", icon: "carve", defaults: { text: "2026", height: 30, depth: 2 }, title: (p) => `Lettering “${p.text}”` },
+  };
+  const catOf = (f) => TYPES[f.type].cat;
+
+  // Tools the shaping methods need that are not in the workshop catalogue yet.
+  const XTOOLS = {
+    covebit: { name: "Cove bit", price: 28 }, ogeebit: { name: "Roman ogee bit", price: 38 }, spokeshave: { name: "Spokeshave", price: 45 },
+    flushbit: { name: "Flush-trim bit", price: 26 }, chipknife: { name: "Chip-carving knife", price: 30 }, vbit: { name: "V-groove bit", price: 24 }, gouges: { name: "Carving gouges", price: 95 },
+  };
+  const toolInfo = (id) => BP.TOOL[id] || XTOOLS[id];
+  const owns = (id) => BP.have(shop, id) > 0;
+  const M = (id, name, tools, min, how) => ({ id, name, tools, min, how });
+  const HOLE_METHODS = (extra) => [
+    M("dp", "Drill press and Forstner bit", ["drillpress", "forstner"], 4, (f) => [`Ø${f.p.d} mm Forstner bit${f.type === "through" ? ", backer board underneath" : `, depth stop at ${f.p.depth} mm`}.`, ...extra(f)]),
+    M("hd", "Drill with a guide block", ["drill", "forstner"], 6, (f) => ["Clamp a square block to the part as a drilling guide.", f.type === "through" ? "Drill until the point shows, then finish from the other side." : `Flag the bit with tape at ${f.p.depth} mm.`, ...extra(f)]),
+  ];
+  const CURVE_METHODS = [
+    M("jig", "Jigsaw, then rasp", ["jigsaw", "rasp"], 20, () => ["Bend a thin batten through three marks to draw the curve.", "Cut 1–2 mm outside the line with a fine blade.", "Fair down to the line with the rasp, then 120 grit on a curved block."]),
+    M("band", "Bandsaw and spokeshave", ["bandsaw", "spokeshave"], 12, () => ["Saw just outside the line.", "Spokeshave downhill from both ends toward the centre."]),
+    M("tmpl", "Router and template", ["router", "flushbit"], 15, () => ["Make one MDF template and fair it carefully.", "Rough-cut each part, then flush-trim it to the template so they all match."]),
+  ];
+  const METHODS = {
+    roundover: [
+      M("rr", "Router and round-over bit", ["router", "roundover"], 6, (f) => [`Bearing-guided R${f.p.r} bit in the plunge router.`, "Rout the end grain first, so the long edges clean up any tear-out at the corners.", "Take two passes; the last one removes about 1 mm."]),
+      M("rt", "Router table", ["routertable", "roundover"], 5, (f) => [`R${f.p.r} bit in the table, fence in line with the bearing.`, "Feed against the rotation, end grain first."]),
+      M("hand", "Block plane and rasp", ["blockplane", "rasp"], 15, (f) => [`Pencil lines ${f.p.r} mm in from the edge on both faces.`, "Plane a 45° facet, then its two corners, and blend with the rasp and 120 grit."]),
+    ],
+    chamfer: [
+      M("rc", "Router and chamfer bit", ["router", "chamferbit"], 5, (f) => [`45° chamfer bit set to ${f.p.s} mm.`, "End grain first, then the long edges."]),
+      M("plane", "Block plane", ["blockplane"], 8, (f) => [`Pencil lines ${f.p.s} mm in from the edge on both faces.`, "Plane down to the lines, skewing the plane across end grain."]),
+      M("rtc", "Router table and chamfer bit", ["routertable", "chamferbit"], 4, (f) => [`Set the bit height for a ${f.p.s} mm chamfer.`]),
+    ],
+    cove: [
+      M("rcv", "Router and cove bit", ["router", "covebit"], 6, (f) => [`R${f.p.r} cove bit in two passes.`]),
+      M("rtcv", "Router table and cove bit", ["routertable", "covebit"], 5, (f) => [`R${f.p.r} cove bit, fence in line with the bearing.`]),
+    ],
+    ogee: [
+      M("rog", "Router and ogee bit", ["router", "ogeebit"], 8, (f) => [`${f.p.r} mm Roman ogee bit in three light passes.`]),
+      M("rtog", "Router table and ogee bit", ["routertable", "ogeebit"], 6, (f) => [`${f.p.r} mm Roman ogee bit, three passes against the fence.`]),
+    ],
+    arch: CURVE_METHODS,
+    cyma: CURVE_METHODS,
+    insert: HOLE_METHODS((f) => [`Drive the ${f.p.thread} insert with a bolt and two lock nuts, keeping it square.`]),
+    blind: HOLE_METHODS(() => []),
+    through: HOLE_METHODS(() => []),
+    rosette: [
+      M("knife", "Chip-carving knife", ["chipknife"], 25, () => ["Lay out the rosette with dividers: six arcs of the same radius.", "Stab the centre lines, then slice each chip with two angled cuts."]),
+      M("chisel", "Chisels and marking knife", ["chisels", "knife"], 40, (f) => ["Lay out with dividers and score every line with the marking knife.", `Pare each chip to ${f.p.depth} mm with a narrow chisel, bevel down.`]),
+    ],
+    lettering: [
+      M("vbit", "Router with V-bit and template", ["router", "vbit"], 20, (f) => [`Print the letters ${f.p.height} mm high and make a template.`, `V-bit set to ${f.p.depth} mm, guided by a bushing.`]),
+      M("gouge", "Carving gouges", ["gouges"], 60, () => ["Transfer the letters with carbon paper.", "Stab the centre line of each stroke, then cut in from both sides."]),
+      M("knife2", "Marking knife and chisels", ["knife", "chisels"], 75, () => ["Transfer the letters and knife every line.", "Pare in V-cuts with the narrowest chisel."]),
+    ],
+  };
+  const feasible = (m) => m.tools.every(owns);
+  const methodOf = (f) => METHODS[f.type].find((m) => m.id === f.method) || METHODS[f.type].find(feasible) || METHODS[f.type][0];
+  const featureMin = (f) => methodOf(f).min * f.parts.length;
+  const fmtMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
+  const fmt = (n) => String(Math.round(n * 10) / 10);
+  const listJoin = (a) => (a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} or ${a[a.length - 1]}`);
+
+  // ---------- Project state ----------
+  let nextId = 1;
+  const F = (type, parts, params = {}) => ({ id: "f" + nextId++, type, parts, p: Object.assign(structuredClone(TYPES[type].defaults), params), method: null });
+  let features = [
+    F("roundover", ["top"], { r: 6, edges: "upper" }),
+    F("chamfer", ["top"], { s: 3, edges: "lower" }),
+    F("chamfer", LEGS.slice(), { s: 3, edges: "lower" }),
+    F("arch", ["apron-f", "apron-b"], { rise: 25, margin: 60 }),
+    F("insert", LEGS.slice(), { thread: "M8", d: 12, depth: 22 }),
+    F("rosette", ["apron-r", "apron-l"], { dia: 50, depth: 3 }),
+  ];
+  let selected = features[0].id;
+  let tool = null; // null = Select, otherwise the feature type being added
+  let breakEdges = false;
+  let sharpOpen = false;
+  let filter = "";
+  const history = [];
+  const sel = () => features.find((f) => f.id === selected) || null;
+  function remember() {
+    history.push(JSON.stringify({ features, selected, breakEdges }));
+    if (history.length > 60) history.shift();
+  }
+
+  const dimsOf = (p) => {
+    const X = Math.round((p.max[0] - p.min[0]) * 10), Y = Math.round((p.max[1] - p.min[1]) * 10), Z = Math.round((p.max[2] - p.min[2]) * 10);
+    return { X, Y, Z, thin: Math.min(X, Y), long: Math.max(X, Y) };
+  };
+  function partsLabel(ids) {
+    const names = [...new Set(ids.map((id) => byId[id].name))];
+    if (names.length === 1) return ids.length > 1 ? `${names[0]} × ${ids.length}` : names[0];
+    return `${ids.length} parts`;
+  }
+  function whereLabel(f) {
+    const p = byId[f.parts[0]];
+    const c = catOf(f);
+    if (c === "edge") return p.kind === "Legs" && f.p.edges === "lower" ? "feet" : `${f.p.edges === "all" ? "all" : f.p.edges} edges`;
+    if (c === "cutout") return "bottom edge";
+    if (c === "hole") return p.kind === "Legs" ? "foot of each leg" : "underside";
+    return "outside face";
+  }
+  const identicalTo = (id) => PARTS.filter((q) => q.name === byId[id].name).map((q) => q.id);
+
+  // ---------- Checks ----------
+  function checks(f) {
+    const out = [];
+    const ok = (text) => out.push({ level: "ok", text });
+    const warn = (text, fixes) => out.push({ level: "warn", text, fixes });
+    const info = (text) => out.push({ level: "info", text });
+    const p = byId[f.parts[0]], d = dimsOf(p), t = TYPES[f.type], P = f.p, c = t.cat;
+    const m = methodOf(f);
+    const missing = m.tools.filter((id) => !owns(id));
+    if (missing.length) {
+      const alt = METHODS[f.type].find((x) => x !== m && feasible(x));
+      warn(`Your workshop has no ${listJoin(missing.map((id) => toolInfo(id).name.toLowerCase()))}. Choose another method or add it in My workshop.`, alt ? [[`Use ${alt.name.toLowerCase()}`, { __method: alt.id }]] : null);
+    }
+    const shares = (g) => g !== f && g.parts.some((id) => f.parts.includes(id));
+    if (c === "edge") {
+      const s = t.size(P);
+      const T = d.Z <= d.thin ? d.Z : d.thin;
+      const same = features.find((g) => shares(g) && catOf(g) === "edge" && (g.p.edges === P.edges || g.p.edges === "all" || P.edges === "all"));
+      const opp = P.edges === "all" ? null : features.find((g) => shares(g) && catOf(g) === "edge" && g.p.edges !== P.edges && g.p.edges !== "all");
+      if (same) warn(`The ${t.name.toLowerCase()} overlaps the ${TYPES[same.type].title(same.p).toLowerCase()} on the same edges.`, [[P.edges === "upper" ? "Move to lower edges" : "Move to upper edges", { edges: P.edges === "upper" ? "lower" : "upper" }]]);
+      const flat = T - s - (P.edges === "all" ? s : opp ? TYPES[opp.type].size(opp.p) : 0);
+      if (flat >= 8) ok(`Leaves a ${fmt(flat)} mm flat on the ${T} mm edge${opp ? `, with the ${TYPES[opp.type].title(opp.p).toLowerCase()} on the ${opp.p.edges} edges` : ""}.`);
+      else warn(`Only ${fmt(Math.max(0, flat))} mm of flat edge is left on the ${T} mm ${p.name.toLowerCase()}; the profiles run into each other.`, [[f.type === "chamfer" ? "Set 3 mm" : "Set R6", f.type === "chamfer" ? { s: 3 } : { r: 6 }]]);
+      if (f.type === "roundover" && m.tools.includes("roundover") && P.r !== 6) warn(`Your round-over bit is R6; R${P.r} needs another bit.`, [["Use R6", { r: 6 }]]);
+      if (f.type === "chamfer" && s < 2) warn(`A ${s} mm chamfer tears out on end grain; 2 mm is the practical minimum.`, [["Set 2 mm", { s: 2 }]]);
+      if (p.kind === "Legs" && P.edges === "lower") ok("Eased feet don't splinter when the bench is dragged across the floor.");
+      if (p.kind === "Panels" && P.edges === "lower") ok(`The under-bevel makes the ${d.Z} mm ${p.name.toLowerCase()} look thinner from the front.`);
+      if (p.kind === "Panels" && P.edges === "upper") ok("A soft upper edge is kinder to legs and bags on a hall bench.");
+      const hole = features.find((g) => shares(g) && catOf(g) === "hole");
+      if (hole && P.edges !== "upper") {
+        const wall = (d.thin - hole.p.d) / 2;
+        if (s > wall - 6) warn(`The ${s} mm profile comes within ${fmt(wall - s)} mm of the Ø${hole.p.d} mm hole.`);
+        else ok(`Clear of the Ø${hole.p.d} mm hole by ${fmt(wall - s)} mm.`);
+      }
+      info(m.tools.some((id) => id === "router" || id === "routertable") ? "Profile after the joinery is cut and before the glue-up, so the bearing runs on flat, square edges." : "Shape by hand after the dry fit, so you can blend the profile across the joints.");
+    } else if (c === "cutout") {
+      const left = d.Z - P.rise;
+      if (left >= 55) ok(`Leaves ${left} mm of ${p.name.toLowerCase()} at the centre, enough to keep the top from sagging.`);
+      else warn(`Only ${left} mm of ${p.name.toLowerCase()} is left at the centre; the top can sag between the legs.`, [["Rise 25 mm", { rise: 25 }]]);
+      if (P.margin >= 40) ok(`The curve starts ${P.margin} mm from each leg, clear of the tenon's bottom shoulder.`);
+      else warn(`The curve starts ${P.margin} mm from the leg and cuts into the tenon's bottom shoulder.`, [["Start at 60 mm", { margin: 60 }]]);
+      if (f.parts.length > 1 && new Set(f.parts.map((id) => byId[id].name)).size === 1) ok(`All ${f.parts.length} parts get the same curve: make one template and trace it on each.`);
+      info("Cut the curve after the tenons are fitted, while the apron still has a straight edge to reference from.");
+    } else if (c === "hole") {
+      const wall = (d.thin - P.d) / 2;
+      if (wall >= 10) ok(`Walls of ${fmt(wall)} mm around the Ø${P.d} mm hole in the ${d.thin} mm ${p.name.toLowerCase()}.`);
+      else warn(`Only ${fmt(wall)} mm of wall around the hole; the ${p.name.toLowerCase()} may split.`, [["Set Ø10", { d: 10 }]]);
+      if (f.type !== "through" && P.depth > d.Z - 4) warn(`${P.depth} mm deep leaves only ${fmt(Math.max(0, d.Z - P.depth))} mm of the ${d.Z} mm ${p.name.toLowerCase()}; the spur of a Forstner bit can break through.`, [[`Set ${Math.max(3, d.Z - 6)} mm`, { depth: Math.max(3, d.Z - 6) }]]);
+      if (f.type === "insert") {
+        const ins = INSERT[P.thread];
+        if (P.d !== ins.d) warn(`${P.thread} inserts need a Ø${ins.d} mm hole.`, [[`Set Ø${ins.d}`, { d: ins.d }]]);
+        if (P.depth >= ins.len + 3) ok(`${P.depth} mm deep: room for the ${ins.len} mm insert and a little dust.`);
+        else warn(`${P.depth} mm is too shallow for the ${ins.len} mm ${P.thread} insert.`, [[`Set ${ins.len + 5} mm`, { depth: ins.len + 5 }]]);
+      }
+      info(p.kind === "Legs" ? "Drill before the glue-up, while each leg can still stand on the drill press table." : "Drill before the glue-up, while the part can lie flat.");
+    } else if (c === "carve") {
+      const size = f.type === "rosette" ? P.dia : P.height;
+      const margin = (d.Z - size) / 2;
+      if (margin >= 10) ok(`${f.type === "rosette" ? `A Ø${P.dia} mm rosette fits` : `${P.height} mm letters fit`} the ${d.Z} mm face with ${fmt(margin)} mm above and below.`);
+      else warn(`The carving comes within ${fmt(Math.max(0, margin))} mm of the edges of the ${d.Z} mm face.`, [[f.type === "rosette" ? "Set Ø50" : "Set 30 mm", f.type === "rosette" ? { dia: 50 } : { height: 30 }]]);
+      if (P.depth <= d.thin / 4) ok(`${P.depth} mm deep leaves most of the ${d.thin} mm ${p.name.toLowerCase()} behind it.`);
+      else warn(`${P.depth} mm deep weakens the ${d.thin} mm ${p.name.toLowerCase()}.`, [["Set 3 mm", { depth: 3 }]]);
+      info(p.material === "oak" ? "Oak is hard for chip carving: strop the knife often and finish each chip with one clean slice." : "Carve before finishing; the finish brings out each facet.");
+    }
+    return out;
+  }
+  const worst = (list) => (list.some((x) => x.level === "warn") ? "warn" : "ok");
+
+  // ---------- Viewport ----------
+  const NS = "http://www.w3.org/2000/svg";
+  const svgEl = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+  function boxEdges(p) {
+    const [x0, y0, z0] = p.min, [x1, y1, z1] = p.max, E = [];
+    for (const y of [y0, y1]) for (const z of [z0, z1]) E.push({ a: [x0, y, z], b: [x1, y, z], n: [[0, y === y1 ? 1 : -1, 0], [0, 0, z === z1 ? 1 : -1]], side: z === z1 ? "upper" : "lower" });
+    for (const x of [x0, x1]) for (const z of [z0, z1]) E.push({ a: [x, y0, z], b: [x, y1, z], n: [[x === x1 ? 1 : -1, 0, 0], [0, 0, z === z1 ? 1 : -1]], side: z === z1 ? "upper" : "lower" });
+    for (const x of [x0, x1]) for (const y of [y0, y1]) E.push({ a: [x, y, z0], b: [x, y, z1], n: [[x === x1 ? 1 : -1, 0, 0], [0, y === y1 ? 1 : -1, 0]], side: "vertical" });
+    return E;
+  }
+  // The face of a thin part that looks away from the middle of the bench.
+  function outerFace(p) {
+    const axis = p.max[0] - p.min[0] < p.max[1] - p.min[1] ? 0 : 1;
+    const mid = (p.min[axis] + p.max[axis]) / 2;
+    const sign = mid > [45, 17.5][axis] ? 1 : -1;
+    const n = [0, 0, 0];
+    n[axis] = sign;
+    return { axis, long: 1 - axis, sign, val: sign > 0 ? p.max[axis] : p.min[axis], n };
+  }
+  const facePt = (face, s, z) => { const q = [0, 0, z]; q[face.axis] = face.val; q[face.long] = s; return q; };
+  function riseAt(type, P, t) {
+    if (type === "arch") return P.rise * Math.sin(Math.PI * t);
+    const u = t < 0.5 ? t : 1 - t;
+    const k = Math.min(1, u / 0.35);
+    return (P.rise * (1 - Math.cos(Math.PI * k))) / 2;
+  }
+  function petal(theta, R, n = 6) {
+    const pts = [];
+    const c1 = [R * Math.cos(theta - Math.PI / 3), R * Math.sin(theta - Math.PI / 3)];
+    const c2 = [R * Math.cos(theta + Math.PI / 3), R * Math.sin(theta + Math.PI / 3)];
+    for (let i = 0; i <= n; i++) { const a = theta + (2 * Math.PI) / 3 - (Math.PI / 3) * (i / n); pts.push([c1[0] + R * Math.cos(a), c1[1] + R * Math.sin(a)]); }
+    for (let i = 0; i <= n; i++) { const a = theta - Math.PI / 3 - (Math.PI / 3) * (i / n); pts.push([c2[0] + R * Math.cos(a), c2[1] + R * Math.sin(a)]); }
+    return pts;
+  }
+
+  function overlay(v) {
+    const g = svgEl("g", { "pointer-events": "none" }, v.svg);
+    const { d } = v._basis;
+    const k = INK();
+    const cur = sel();
+    // With nothing selected every part is opaque, so only draw what is not hidden behind another part.
+    // The point is nudged toward the part's centre so silhouette edges hit their own faces.
+    const overview = !cur;
+    const box = v.svg.getBoundingClientRect();
+    const seenAt = (q, p) => {
+      if (!overview) return true;
+      const c = [0, 1, 2].map((i) => (p.min[i] + p.max[i]) / 2);
+      const [x, y] = v.project(q.map((x0, i) => x0 + (c[i] - x0) * 0.03));
+      const hit = document.elementFromPoint(box.left + x, box.top + y);
+      const g = hit && hit.closest && hit.closest("[data-part]");
+      return !!g && g.getAttribute("data-part") === p.id;
+    };
+    const mid = (a, b) => a.map((x, i) => (x + b[i]) / 2);
+    const poly = (pts3, attrs) => svgEl("polyline", Object.assign({ points: pts3.map((q) => v.project(q).join(",")).join(" "), fill: "none", "stroke-linejoin": "round", "stroke-linecap": "round" }, attrs), g);
+    for (const f of features) {
+      const on = cur && f.id === cur.id;
+      if (cur && !on) continue;
+      const w = on ? 2.6 : 1.8;
+      const op = on ? 1 : 0.7;
+      const c = catOf(f);
+      for (const id of f.parts) {
+        const p = byId[id];
+        if (c === "edge") {
+          for (const e of boxEdges(p)) {
+            if (f.p.edges !== "all" && e.side !== f.p.edges) continue;
+            if (!e.n.some((n) => dot(n, d) > 1e-6)) continue;
+            if (!seenAt(mid(e.a, e.b), p)) continue;
+            poly([e.a, e.b], { stroke: k.accent, "stroke-width": w, opacity: op });
+          }
+        } else if (c === "cutout") {
+          const face = outerFace(p);
+          const seen = dot(face.n, d) > 1e-6;
+          if (overview && !seen) continue;
+          if (!seen) face.val = face.sign > 0 ? p.min[face.axis] : p.max[face.axis];
+          const s0 = p.min[face.long] + f.p.margin / 10, s1 = p.max[face.long] - f.p.margin / 10;
+          const pts = [];
+          for (let i = 0; i <= 32; i++) { const t = i / 32; pts.push(facePt(face, s0 + t * (s1 - s0), p.min[2] + riseAt(f.type, f.p, t) / 10)); }
+          if (seen && dot([0, 0, 1], d) < 0.995) {
+            svgEl("polygon", { points: pts.map((q) => v.project(q).join(",")).join(" "), fill: k.cut, opacity: 0.92 }, g);
+          }
+          poly(pts, { stroke: k.accent, "stroke-width": w, opacity: op, "stroke-dasharray": seen ? "" : "4 3" });
+        } else if (c === "hole") {
+          if (overview && d[2] >= 0) continue; // holes on the underside only show when the feature is selected
+          const cx = (p.min[0] + p.max[0]) / 2, cy = (p.min[1] + p.max[1]) / 2, r = f.p.d / 20;
+          const depth = f.type === "through" ? p.max[2] - p.min[2] : f.p.depth / 10;
+          const ring = (z) => Array.from({ length: 25 }, (_, i) => { const a = (i / 24) * Math.PI * 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a), z]; });
+          const below = d[2] < 0;
+          poly(ring(p.min[2]), { stroke: k.accent, "stroke-width": w * 0.8, opacity: op, "stroke-dasharray": below ? "" : "3 2" });
+          poly(ring(p.min[2] + depth), { stroke: k.accent, "stroke-width": w * 0.6, opacity: op * 0.8, "stroke-dasharray": "3 2" });
+        } else if (c === "carve") {
+          const face = outerFace(p);
+          const seen = dot(face.n, d) > 1e-6;
+          const sc = (p.min[face.long] + p.max[face.long]) / 2, zc = (p.min[2] + p.max[2]) / 2;
+          if (overview && !(seen && seenAt(facePt(face, sc, zc), p))) continue;
+          // Keep the drawing reading the same way from outside: flip the long axis on faces that look the other way.
+          const flip = (face.axis === 0 ? -face.sign : face.sign);
+          const at = (u, vv) => facePt(face, sc + flip * u, zc + vv);
+          const dash = seen ? "" : "4 3";
+          if (f.type === "rosette") {
+            const R = f.p.dia / 20;
+            poly(Array.from({ length: 41 }, (_, i) => { const a = (i / 40) * Math.PI * 2; return at(R * Math.cos(a), R * Math.sin(a)); }), { stroke: k.accent, "stroke-width": w * 0.8, opacity: op, "stroke-dasharray": dash });
+            for (let i = 0; i < 6; i++) {
+              const pts = petal(Math.PI / 2 + (i * Math.PI) / 3, R).map(([u, vv]) => at(u, vv));
+              if (seen) svgEl("polygon", { points: pts.map((q) => v.project(q).join(",")).join(" "), fill: k.chip, stroke: k.accent, "stroke-width": 0.8, opacity: op }, g);
+              else poly(pts, { stroke: k.accent, "stroke-width": 0.8, opacity: op * 0.8, "stroke-dasharray": dash });
+            }
+          } else {
+            const h = f.p.height / 10, wdt = Math.min((f.p.text.length * 0.62 * f.p.height) / 10, p.max[face.long] - p.min[face.long] - 2);
+            poly([at(-wdt / 2, -h / 2), at(wdt / 2, -h / 2), at(wdt / 2, h / 2), at(-wdt / 2, h / 2), at(-wdt / 2, -h / 2)], { stroke: k.accent, "stroke-width": w * 0.8, opacity: op, "stroke-dasharray": seen ? "2 2" : "4 3" });
+          }
+        }
+      }
+    }
+  }
+
+  const view = new BenchView(document.getElementById("vp"), {
+    theme: {
+      colors: COLORS,
+      stroke: "rgba(60,45,30,0.45)",
+      strokeWidth: 0.7,
+      selectedStroke: "#d63b32",
+      hoverStroke: "rgba(214,59,50,.6)",
+      grid: { minor: "rgba(40,40,40,.06)", major: "rgba(40,40,40,.12)" },
+      shadow: "rgba(60,50,40,.22)",
+    },
+    dims: false,
+    // Shifted right so the section inset at the top left doesn't cover the bench.
+    view: { azimuth: 62, elevation: 24, pan: [80, -20] },
+    onSelect: (id) => onPartClick(id),
+    onRender: (v) => overlay(v),
+  });
+  let shiftDown = false;
+  document.getElementById("vp").addEventListener("pointerdown", (e) => (shiftDown = e.shiftKey), true);
+  benchTheme.bind(view);
+  window.addEventListener("themechange", () => renderInset());
+
+  function renderViewport() {
+    const f = sel();
+    view.selectedId = null;
+    view.theme.dimmed = f ? new Set(f.parts) : null;
+    view.render();
+    document.getElementById("featchip").innerHTML = f
+      ? `<b>${TYPES[f.type].title(f.p)}</b> · ${partsLabel(f.parts)}`
+      : `<b>${features.length}</b> shaping feature${features.length === 1 ? "" : "s"} · ${fmtMin(features.reduce((a, x) => a + featureMin(x), 0))}`;
+  }
+
+  // ---------- Section inset ----------
+  function profileUV(type, s) {
+    if (type === "chamfer") return [[0, 0], [s, s]];
+    const out = [];
+    for (let i = 0; i <= 10; i++) {
+      const a = (i / 10) * (Math.PI / 2);
+      if (type === "roundover") out.push([s * Math.sin(a), s - s * Math.cos(a)]);
+      else if (type === "cove") out.push([s - s * Math.cos(a), s * Math.sin(a)]);
+      else { const u = (s * i) / 10; out.push([u, (s * (1 - Math.cos((Math.PI * u) / s))) / 2]); }
+    }
+    return out;
+  }
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => Math.max(0, Math.min(255, Math.round(x * f))));
+    return `rgb(${c.join(",")})`;
+  }
+  const W = 248, H = 184;
+  function dimSvg(x1, y1, x2, y2, label, color) {
+    const k = INK();
+    const vert = Math.abs(x2 - x1) < Math.abs(y2 - y1);
+    const t = (x, y) => (vert ? `M${x - 3},${y}L${x + 3},${y}` : `M${x},${y - 3}L${x},${y + 3}`);
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, w = label.length * 6.6 + 8;
+    return `<path d="M${x1},${y1}L${x2},${y2}${t(x1, y1)}${t(x2, y2)}" stroke="${color}" stroke-width="1" fill="none"/>
+      <rect x="${mx - w / 2}" y="${my - 8}" width="${w}" height="16" rx="4" fill="${k.dimBg}"/>
+      <text x="${mx}" y="${my + 4}" text-anchor="middle" fill="${color}" style="font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace">${label}</text>`;
+  }
+  function breakV(x, y0, y1, color) {
+    const m = (y0 + y1) / 2;
+    return `<path d="M${x},${y0}L${x},${m - 6}L${x + 5},${m - 2}L${x - 5},${m + 2}L${x},${m + 6}L${x},${y1}" stroke="${color}" stroke-width="1" fill="none"/>`;
+  }
+  function breakH(y, x0, x1, color) {
+    const m = (x0 + x1) / 2;
+    return `<path d="M${x0},${y}L${m - 6},${y}L${m - 2},${y - 5}L${m + 2},${y + 5}L${m + 6},${y}L${x1},${y}" stroke="${color}" stroke-width="1" fill="none"/>`;
+  }
+  const profileLabel = (pr) => (!pr.f ? "1 mm break" : pr.type === "roundover" ? `R${pr.s}` : pr.type === "chamfer" ? `${pr.s} × 45°` : pr.type === "cove" ? `R${pr.s} cove` : `ogee ${pr.s}`);
+
+  function insetSection(f) {
+    const k = INK();
+    const p = byId[f.parts[0]], d = dimsOf(p), Wh = d.thin, Hh = d.Z;
+    const corners = { TL: null, TR: null, BL: null, BR: null };
+    for (const g of features) {
+      if (catOf(g) !== "edge" || !g.parts.includes(p.id)) continue;
+      const keys = g.p.edges === "upper" ? ["TL", "TR"] : g.p.edges === "lower" ? ["BL", "BR"] : ["TL", "TR", "BL", "BR"];
+      for (const c of keys) if (!corners[c] || g.id === f.id) corners[c] = { type: g.type, s: TYPES[g.type].size(g.p), f: g };
+    }
+    if (breakEdges) for (const c in corners) if (!corners[c]) corners[c] = { type: "roundover", s: 1, f: null };
+    const holes = features.filter((g) => catOf(g) === "hole" && g.parts.includes(p.id));
+    const lowerFocus = catOf(f) === "hole" || f.p.edges === "lower" || f.p.edges === "all";
+    const bH = Wh > 90, bV = Hh > 90;
+    const wx0 = bH ? Wh - 70 : 0, wx1 = Wh;
+    const wz0 = bV && !lowerFocus ? Hh - 70 : 0, wz1 = bV && lowerFocus ? 70 : Hh;
+    const ww = wx1 - wx0, wh = wz1 - wz0;
+    // Leave room above for the width dimension when the section is cut off at the top.
+    const L = 46, R = 58, T = bV && lowerFocus && !bH ? 54 : 36, B = 34;
+    const sc = Math.min((W - L - R) / ww, (H - T - B) / wh);
+    const ox = L + (W - L - R - ww * sc) / 2 - wx0 * sc;
+    const oy = T + (H - T - B + wh * sc) / 2 + wz0 * sc;
+    const X = (x) => ox + x * sc, Y = (z) => oy - z * sc;
+    const C = [
+      { k: "BL", P: [0, 0], din: [-1, 0], dout: [0, 1] },
+      { k: "TL", P: [0, Hh], din: [0, 1], dout: [1, 0] },
+      { k: "TR", P: [Wh, Hh], din: [1, 0], dout: [0, -1] },
+      { k: "BR", P: [Wh, 0], din: [0, -1], dout: [-1, 0] },
+    ];
+    const at = (c, s, u, v) => [c.P[0] - c.din[0] * s + u * c.din[0] + v * c.dout[0], c.P[1] - c.din[1] * s + u * c.din[1] + v * c.dout[1]];
+    const pts = [];
+    for (const c of C) {
+      const pr = corners[c.k];
+      if (!pr) pts.push(c.P);
+      else for (const [u, v] of profileUV(pr.type, pr.s)) pts.push(at(c, pr.s, u, v));
+    }
+    const path = "M" + pts.map(([x, z]) => `${X(x).toFixed(1)},${Y(z).toFixed(1)}`).join("L") + "Z";
+    let s = `<defs><clipPath id="secClip"><rect x="${X(wx0)}" y="${Y(wz1)}" width="${ww * sc}" height="${wh * sc}"/></clipPath></defs>`;
+    s += `<g clip-path="url(#secClip)"><path d="${path}" fill="${COLORS[p.material]}" stroke="${k.ink}" stroke-width="1.2" stroke-linejoin="round"/>`;
+    for (const h of holes) {
+      const cx = bH ? (wx0 + wx1) / 2 : Wh / 2;
+      const depth = h.type === "through" ? Hh : h.p.depth;
+      const on = h.id === f.id;
+      s += `<rect x="${X(cx - h.p.d / 2)}" y="${Y(depth)}" width="${h.p.d * sc}" height="${depth * sc}" fill="${k.cut}" stroke="${on ? k.accent : k.ink}" stroke-width="${on ? 1.6 : 1}"/>`;
+      if (h.type === "insert") {
+        const ins = INSERT[h.p.thread], bore = h.p.d * 0.62;
+        for (const side of [-1, 1]) {
+          const xa = side < 0 ? cx - h.p.d / 2 : cx + bore / 2;
+          s += `<rect x="${X(xa)}" y="${Y(ins.len)}" width="${((h.p.d - bore) / 2) * sc}" height="${ins.len * sc}" fill="${k.steel}" opacity=".85"/>`;
+          for (let z = 2; z < ins.len; z += 2.2) s += `<path d="M${X(xa)},${Y(z)}L${X(xa + (h.p.d - bore) / 2)},${Y(z + 1)}" stroke="${k.ink}" stroke-width=".6" opacity=".6"/>`;
+        }
+      }
+    }
+    s += `</g>`;
+    if (bH) s += breakV(X(wx0), Y(wz0), Y(wz1), k.ink);
+    if (bV) s += breakH(lowerFocus ? Y(wz1) : Y(wz0), X(wx0), X(wx1), k.ink);
+    for (const c of C) {
+      const pr = corners[c.k];
+      if (!pr) continue;
+      if (c.P[0] < wx0 - 1e-6 || c.P[1] < wz0 - 1e-6 || c.P[1] > wz1 + 1e-6) continue;
+      const [mx, mz] = pr.type === "chamfer" ? at(c, pr.s, pr.s / 2, pr.s / 2) : at(c, pr.s, pr.s * 0.7, pr.s * 0.3);
+      const out = [c.din[0] - c.dout[0], c.din[1] - c.dout[1]];
+      const ax = X(mx), ay = Y(mz), bx = ax + out[0] * 15, by = ay - out[1] * 15;
+      const color = pr.f && pr.f.id === f.id ? k.accent : k.muted;
+      s += `<path d="M${ax},${ay}L${bx},${by}" stroke="${color}" stroke-width="1"/><circle cx="${ax}" cy="${ay}" r="1.6" fill="${color}"/>`;
+      s += `<text x="${bx + (out[0] > 0 ? 3 : -3)}" y="${by + (out[1] > 0 ? -2 : 10)}" text-anchor="${out[0] > 0 ? "start" : "end"}" fill="${color}" style="font: 600 11px Inter, ui-sans-serif, system-ui, sans-serif">${profileLabel(pr)}</text>`;
+    }
+    if (!bV) s += dimSvg(X(wx0) - 26, Y(0), X(wx0) - 26, Y(Hh), `${Hh}`, k.muted);
+    if (!bH) { const y = bV && lowerFocus ? Y(wz1) - 14 : Y(wz0) + 16; s += dimSvg(X(0), y, X(Wh), y, `${Wh}`, k.muted); }
+    for (const h of holes) {
+      if (h.id !== f.id) continue;
+      const cx = bH ? (wx0 + wx1) / 2 : Wh / 2;
+      s += `<text x="${X(cx)}" y="${Y(0) + 18}" text-anchor="middle" fill="${k.accent}" style="font: 600 11px Inter, ui-sans-serif, system-ui, sans-serif">Ø${h.p.d}${h.type === "through" ? " through" : ` × ${h.p.depth}`}</text>`;
+    }
+    return { svg: s, label: catOf(f) === "hole" || (p.kind === "Legs" && lowerFocus) ? `Section through the ${p.kind === "Legs" ? "foot" : p.name.toLowerCase()}` : `Section through the ${p.name.toLowerCase()} edge` };
+  }
+
+  function insetElevation(f) {
+    const k = INK();
+    const p = byId[f.parts[0]], d = dimsOf(p), Lh = d.long, Hh = d.Z, half = Lh / 2, P = f.p;
+    const x0 = -45, x1 = half, z0 = -16, z1 = Hh + 12;
+    const L = 14, R = 40, T = 44, B = 44;
+    const sc = Math.min((W - L - R) / (x1 - x0), (H - T - B) / (z1 - z0));
+    const ox = L + (W - L - R - (x1 - x0) * sc) / 2 - x0 * sc;
+    const oy = T + (H - T - B + (z1 - z0) * sc) / 2 + z0 * sc;
+    const X = (x) => ox + x * sc, Y = (z) => oy - z * sc;
+    let s = `<rect x="${X(-45)}" y="${Y(z1)}" width="${45 * sc}" height="${(z1 - z0) * sc}" fill="${COLORS.oak}" opacity=".45" stroke="${k.muted}" stroke-width=".8"/>`;
+    s += `<rect x="${X(-30)}" y="${Y(Hh - 10)}" width="${30 * sc}" height="${(Hh - 20) * sc}" fill="none" stroke="${k.muted}" stroke-dasharray="3 2"/>`;
+    const curve = [];
+    for (let i = 16; i >= 0; i--) { const t = (i / 16) * 0.5; curve.push(`L${X(P.margin + t * (Lh - 2 * P.margin)).toFixed(1)},${Y(riseAt(f.type, P, t)).toFixed(1)}`); }
+    s += `<path d="M${X(0)},${Y(Hh)}L${X(half)},${Y(Hh)}L${X(half)},${Y(riseAt(f.type, P, 0.5))}${curve.join("")}L${X(0)},${Y(0)}Z" fill="${COLORS[p.material]}" stroke="${k.ink}" stroke-width="1.1" stroke-linejoin="round"/>`;
+    s += `<path d="M${X(half)},${Y(z1)}L${X(half)},${Y(z0)}" stroke="${k.muted}" stroke-dasharray="8 2 2 2" stroke-width=".8"/>`;
+    s += `<text x="${X(half)}" y="${Y(z1) - 4}" text-anchor="end" fill="${k.muted}" style="font: 10px Inter, ui-sans-serif, system-ui, sans-serif">centre</text>`;
+    // Rise to the right of the centre line, what is left of the apron to the left, so the labels never overlap.
+    const rise = riseAt(f.type, P, 0.5);
+    s += dimSvg(X(half) + 18, Y(0), X(half) + 18, Y(rise), `${fmt(rise)}`, k.accent);
+    s += dimSvg(X(half) - 18, Y(rise), X(half) - 18, Y(Hh), `${fmt(Hh - rise)}`, k.muted);
+    s += dimSvg(X(0), Y(0) + 16, X(P.margin), Y(0) + 16, `${P.margin}`, k.accent);
+    s += `<text x="${X(-22)}" y="${Y(0) + 34}" text-anchor="middle" fill="${k.muted}" style="font: 10px Inter, ui-sans-serif, system-ui, sans-serif">Leg</text>`;
+    return { svg: s, label: `Elevation · half the ${p.name.toLowerCase()}` };
+  }
+
+  function insetFace(f) {
+    const k = INK();
+    const p = byId[f.parts[0]], d = dimsOf(p), Hh = d.Z, wl = Math.min(d.long, 260), P = f.p;
+    const L = 20, R = 20, T = 34, B = 36;
+    const sc = Math.min((W - L - R) / wl, (H - T - B) / Hh);
+    const ox = L + (W - L - R - wl * sc) / 2, oy = T + (H - T - B + Hh * sc) / 2;
+    const X = (x) => ox + x * sc, Y = (z) => oy - z * sc;
+    const cx = wl / 2, cz = Hh / 2, wood = COLORS[p.material];
+    let s = `<rect x="${X(0)}" y="${Y(Hh)}" width="${wl * sc}" height="${Hh * sc}" fill="${wood}" stroke="${k.ink}" stroke-width="1.1"/>`;
+    if (d.long > 260) s += breakV(X(0), Y(0), Y(Hh), k.ink) + breakV(X(wl), Y(0), Y(Hh), k.ink);
+    if (f.type === "rosette") {
+      const Rr = P.dia / 2;
+      s += `<circle cx="${X(cx)}" cy="${Y(cz)}" r="${Rr * sc}" fill="none" stroke="${k.ink}" stroke-width="1"/>`;
+      for (let i = 0; i < 6; i++) {
+        const pts = petal(Math.PI / 2 + (i * Math.PI) / 3, Rr, 8);
+        s += `<path d="M${pts.map(([u, v]) => `${X(cx + u).toFixed(1)},${Y(cz + v).toFixed(1)}`).join("L")}Z" fill="${shade(wood, 0.62)}" stroke="${k.ink}" stroke-width=".8"/>`;
+        // The ridge down the middle of each petal, where the two chip cuts meet.
+        const a = Math.PI / 2 + (i * Math.PI) / 3;
+        s += `<path d="M${X(cx)},${Y(cz)}L${X(cx + Rr * Math.cos(a))},${Y(cz + Rr * Math.sin(a))}" stroke="${k.ink}" stroke-width=".5" opacity=".5"/>`;
+      }
+      s += dimSvg(X(cx - Rr), Y(0) + 16, X(cx + Rr), Y(0) + 16, `Ø${P.dia}`, k.accent);
+    } else {
+      const fs = Math.max(8, P.height * sc);
+      s += `<text x="${X(cx)}" y="${Y(cz) + fs * 0.36}" text-anchor="middle" fill="${shade(wood, 0.55)}" stroke="${k.ink}" stroke-width=".5" style="font: 600 ${fs}px Georgia, 'Times New Roman', serif">${P.text.replace(/[<&]/g, "")}</text>`;
+      s += dimSvg(X(0) + 10, Y(cz - P.height / 2), X(0) + 10, Y(cz + P.height / 2), `${P.height}`, k.accent);
+    }
+    s += `<text x="${X(wl)}" y="${Y(0) + 34}" text-anchor="end" fill="${k.muted}" style="font: 10px Inter, ui-sans-serif, system-ui, sans-serif">${P.depth} mm deep</text>`;
+    return { svg: s, label: `Outside face · ${p.name.toLowerCase()}` };
+  }
+
+  function renderInset() {
+    const f = sel();
+    const box = document.getElementById("insetBox");
+    box.classList.toggle("hidden", !f);
+    if (!f) return;
+    const c = catOf(f);
+    const r = c === "cutout" ? insetElevation(f) : c === "carve" ? insetFace(f) : insetSection(f);
+    const svg = document.getElementById("inset");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.innerHTML = r.svg;
+    document.getElementById("insetLbl").textContent = r.label;
+  }
+
+  // ---------- Left list ----------
+  function coveredEdges() {
+    let n = 0;
+    for (const p of PARTS) {
+      const sides = new Set();
+      for (const f of features) if (catOf(f) === "edge" && f.parts.includes(p.id)) (f.p.edges === "all" ? ["upper", "lower", "vertical"] : [f.p.edges]).forEach((x) => sides.add(x));
+      n += (sides.has("upper") ? 4 : 0) + (sides.has("lower") ? 4 : 0) + (sides.has("vertical") ? 4 : 0);
+    }
+    return n;
+  }
+  const featureText = (f) => `${TYPES[f.type].title(f.p)} ${partsLabel(f.parts)} ${whereLabel(f)} ${f.parts.map((id) => LOC[id] || "").join(" ")}`.toLowerCase();
+
+  function renderList() {
+    const host = document.getElementById("flist");
+    const q = filter.toLowerCase();
+    document.getElementById("fcount").textContent = features.length;
+    if (!features.length) {
+      host.innerHTML = `<div class="list-empty"><b style="color:var(--ink)">No shaping yet.</b><br>Pick a tool below and click a part to add an edge profile, a curve, a hole or a carving. Projects without any can go straight to the cut list.
+        <a class="btn" href="a-workshop-flow.html#cutlist">Continue to Cut list${icon("chevronRight", 14)}</a></div>`;
+    } else {
+      const shown = features.filter((f) => !q || featureText(f).includes(q));
+      host.innerHTML = CATS.map((c) => {
+        const items = shown.filter((f) => catOf(f) === c.id);
+        if (!items.length) return "";
+        const warns = items.filter((f) => worst(checks(f)) === "warn").length;
+        return `<div class="group-h">${c.name}<span class="count">${items.length}</span>${warns ? `<span style="margin-left:auto;color:var(--warn-ink);text-transform:none;letter-spacing:0">${warns} to review</span>` : ""}</div>` +
+          items.map((f) => {
+            const s = worst(checks(f));
+            return `<div class="frow ${f.id === selected ? "sel" : ""}" data-id="${f.id}"><span class="st ${s}">${s === "ok" ? "✓" : "!"}</span>
+              <div class="nm">${TYPES[f.type].title(f.p)}<small>${partsLabel(f.parts)} · ${whereLabel(f)}</small></div><span class="time">${fmtMin(featureMin(f))}</span></div>`;
+          }).join("");
+      }).join("") || `<div class="list-empty">No features match “${filter.replace(/[<&]/g, "")}”.</div>`;
+    }
+    host.querySelectorAll(".frow").forEach((r) => (r.onclick = () => selectFeature(r.dataset.id)));
+    const sharp = PARTS.length * 12 - coveredEdges();
+    const box = document.getElementById("sharp");
+    box.innerHTML = `<button class="sharp-toggle" id="sharpToggle" aria-expanded="${sharpOpen}"><span>Edges left sharp</span><span style="display:flex;gap:8px;align-items:center">${breakEdges ? '<span class="pill ok">Broken 1 mm</span>' : `<span class="pill warn">${sharp}</span>`}${icon(sharpOpen ? "chevronDown" : "chevronRight", 14)}</span></button>` +
+      (sharpOpen ? `<div class="sharp-body"><label class="switch"><input type="checkbox" id="breakEdges" ${breakEdges ? "checked" : ""}/><span></span>Break them 1 mm</label>
+        ${sharp} edges have no profile. Breaking them with a few strokes of a block plane or 180 grit makes them pleasant to touch and stops the finish wearing through. It adds about ${fmtMin(Math.round(sharp / 6))} to the plan and needs no new tool.</div>` : "");
+    document.getElementById("sharpToggle").onclick = () => { sharpOpen = !sharpOpen; renderList(); };
+    const cb = document.getElementById("breakEdges");
+    if (cb) cb.onchange = () => { remember(); breakEdges = cb.checked; renderList(); renderInset(); if (!sel()) renderEditor(); };
+  }
+
+  // ---------- Right editor ----------
+  function field(key, label, value, unit = "mm", ro = false) {
+    return `<div class="dim ${ro ? "ro" : ""}"><label>${label}</label><div><input data-key="${key}" value="${value}" ${ro ? "readonly" : ""} inputmode="decimal" /><span>${unit}</span></div></div>`;
+  }
+  function segs(key, options, value) {
+    return `<div class="segs">${options.map(([v, l]) => `<button data-seg="${key}" data-val="${v}" class="${String(value) === String(v) ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  }
+  function params(f) {
+    const P = f.p, d = dimsOf(byId[f.parts[0]]);
+    const edges = `<div class="field"><label>Edges</label>${segs("edges", [["upper", "Upper"], ["lower", "Lower"], ["all", "All"]], P.edges)}</div>`;
+    switch (f.type) {
+      case "roundover": return `<div class="dims two">${field("r", "Radius", P.r)}${field("flat", "Flat left", fmt(flatLeft(f)), "mm", true)}</div>${edges}`;
+      case "cove": return `<div class="dims two">${field("r", "Radius", P.r)}${field("flat", "Flat left", fmt(flatLeft(f)), "mm", true)}</div>${edges}`;
+      case "chamfer": return `<div class="dims two">${field("s", "Size", P.s)}${field("flat", "Flat left", fmt(flatLeft(f)), "mm", true)}</div>${edges}`;
+      case "ogee": return `<div class="dims two">${field("r", "Profile size", P.r)}${field("flat", "Flat left", fmt(flatLeft(f)), "mm", true)}</div>${edges}`;
+      case "arch": case "cyma": return `<div class="dims">${field("rise", "Rise", P.rise)}${field("margin", "From legs", P.margin)}${field("left", "Left at centre", d.Z - P.rise, "mm", true)}</div>`;
+      case "insert": return `<div class="field" style="margin-top:0"><label>Thread</label>${segs("thread", Object.keys(INSERT).map((t) => [t, t]), P.thread)}</div><div class="dims two" style="margin-top:10px">${field("d", "Hole", P.d)}${field("depth", "Depth", P.depth)}</div>`;
+      case "blind": return `<div class="dims two">${field("d", "Diameter", P.d)}${field("depth", "Depth", P.depth)}</div>`;
+      case "through": return `<div class="dims two">${field("d", "Diameter", P.d)}${field("depth", "Depth", d.Z, "mm", true)}</div>`;
+      case "rosette": return `<div class="dims two">${field("dia", "Diameter", P.dia)}${field("depth", "Depth", P.depth)}</div>`;
+      case "lettering": return `<div class="dims" style="grid-template-columns:1.4fr 1fr 1fr"><div class="dim text"><label>Text</label><div><input data-key="text" data-text="1" value="${P.text.replace(/"/g, "&quot;")}" /></div></div>${field("height", "Height", P.height)}${field("depth", "Depth", P.depth)}</div>`;
+    }
+    return "";
+  }
+  function flatLeft(f) {
+    const p = byId[f.parts[0]], d = dimsOf(p), t = TYPES[f.type], s = t.size(f.p);
+    const T = d.Z <= d.thin ? d.Z : d.thin;
+    if (f.p.edges === "all") return T - 2 * s;
+    const opp = features.find((g) => g !== f && catOf(g) === "edge" && g.parts.some((id) => f.parts.includes(id)) && g.p.edges !== f.p.edges && g.p.edges !== "all");
+    return T - s - (opp ? TYPES[opp.type].size(opp.p) : 0);
+  }
+
+  function methodsHtml(f) {
+    const cur = methodOf(f);
+    return METHODS[f.type].map((m) => {
+      const tools = m.tools.map((id) => (owns(id) ? toolInfo(id).name : `<span class="miss">${toolInfo(id).name} (not in your workshop)</span>`)).join(" · ");
+      return `<button class="radio ${m === cur ? "on" : ""}" data-method="${m.id}"><span class="dot"></span><span>${m.name}<small>${tools}</small></span><span class="mins">${fmtMin(m.min * f.parts.length)}</span></button>`;
+    }).join("");
+  }
+
+  function renderChecks() {
+    const f = sel();
+    const host = document.getElementById("checks");
+    if (!f || !host) return;
+    const list = checks(f);
+    const warns = list.filter((c) => c.level === "warn").length;
+    const cc = document.getElementById("checkcount");
+    cc.textContent = warns ? `${warns} to review` : "All clear";
+    cc.style.color = warns ? "var(--warn-ink)" : "var(--ok-ink)";
+    host.innerHTML = list.map((c, i) => `<div class="check ${c.level}"><span class="ico">${c.level === "ok" ? "✓" : c.level === "warn" ? "!" : "i"}</span>
+      <div>${c.text}${c.fixes ? `<div class="fixes">${c.fixes.map((fx, j) => `<button class="fix" data-check="${i}" data-fix="${j}">${fx[0]}</button>`).join("")}</div>` : ""}</div></div>`).join("");
+    host.querySelectorAll(".fix").forEach((b) => (b.onclick = () => {
+      const fx = list[+b.dataset.check].fixes[+b.dataset.fix][1];
+      remember();
+      if (fx.__method) f.method = fx.__method;
+      else Object.assign(f.p, fx);
+      renderAll();
+    }));
+    const flat = document.querySelector('input[data-key="flat"]');
+    if (flat) flat.value = fmt(flatLeft(f));
+    const left = document.querySelector('input[data-key="left"]');
+    if (left) left.value = dimsOf(byId[f.parts[0]]).Z - f.p.rise;
+    document.getElementById("howList").innerHTML = methodOf(f).how(f).map((t, i) => `<li><span class="n">${i + 1}</span><span>${t}</span></li>`).join("");
+    document.querySelectorAll(".radio .mins").forEach((el, i) => (el.textContent = fmtMin(METHODS[f.type][i].min * f.parts.length)));
+  }
+
+  function renderOverview() {
+    const host = document.getElementById("right");
+    const total = features.reduce((a, f) => a + featureMin(f), 0) + (breakEdges ? Math.round((PARTS.length * 12 - coveredEdges()) / 6) : 0);
+    const toolIds = [...new Set(features.flatMap((f) => methodOf(f).tools))];
+    const missing = toolIds.filter((id) => !owns(id));
+    host.innerHTML = `
+      <div class="card"><div style="font-size:18px;font-weight:600">Shaping</div>
+        <div class="sub"><span>Edge profiles, curves, holes and carving on the Hall bench</span></div></div>
+      <div class="card"><h3>Summary</h3>
+        ${CATS.map((c) => `<div class="stat"><span>${c.name}</span><b>${features.filter((f) => catOf(f) === c.id).length}</b></div>`).join("")}
+        <div class="stat"><span>Sharp edges</span><b>${breakEdges ? "Broken 1 mm" : PARTS.length * 12 - coveredEdges()}</b></div>
+        <div class="stat" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span style="color:var(--ink);font-weight:600">Shop time</span><b>${fmtMin(total)}</b></div></div>
+      <div class="card"><h3>Tools<a href="a-workshop.html">My workshop</a></h3>
+        ${toolIds.map((id) => `<div class="trow"><span class="st ${owns(id) ? "ok" : "warn"}">${owns(id) ? "✓" : "!"}</span><span>${toolInfo(id).name}<small>${[...new Set(features.filter((f) => methodOf(f).tools.includes(id)).map((f) => `${TYPES[f.type].title(f.p)} on the ${partsLabel(f.parts).replace(/ × \d+$/, "s").toLowerCase()}`))].join(", ")}</small></span><small>${owns(id) ? "" : "€" + toolInfo(id).price}</small></div>`).join("")}
+        ${missing.length ? `<p class="note" style="margin-top:10px">${missing.length === 1 ? "One tool is" : `${missing.length} tools are`} missing. Select a feature to choose a method that uses what you have.</p>` : ""}</div>
+      <div class="card"><p class="note">Shaping is optional. A project without profiles, curves, holes or carving can go straight to the cut list. Planning puts these steps after the joinery and before the glue-up.</p></div>
+      <div class="actions"><a class="btn primary" href="a-workshop-flow.html#cutlist">Continue to Cut list${icon("chevronRight", 15)}</a></div>`;
+  }
+
+  function renderEditor() {
+    const f = sel();
+    if (!f) { renderOverview(); return; }
+    const host = document.getElementById("right");
+    const scrollTop = host.scrollTop;
+    const c = CAT[catOf(f)];
+    const ids = f.parts;
+    const missingIdentical = [...new Set(ids.flatMap(identicalTo))].filter((id) => !ids.includes(id));
+    host.innerHTML = `
+      <div class="card">
+        <div style="font-size:18px;font-weight:600">${TYPES[f.type].title(f.p)}</div>
+        <div class="sub"><span class="tag">${c.name}</span><span>${partsLabel(ids)} · ${whereLabel(f)}</span></div>
+      </div>
+      <div class="card"><h3>Type</h3><div class="types">${c.types.map((t) => `<button class="type ${t === f.type ? "on" : ""}" data-type="${t}">${icon(TYPES[t].icon, 20)}<span>${TYPES[t].short || TYPES[t].name}</span></button>`).join("")}</div></div>
+      <div class="card"><h3>${TYPES[f.type].name}<span style="text-transform:none;letter-spacing:0;font-weight:500">mm</span></h3>${params(f)}</div>
+      <div class="card"><h3>How you'll make it<a href="a-workshop.html">My workshop</a></h3><div class="methods">${methodsHtml(f)}</div><ul class="notes" id="howList"></ul></div>
+      <div class="card"><h3>Checks<span id="checkcount" style="text-transform:none;letter-spacing:0;font-weight:500"></span></h3><div id="checks"></div></div>
+      <div class="card"><h3>Parts<span style="text-transform:none;letter-spacing:0;font-weight:500">${ids.length}</span></h3>
+        ${ids.map((id) => `<div class="prow"><span class="sw" style="background:${COLORS[byId[id].material]}"></span><span>${byId[id].name}${LOC[id] ? ` <small>${LOC[id]}</small>` : ""}</span>${ids.length > 1 ? `<button class="x" data-unpart="${id}" title="Remove from this feature">×</button>` : "<span></span>"}</div>`).join("")}
+        ${missingIdentical.length ? `<button class="linkbtn" id="addIdentical">Add ${missingIdentical.length} identical part${missingIdentical.length > 1 ? "s" : ""}</button>` : ""}</div>
+      <div class="editor-actions"><button class="btn" id="dup">${icon("copy", 15)}Duplicate</button><button class="btn" id="del">${icon("erase", 15)}Remove</button></div>`;
+    host.scrollTop = scrollTop;
+    host.querySelectorAll(".type").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
+    host.querySelectorAll("input[data-key]:not([readonly])").forEach((inp) => {
+      inp.addEventListener("focus", () => remember(), { once: true });
+      inp.addEventListener("input", () => {
+        if (inp.dataset.text) { f.p.text = inp.value.slice(0, 16) || " "; }
+        else {
+          const v = parseFloat(inp.value.replace(",", "."));
+          if (!Number.isFinite(v) || v <= 0) return;
+          f.p[inp.dataset.key] = v;
+        }
+        host.querySelector(".card div").textContent = TYPES[f.type].title(f.p);
+        renderChecks();
+        renderViewport();
+        renderInset();
+        renderList();
+      });
+    });
+    host.querySelectorAll("[data-seg]").forEach((b) => (b.onclick = () => {
+      remember();
+      const key = b.dataset.seg;
+      f.p[key] = b.dataset.val;
+      if (key === "thread") f.p.d = INSERT[f.p.thread].d;
+      renderAll();
+    }));
+    host.querySelectorAll("[data-method]").forEach((b) => (b.onclick = () => { remember(); f.method = b.dataset.method; renderAll(); }));
+    host.querySelectorAll("[data-unpart]").forEach((b) => (b.onclick = () => { remember(); f.parts = f.parts.filter((id) => id !== b.dataset.unpart); renderAll(); }));
+    const addI = document.getElementById("addIdentical");
+    if (addI) addI.onclick = () => { remember(); f.parts = [...f.parts, ...missingIdentical]; renderAll(); toast(`Added ${missingIdentical.length} identical part${missingIdentical.length > 1 ? "s" : ""}`); };
+    document.getElementById("dup").onclick = () => {
+      remember();
+      const copy = Object.assign(structuredClone(f), { id: "f" + nextId++ });
+      features.splice(features.indexOf(f) + 1, 0, copy);
+      selected = copy.id;
+      renderAll();
+      toast("Duplicated. Change its parts or edges below.");
+    };
+    document.getElementById("del").onclick = removeSelected;
+    renderChecks();
+  }
+
+  function setType(t) {
+    const f = sel();
+    if (!f || f.type === t) return;
+    remember();
+    const keep = catOf(f) === "edge" ? { edges: f.p.edges } : {};
+    f.type = t;
+    f.p = Object.assign(structuredClone(TYPES[t].defaults), keep);
+    f.method = null;
+    renderAll();
+  }
+
+  function removeSelected() {
+    const f = sel();
+    if (!f) return;
+    remember();
+    const i = features.indexOf(f);
+    features.splice(i, 1);
+    selected = features.length ? features[Math.min(i, features.length - 1)].id : null;
+    renderAll();
+    toast(`Removed ${TYPES[f.type].title(f.p).toLowerCase()} · ⌘Z to undo`);
+  }
+
+  // ---------- Tool strip ----------
+  const STRIP = [["select", "Select", null], "|", ["roundover", "Round-over", "roundover"], ["chamfer", "Chamfer", "chamfer"], ["profile", "Profile", "cove"], "|", ["curve", "Curve", "arch"], ["hole", "Hole", "blind"], ["carve", "Carve", "rosette"]];
+  function renderTools() {
+    document.getElementById("tools").innerHTML = STRIP.map((t) => t === "|" ? '<span class="tool-sep"></span>' :
+      `<button class="tool ${t[2] === tool ? "on" : ""}" data-type="${t[2] || ""}" title="${t[1]}">${icon(t[0], 20)}<span>${t[1]}</span></button>`).join("");
+    document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => { tool = b.dataset.type || null; renderTools(); }));
+    hint();
+  }
+  let toastTimer = null;
+  function hint() {
+    document.getElementById("hint").innerHTML = tool
+      ? `${TYPES[tool].name}: click a part to add it · <kbd>⇧</kbd> adds every identical part · <kbd>Esc</kbd> stops`
+      : "Click a part to see its shaping · <kbd>↑</kbd><kbd>↓</kbd> step through features · <kbd>⌫</kbd> removes";
+  }
+  function toast(text) {
+    const h = document.getElementById("hint");
+    h.textContent = text;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hint, 2400);
+  }
+
+  // ---------- Interaction ----------
+  function onPartClick(id) {
+    if (!id) {
+      if (!tool) { selected = null; renderAll(); }
+      else renderViewport();
+      return;
+    }
+    if (tool) {
+      remember();
+      const parts = shiftDown ? identicalTo(id) : [id];
+      const f = F(tool, parts);
+      if (catOf(f) === "edge" && byId[id].kind === "Legs") f.p.edges = "lower";
+      features.push(f);
+      selected = f.id;
+      renderAll();
+      toast(`Added ${TYPES[f.type].title(f.p).toLowerCase()} to ${partsLabel(parts).toLowerCase()}`);
+      return;
+    }
+    const onPart = features.filter((f) => f.parts.includes(id));
+    if (!onPart.length) { selected = null; renderAll(); toast(`No shaping on the ${byId[id].name.toLowerCase()} yet. Pick a tool below to add some.`); return; }
+    // Clicking the same part again steps through its features.
+    const i = onPart.findIndex((f) => f.id === selected);
+    selected = onPart[(i + 1) % onPart.length].id;
+    renderAll();
+  }
+  function selectFeature(id) {
+    if (id === selected) return;
+    selected = id;
+    renderAll();
+  }
+  function renderMeta() {
+    document.getElementById("projectMeta").textContent = `Saved · 12 parts · ${features.length} shaping feature${features.length === 1 ? "" : "s"}`;
+  }
+  function renderAll() {
+    renderList();
+    renderEditor();
+    renderTools();
+    renderViewport();
+    renderInset();
+    renderMeta();
+  }
+
+  const VIEWS = { persp: { azimuth: 62, elevation: 24 }, front: { azimuth: 90, elevation: 0.5 }, side: { azimuth: 0.5, elevation: 0.5 }, below: { azimuth: 62, elevation: 4 } };
+  document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => {
+    document.querySelectorAll("#views button").forEach((x) => x.classList.toggle("on", x === b));
+    view.animateTo(VIEWS[b.dataset.v]);
+  }));
+  document.getElementById("fsearch").addEventListener("input", (e) => { filter = e.target.value; renderList(); });
+  document.getElementById("undo").onclick = () => {
+    const last = history.pop();
+    if (!last) return;
+    const s = JSON.parse(last);
+    features = s.features;
+    selected = s.selected;
+    breakEdges = s.breakEdges;
+    renderAll();
+  };
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "z") { e.preventDefault(); document.getElementById("undo").click(); return; }
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "Escape") { if (tool) { tool = null; renderTools(); } else { selected = null; renderAll(); } }
+    if ((e.key === "Backspace" || e.key === "Delete") && sel()) { e.preventDefault(); removeSelected(); }
+    if (e.key.toLowerCase() === "v") { tool = null; renderTools(); }
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && features.length) {
+      const order = CATS.flatMap((c) => features.filter((f) => catOf(f) === c.id));
+      const i = order.findIndex((f) => f.id === selected);
+      const next = i < 0 ? order[0] : order[(i + (e.key === "ArrowDown" ? 1 : order.length - 1)) % order.length];
+      selectFeature(next.id);
+      e.preventDefault();
+    }
+  });
+
+  hydrateIcons();
+  renderAll();
+</script>
+</body>
+</html>
