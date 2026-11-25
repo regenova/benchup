@@ -79,10 +79,10 @@
     <nav class="stages stage-wrap" id="stages">
       <a class="stage active" href="a-empty.html"><span class="n">1</span>Design</a>
       <a class="stage locked" data-hint="Add parts first" href="a-joinery.html"><span class="n">2</span>Joinery</a>
-      <a class="stage locked" data-hint="Add parts first" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-shaping.html"><span class="n">3</span>Shaping</a>
       <a class="stage locked" data-hint="Add parts first" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
-      <a class="stage locked" data-hint="Add parts first" href="a-planning.html"><span class="n">5</span>Planning</a>
-      <a class="stage locked" data-hint="Add parts first" href="a-estimate.html"><span class="n">6</span>Estimate</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+      <a class="stage locked" data-hint="Add parts first" href="a-planning.html"><span class="n">6</span>Planning</a>
     </nav>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
@@ -297,8 +297,8 @@
     const done = [state.parts.length > 0, false, false, false];
     const steps = [
       ["Add parts", "From stock, by drawing, or by importing a model"],
-      ["Join them", "Mortise & tenon, dowels, dovetails…"],
       ["Assign materials", "Species, grain direction and finish"],
+      ["Join them", "Mortise & tenon, dowels, dovetails…"],
       ["Review the cut list", "Cut sizes, board layouts and costs"],
     ];
     const nextIndex = done.indexOf(false);
@@ -378,7 +378,7 @@
       nav.classList.remove("shake");
       void nav.offsetWidth;
       nav.classList.add("shake");
-      X.toast("Add at least one part, then join, assign materials and review the cut list.");
+      X.toast("Add at least one part, then assign materials, join the parts and review the cut list.");
     }
   }));
   document.getElementById("drawingsBtn").addEventListener("click", (e) => {

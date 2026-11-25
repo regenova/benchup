@@ -52,6 +52,12 @@
     command: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
     magnet: '<path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3z"/>',
     walk: '<circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M9 11l3-3 3 3 3 1M12 8l-1 5"/>',
+    roundover: '<path d="M4 20V10a6 6 0 0 1 6-6h10"/><path d="M4 20h16V4" stroke-dasharray="2 2"/>',
+    chamfer: '<path d="M4 20V9l5-5h11"/><path d="M4 20h16V4" stroke-dasharray="2 2"/>',
+    profile: '<path d="M4 20V13c3 0 3-4 6-4s3-5 6-5h4"/><path d="M4 20h16V4" stroke-dasharray="2 2"/>',
+    curve: '<path d="M3 7h18v10h-3c0-4-3-6-6-6s-6 2-6 6H3z"/>',
+    hole: '<rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="12" r="3.5"/><path d="M12 7v1.5M12 15.5V17"/>',
+    carve: '<path d="M4 20l7-7"/><path d="M11 13l6-8 2 2-8 6z"/><path d="M14 19c2-1 4-1 6 0"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   };
 
