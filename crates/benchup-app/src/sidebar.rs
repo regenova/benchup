@@ -3997,6 +3997,37 @@ mod preference_tests {
     }
 
     #[test]
+    fn environment_mode_defaults_to_plain_and_persists_without_model_edit() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = SavedPreferences::default();
+        storage.set_string(
+            PREFERENCE_KEY,
+            "(display:Some((sky:false,ground:true)))".into(),
+        );
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert!(!app.doc.display.environment_horizon);
+        assert!(!app.doc.display.sky);
+        for horizon in [true, false] {
+            storage.flushed = false;
+            app.doc.display.environment_horizon = horizon;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+
+            let restored_ctx = egui::Context::default();
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&restored_ctx, Some(&storage));
+            assert_eq!(restored.doc.display.environment_horizon, horizon);
+            let mut other = Document::default();
+            other.display.environment_horizon = !horizon;
+            restored.replace_project(other, None, &restored_ctx);
+            assert_eq!(restored.doc.display.environment_horizon, horizon);
+        }
+    }
+
+    #[test]
     fn sidebar_preferences_save_immediately_and_restore_without_a_model_edit() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
@@ -6120,6 +6151,7 @@ impl BenchUpApp {
             };
         }
         before.grain_direction = self.doc.display.grain_direction;
+        before.environment_horizon = self.doc.display.environment_horizon;
         if before != self.doc.display {
             self.changed(ui.ctx());
         }

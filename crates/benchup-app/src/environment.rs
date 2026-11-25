@@ -6,9 +6,17 @@ use benchup_core::{Camera, DisplaySettings, Projection};
 
 /// Adapt the default environment without changing saved or custom project colors.
 pub fn for_theme(display: &DisplaySettings, dark: bool) -> DisplaySettings {
+    const LEGACY_BACKGROUND: [u8; 3] = [240, 242, 234];
     let mut themed = display.clone();
+    let defaults = DisplaySettings::default();
+    // Older projects and preferences serialized the previous default color.
+    let legacy_default = display.background == LEGACY_BACKGROUND;
+    if display.background == defaults.background || (!display.environment_horizon && legacy_default) {
+        themed.background = if dark { [32; 3] } else { defaults.background };
+    } else if dark && legacy_default {
+        themed.background = [28, 34, 30];
+    }
     if dark {
-        let defaults = DisplaySettings::default();
         for (color, light, dark) in [
             (&mut themed.sky_color, defaults.sky_color, [34, 46, 61]),
             (
@@ -21,7 +29,6 @@ pub fn for_theme(display: &DisplaySettings, dark: bool) -> DisplaySettings {
                 defaults.horizon_color,
                 [62, 72, 76],
             ),
-            (&mut themed.background, defaults.background, [28, 34, 30]),
         ] {
             if *color == light {
                 *color = dark;
@@ -41,6 +48,11 @@ pub fn paint(
     dark: bool,
     sun_visible: bool,
 ) {
+    if !display.environment_horizon {
+        let [r, g, b] = display.background;
+        painter.rect_filled(rect, 0., Color32::from_rgb(r, g, b));
+        return;
+    }
     painter.add(backdrop(rect, camera, display, dark));
     // Editing emphasis can suppress face shadows without hiding the user's sun.
     if sun_visible
@@ -171,10 +183,20 @@ fn backdrop(rect: Rect, camera: &Camera, display: &DisplaySettings, dark: bool) 
     mesh
 }
 
-pub fn controls(ui: &mut egui::Ui, display: &mut DisplaySettings) -> bool {
-    let before = display.clone();
+pub fn controls(ui: &mut egui::Ui, display: &mut DisplaySettings) {
+    ui.horizontal_wrapped(|ui| {
+        ui.radio_value(
+            &mut display.environment_horizon,
+            false,
+            tr!("environment.plain"),
+        );
+        ui.radio_value(
+            &mut display.environment_horizon,
+            true,
+            tr!("environment.sky_and_ground"),
+        );
+    });
     let mut themed = for_theme(display, ui.visuals().dark_mode);
-    ui.text_label(tr!("environment.environment"));
     ui.separator();
     let mut table =
         InspectorTable::new(ui.available_width(), [Column::flex(1.), Column::flex(1.)]).centered();
@@ -182,6 +204,9 @@ pub fn controls(ui: &mut egui::Ui, display: &mut DisplaySettings) -> bool {
         .into_iter()
         .enumerate()
     {
+        if row < 3 && !display.environment_horizon {
+            continue;
+        }
         table.row(ui, ("environment_colors", row), |column, ui| {
             if column == 0 {
                 match row {
@@ -246,7 +271,6 @@ pub fn controls(ui: &mut egui::Ui, display: &mut DisplaySettings) -> bool {
         display.horizon_color = defaults.horizon_color;
         display.background = defaults.background;
     }
-    *display != before
 }
 
 pub fn background_control(ui: &mut egui::Ui, display: &mut DisplaySettings) -> egui::Response {
@@ -366,6 +390,7 @@ mod tests {
         };
         for (sky, ground) in [(false, true), (true, false), (false, false)] {
             let display = DisplaySettings {
+                environment_horizon: true,
                 sky,
                 ground,
                 ..Default::default()
@@ -385,6 +410,8 @@ mod tests {
     #[test]
     fn environment_settings_round_trip_and_older_projects_get_defaults() {
         let mut doc = Document::default();
+        assert!(!doc.display.environment_horizon);
+        doc.display.environment_horizon = true;
         doc.display.ground_color = [100, 120, 80];
         doc.display.horizon_color = [240, 230, 210];
         doc.display.sky = false;
@@ -392,6 +419,7 @@ mod tests {
         assert_eq!(Document::from_json(&json).unwrap().display, doc.display);
         let mut old = serde_json::to_value(&doc).unwrap();
         for field in [
+            "environment_horizon",
             "ground",
             "sky",
             "ground_color",
@@ -401,11 +429,59 @@ mod tests {
             old["display"].as_object_mut().unwrap().remove(field);
         }
         let restored = Document::from_json(&old.to_string()).unwrap();
+        assert!(!restored.display.environment_horizon);
         assert!(restored.display.sky && restored.display.ground);
         assert_eq!(
             restored.display.ground_color,
             DisplaySettings::default().ground_color
         );
+    }
+
+    #[test]
+    fn plain_background_uses_neutral_defaults_and_preserves_custom_colors() {
+        let mut display = DisplaySettings::default();
+        for background in [display.background, [240, 242, 234]] {
+            display.background = background;
+            assert_eq!(for_theme(&display, false).background, [244; 3]);
+            assert_eq!(for_theme(&display, true).background, [32; 3]);
+        }
+        display.background = [97, 111, 105];
+        for dark in [false, true] {
+            assert_eq!(for_theme(&display, dark).background, display.background);
+        }
+    }
+
+    #[test]
+    fn plain_mode_paints_only_the_background_even_with_shadows_enabled() {
+        let ctx = egui::Context::default();
+        let rect = Rect::from_min_size(egui::pos2(20., 50.), egui::vec2(800., 600.));
+        let camera = Camera {
+            yaw: std::f64::consts::PI,
+            pitch: 0.,
+            ..Default::default()
+        };
+        let display = DisplaySettings {
+            shadows: true,
+            sun_angle: 0.,
+            sun_elevation: 5.,
+            ..Default::default()
+        };
+        let output = ctx.run_test_ui(
+            egui::RawInput {
+                screen_rect: Some(rect.expand(20.)),
+                ..Default::default()
+            },
+            |ui| {
+                let painter = ui.painter().with_clip_rect(rect);
+                paint(&painter, rect, &camera, &display, false, true);
+            },
+        );
+        let mut backdrop = output.shapes.iter().filter(|shape| shape.clip_rect == rect);
+        assert!(matches!(
+            backdrop.next().map(|shape| &shape.shape),
+            Some(egui::Shape::Rect(fill)) if fill.rect == rect && fill.fill == Color32::from_gray(244)
+        ));
+        assert!(backdrop.next().is_none());
     }
 }
 
@@ -419,7 +495,10 @@ pub(crate) fn paint_sun_hint(painter: &egui::Painter, rect: Rect, camera: &Camer
 }
 
 fn sun_hint_position(rect: Rect, camera: &Camera, display: &DisplaySettings) -> Option<(egui::Pos2, egui::Vec2)> {
-    if !display.shadows || sun_center(rect, camera, display).is_some_and(|center| rect.contains(center)) {
+    if !display.environment_horizon
+        || !display.shadows
+        || sun_center(rect, camera, display).is_some_and(|center| rect.contains(center))
+    {
         return None;
     }
     let angle = display.sun_angle.to_radians();
@@ -440,6 +519,8 @@ mod sun_hint_tests {
     fn sun_stays_discoverable_during_normal_orbits_and_hides_when_disabled() {
         let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900., 600.));
         let mut display = DisplaySettings { shadows: true, ..Default::default() };
+        assert!(sun_hint_position(rect, &Camera::default(), &display).is_none());
+        display.environment_horizon = true;
         for yaw in [-3., -1.5, 0., 1.5, 3.] {
             let camera = Camera { yaw, ..Default::default() };
             let (center, direction) = sun_hint_position(rect, &camera, &display).unwrap();
