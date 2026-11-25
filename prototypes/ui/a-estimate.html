@@ -129,23 +129,23 @@
   <header>
     <div class="brand">
       <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
-      <div class="project"><b>Hall bench</b><span id="subtitle">Estimate · quote Q-2026-014</span></div>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
       <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
       <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
     </div>
     <nav class="stages">
       <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
       <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
-      <a class="stage done" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage done" href="a-shaping.html"><span class="n">3</span>Shaping</a>
       <a class="stage done" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
-      <a class="stage done" href="a-planning.html"><span class="n">5</span>Planning</a>
-      <a class="stage active" href="a-estimate.html"><span class="n">6</span>Estimate</a>
+      <a class="stage active" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+      <a class="stage" href="a-planning.html"><span class="n">6</span>Planning</a>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
-      <a class="btn" href="a-shop-drawings.html"><i data-icon="print" data-size="16"></i>Shop drawings</a>
-      <button class="btn" data-toast="pdf"><i data-icon="download" data-size="16"></i>Export PDF</button>
-      <button class="btn primary" data-toast="send"><i data-icon="share" data-size="16"></i>Send quote</button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
     </div>
   </header>
 
@@ -192,6 +192,10 @@
         <div class="field"><label for="valid">Valid for</label><div class="unit-in"><input id="valid" type="number" min="1" step="1" value="30" /><span>days</span></div></div>
       </div>
       <div class="card" id="summary"></div>
+      <div class="actions sticky" style="flex-wrap:wrap">
+        <button class="btn" data-toast="pdf"><i data-icon="download" data-size="16"></i>Export PDF</button>
+        <button class="btn primary" data-toast="send" style="flex-basis:100%"><i data-icon="share" data-size="16"></i>Send quote Q-2026-014</button>
+      </div>
     </aside>
   </div>
 </div>

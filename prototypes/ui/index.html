@@ -37,7 +37,7 @@
         <h2>A · Workshop flow</h2>
         <p>The app is organised around the woodworker's process rather than a generic toolbox. Each stage brings its own tools and panels.</p>
         <ul>
-          <li>Stages Design → Joinery → Materials → Cut list → Planning → Estimate replace the tool rail as primary navigation.</li>
+          <li>Stages Design → Joinery → Shaping → Cut list → Estimate → Planning replace the tool rail as primary navigation.</li>
           <li>A parts list with real dimensions replaces the outliner.</li>
           <li>A part card edits length, width, thickness, grain and joints.</li>
         </ul>
@@ -74,14 +74,33 @@
     <a href="screens/b-canvas-palette.jpeg">B · Command palette</a>
   </div>
 
+  <h3>The header and its stage bar</h3>
+  <p class="lead" style="margin-bottom:20px">The header is now the same on every project screen: the project and its save status with undo and redo, the stage bar, and search, theme and Share. Actions that belong to one screen, such as Export PDF, Send quote or Print plan, sit at the bottom of that screen's sidebar instead of changing the header. Six numbered stages were too many, and Cut list, Estimate and Planning are calculated from the model rather than edited in 3D, so both variants keep Design, Joinery and Shaping as numbered stages and treat the rest as a group. Model stages and outputs is the default; each link switches every prototype A screen to that variant, and the choice is remembered.</p>
+  <div class="grid">
+    <a class="card" href="a-workshop-flow.html?nav=dropdown#cutlist">
+      <img src="screens/a-nav-dropdown.jpeg" alt="Stage bar with a Preparation menu" />
+      <div class="body">
+        <h2>Preparation menu</h2>
+        <p>A fourth numbered stage, Preparation, opens a menu with Cut list, Estimate, Planning and Shop drawings, each with a short description. While one of them is open, the stage shows its name, as in "Preparation · Cut list".</p>
+      </div>
+    </a>
+    <a class="card" href="a-workshop-flow.html?nav=split#cutlist">
+      <img src="screens/a-nav-split.jpeg" alt="Stage bar with a separate group of outputs" />
+      <div class="body">
+        <h2>Model stages and outputs (default)</h2>
+        <p>The three model stages keep their numbers, and the outputs sit apart in their own lighter group of unnumbered tabs: Cut list, Estimate, Plan and Drawings. Nothing is hidden behind a menu. Woodworkers who never price their work can hide Estimate in My workshop → How you work, outside the navigation.</p>
+      </div>
+    </a>
+  </div>
+
   <h3>Prototype A, stage by stage</h3>
   <p class="lead" style="margin-bottom:20px">Direction A expanded into full screens. The stage switcher in each header links them together, and the Shop drawings button opens the drawing set.</p>
   <div class="grid">
     <a class="card" href="a-materials.html">
-      <img src="screens/a-materials.jpeg" alt="Materials stage" />
+      <img src="screens/a-materials.jpeg" alt="Design stage, Materials mode" />
       <div class="body">
-        <h2>Materials</h2>
-        <p>Parts grouped by material, a material brush that is applied by clicking parts, grain shown on the faces, a species catalogue, finish settings and a live estimate of board feet and cost.</p>
+        <h2>Design · Materials</h2>
+        <p>Materials are part of Design, because joinery depends on stock thickness and species. The part card sets material, grain and finish for one part; the Materials mode paints them onto many parts at once, with parts grouped by material, grain shown on the faces, a species catalogue and a live estimate of board feet and cost.</p>
       </div>
     </a>
     <a class="card" href="a-joinery.html">
@@ -89,6 +108,13 @@
       <div class="body">
         <h2>Joinery</h2>
         <p>The project's joints with their status, a close-up of the selected joint that can be seen inside or exploded, joint parameters with live checks and one-click fixes, and the option to apply them to every identical joint.</p>
+      </div>
+    </a>
+    <a class="card" href="a-shaping.html">
+      <img src="screens/a-shaping.jpeg" alt="Shaping stage" />
+      <div class="body">
+        <h2>Shaping</h2>
+        <p>Everything cut into a single part that doesn't join it to another: edge profiles, curves and cutouts, holes and carving. Each feature shows where it sits on the bench and in section, offers methods that match the tools in My workshop, and checks how it interacts with the joinery and other profiles. The stage is optional, and edges left sharp can be broken in one switch.</p>
       </div>
     </a>
     <a class="card" href="a-shop-drawings.html">
@@ -101,7 +127,7 @@
   </div>
 
   <h3>Before and after the model</h3>
-  <p class="lead" style="margin-bottom:20px">How a project starts, and how it ends as a price for the client. Estimate is proposed as the sixth stage, after Planning.</p>
+  <p class="lead" style="margin-bottom:20px">How a project starts, and how it becomes a price for the client. Estimate is the fifth stage, after the cut list and before Planning.</p>
   <div class="grid">
     <a class="card" href="a-start.html">
       <img src="screens/a-start.jpeg" alt="Start screen" />
@@ -127,7 +153,7 @@
   </div>
 
   <h3>Planning the build</h3>
-  <p class="lead" style="margin-bottom:20px">A proposed Planning stage between Cut list and Estimate: a step-by-step build guide whose methods depend on the tools you own. The workshop is a user preference shared by every project; the plan, its chosen methods and finished steps belong to the project.</p>
+  <p class="lead" style="margin-bottom:20px">Planning is the last stage, after Estimate: a step-by-step build guide whose methods depend on the tools you own. The workshop is a user preference shared by every project; the plan, its chosen methods and finished steps belong to the project.</p>
   <div class="grid">
     <a class="card" href="a-workshop-setup.html">
       <img src="screens/a-workshop-setup.jpeg" alt="Workshop setup" />

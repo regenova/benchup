@@ -61,6 +61,10 @@
   aside.right .note { color: var(--muted); font-size: 12px; line-height: 1.45; }
   .cut-toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13px; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 20; max-width: 560px; }
   .cut-toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .seg .mode-link { height: 28px; padding: 0 10px; border-radius: 6px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 12px; text-decoration: none; }
+  .seg .mode-link:hover { color: var(--ink); }
+  .card-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; text-decoration: none; margin-top: 10px; }
+  .card-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -75,16 +79,16 @@
     <nav class="stages" id="stages">
       <button class="stage done" data-stage="design"><span class="n">1</span>Design</button>
       <button class="stage" data-stage="joinery"><span class="n">2</span>Joinery</button>
-      <button class="stage" data-stage="materials"><span class="n">3</span>Materials</button>
+      <button class="stage" data-stage="shaping"><span class="n">3</span>Shaping</button>
       <button class="stage" data-stage="cutlist"><span class="n">4</span>Cut list</button>
-      <button class="stage" data-stage="planning"><span class="n">5</span>Planning</button>
-      <button class="stage" data-stage="estimate"><span class="n">6</span>Estimate</button>
+      <button class="stage" data-stage="estimate"><span class="n">5</span>Estimate</button>
+      <button class="stage" data-stage="planning"><span class="n">6</span>Planning</button>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
-      <a class="btn primary" href="a-shop-drawings.html" style="text-decoration:none"><i data-icon="print" data-size="16"></i>Shop drawings</a>
     </div>
   </header>
 
@@ -107,6 +111,7 @@
     <main id="main">
       <svg class="vp" id="vp"></svg>
       <div class="overlay" style="left:16px;top:16px">
+        <div class="seg" title="Design mode"><button class="on">Shape</button><a class="mode-link" href="a-materials.html"><i data-icon="paint" data-size="15"></i>Materials</a></div>
         <div class="seg" id="views">
           <button class="on" data-v="persp"><i data-icon="cube" data-size="15"></i>3D</button>
           <button data-v="front">Front</button>
@@ -163,10 +168,6 @@
     joinery: {
       tools: [["select", "Select"], "|", ["tenon", "Mortise"], ["dowel", "Dowels"], ["dovetail", "Dovetail"], ["halflap", "Half-lap"], ["finger", "Finger"], ["groove", "Groove"], ["screw", "Screws"]],
       hint: "Pick two touching parts to join them · Connected parts are highlighted",
-    },
-    materials: {
-      tools: [["select", "Select"], "|", ["paint", "Assign"], ["grain", "Grain"], ["finish", "Finish"], ["stock", "Stock"]],
-      hint: "Pick a material on the right, then click parts · Hold <kbd>⇧</kbd> to fill every identical part",
     },
     cutlist: { tools: [], hint: "" },
   };
@@ -254,6 +255,8 @@
         <div class="field"><label>Grain</label>
           <div class="segs"><button class="on">Along length</button><button>Across</button></div></div>
         <div class="field"><label>Stock</label><div style="color:var(--muted)">${MATERIALS[p.material].stock}</div></div>
+        <div class="field"><label>Finish</label><div class="select"><span class="grow">${p.material === "plywood" ? "Water-based lacquer" : "Hardwax oil, matte"}</span>${icon("chevronDown", 14)}</div></div>
+        <a class="card-link" href="a-materials.html">${icon("paint", 14)}Paint materials onto several parts</a>
       </div>
       <div class="card">
         <h3>Joints<span>${joints.length}</span></h3>
@@ -266,18 +269,6 @@
   function renderRight() {
     const host = document.getElementById("right");
     const p = PARTS.find((q) => q.id === selected);
-    if (stage === "materials") {
-      host.innerHTML = `<div class="card"><h3>Materials in this project</h3>
-        ${Object.entries(MATERIALS).map(([k, m]) => `<div class="mat ${p && p.material === k ? "on" : ""}">
-          <span class="big" style="background-color:${COLORS[k]}"></span>
-          <div>${m.name}<small>${m.stock}</small></div><small>${PARTS.filter((q) => q.material === k).length} parts</small></div>`).join("")}
-        <button class="btn" style="margin-top:10px;width:100%;justify-content:center">${icon("plus", 15)}Add material</button></div>
-        <div class="card"><h3>Finish</h3>
-          <div class="field" style="margin-top:0"><label>Product</label><div class="select"><span class="grow">Hardwax oil, matte</span>${icon("chevronDown", 14)}</div></div>
-          <div class="field"><label>Coats</label><div class="segs"><button>1</button><button class="on">2</button><button>3</button></div></div>
-          <div class="field"><label>Sanding</label><div style="color:var(--muted)">120 → 180 → 240</div></div></div>`;
-      return;
-    }
     if (stage === "cutlist") {
       const S = BenchStock;
       const stock = S.loadStock();
@@ -295,13 +286,22 @@
         <div class="stat"><span>Offcuts to keep</span><b>${plan.leftovers}</b></div>
         <div class="stat"><span>Material cost</span><b>€ ${plan.buyCost + stockCost}</b></div>
         <p class="note" style="margin:6px 0 0">${stock.costing === "free" ? "Wood from your shop counts at no cost." : `Includes €${plan.stockValue} for wood you already have, at purchase price.`}</p></div>
-        <div class="actions" style="flex-wrap:wrap"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button>
+        <div class="actions sticky" style="flex-wrap:wrap"><button class="btn">${icon("download", 15)}Export PDF</button><button class="btn">${icon("print", 15)}Labels</button>
           <button class="btn primary" id="built" style="flex-basis:100%">${icon("check", 15)}Mark as built</button></div>`;
       host.querySelector("#built").onclick = () => openBuilt();
       return;
     }
     if (!p) {
-      host.innerHTML = `<div class="empty"><b>Nothing selected.</b><br>Click a part in the model or in the list to edit its size, material and joints.</div>`;
+      host.innerHTML = `<div class="empty" style="padding-bottom:12px"><b>Nothing selected.</b><br>Click a part in the model or in the list to edit its size, material and joints.</div>
+        <div class="card"><h3>Materials in this project</h3>
+        ${Object.entries(MATERIALS).map(([k, m]) => `<div class="mat">
+          <span class="big" style="background-color:${COLORS[k]}"></span>
+          <div>${m.name}<small>${m.stock}</small></div><small>${PARTS.filter((q) => q.material === k).length} parts</small></div>`).join("")}
+        <a class="btn" href="a-materials.html" style="margin-top:10px;width:100%;justify-content:center;text-decoration:none;color:inherit">${icon("paint", 15)}Assign materials</a></div>
+        <div class="card"><h3>Finish</h3>
+          <div class="field" style="margin-top:0"><label>Product</label><div class="select"><span class="grow">Hardwax oil, matte</span>${icon("chevronDown", 14)}</div></div>
+          <div class="field"><label>Coats</label><div class="segs"><button>1</button><button class="on">2</button><button>3</button></div></div>
+          <div class="field"><label>Sanding</label><div style="color:var(--muted)">120 → 180 → 240</div></div></div>`;
       return;
     }
     if (stage === "joinery") {
@@ -463,7 +463,7 @@
   function setStage(s) {
     stage = s;
     tool = "select";
-    const order = Object.keys(STAGES);
+    const order = ["design", "joinery", "shaping", "cutlist", "estimate", "planning"];
     document.querySelectorAll(".stage").forEach((b) => {
       const i = order.indexOf(b.dataset.stage);
       b.classList.toggle("active", b.dataset.stage === s);
@@ -476,8 +476,9 @@
     renderRight();
   }
 
-  // Joinery and Materials have their own full screens; Design and Cut list stay on this page.
-  const STAGE_PAGES = { joinery: "a-joinery.html", materials: "a-materials.html", planning: "a-planning.html", estimate: "a-estimate.html" };
+  // Joinery, Shaping, Estimate and Planning have their own screens; Design and Cut list stay on this page.
+  // Materials are part of Design: the Materials mode (a-materials.html) paints them onto several parts at once.
+  const STAGE_PAGES = { joinery: "a-joinery.html", shaping: "a-shaping.html", estimate: "a-estimate.html", planning: "a-planning.html" };
   document.querySelectorAll(".stage").forEach((b) => (b.onclick = () => {
     const page = STAGE_PAGES[b.dataset.stage];
     if (page) location.href = page;

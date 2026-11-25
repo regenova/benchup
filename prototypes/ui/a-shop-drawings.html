@@ -84,22 +84,23 @@
   <header>
     <div class="brand">
       <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
-      <div class="project"><b>Hall bench</b><span>Shop drawings · <span id="hdrCount">10 sheets</span></span></div>
-      <a class="back" href="a-workshop-flow.html"><i data-icon="chevronRight" data-size="16"></i>Back to model</a>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
+      <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
+      <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
     </div>
     <nav class="stages">
       <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
       <a class="stage" href="a-joinery.html"><span class="n">2</span>Joinery</a>
-      <a class="stage" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage" href="a-shaping.html"><span class="n">3</span>Shaping</a>
       <a class="stage" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
-      <a class="stage" href="a-planning.html"><span class="n">5</span>Planning</a>
-      <a class="stage" href="a-estimate.html"><span class="n">6</span>Estimate</a>
+      <a class="stage" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+      <a class="stage" href="a-planning.html"><span class="n">6</span>Planning</a>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
       <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
       <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
-      <button class="btn primary" id="export"><i data-icon="download" data-size="16"></i>Export PDF</button>
     </div>
   </header>
 
@@ -763,7 +764,7 @@
       host.appendChild(item);
     });
     document.getElementById("navCount").textContent = `${included().length}/${state.sheets.length}`;
-    document.getElementById("hdrCount").textContent = `${included().length} sheets`;
+    // The sheet count is shown above the sheet list; the header stays the same on every screen.
     const sel = host.querySelector(".sel");
     if (sel) sel.scrollIntoView({ block: "nearest" });
   }
@@ -807,7 +808,7 @@
         <div class="field"><label>Revision</label><input class="text-input" data-tb="revision" value="${state.revision}" /></div>
         <div class="set-summary">Every sheet carries the BenchUp header with the project name, report type and generation date.</div>
       </div>
-      <div class="actions"><button class="btn" id="printBtn">${icon("print", 15)}Print</button><button class="btn primary" id="export2">${icon("download", 15)}Export PDF</button></div>`;
+      <div class="actions sticky"><button class="btn" id="printBtn">${icon("print", 15)}Print</button><button class="btn primary" id="export2">${icon("download", 15)}Export PDF</button></div>`;
     host.innerHTML = sheetCard + setCard;
 
     host.querySelectorAll("[data-seg]").forEach((group) => {
@@ -858,7 +859,7 @@
     toast(`Exported ${included().length} sheets · ${state.paper} ${state.orientation} · “Hall bench – Shop drawings.pdf”`);
   }
 
-  document.getElementById("export").onclick = exportPdf;
+  // Export lives at the bottom of the settings panel, not in the header.
   document.getElementById("prev").onclick = () => select(state.current - 1);
   document.getElementById("next").onclick = () => select(state.current + 1);
   document.getElementById("zFit").onclick = () => setZoom("fit");

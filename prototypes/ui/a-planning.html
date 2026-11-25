@@ -190,22 +190,23 @@
   <header>
     <div class="brand">
       <a class="mark" href="a-start.html" title="All projects" style="text-decoration:none">B</a>
-      <div class="project"><b>Hall bench</b><span id="subtitle"></span></div>
+      <div class="project"><b>Hall bench</b><span>Saved · 12 parts · 3 materials</span></div>
       <button class="iconbtn" title="Undo"><i data-icon="undo"></i></button>
       <button class="iconbtn" title="Redo"><i data-icon="redo"></i></button>
     </div>
     <nav class="stages">
       <a class="stage done" href="a-workshop-flow.html"><span class="n">1</span>Design</a>
       <a class="stage done" href="a-joinery.html"><span class="n">2</span>Joinery</a>
-      <a class="stage done" href="a-materials.html"><span class="n">3</span>Materials</a>
+      <a class="stage done" href="a-shaping.html"><span class="n">3</span>Shaping</a>
       <a class="stage done" href="a-workshop-flow.html#cutlist"><span class="n">4</span>Cut list</a>
-      <a class="stage active" href="a-planning.html"><span class="n">5</span>Planning</a>
-      <a class="stage" href="a-estimate.html"><span class="n">6</span>Estimate</a>
+      <a class="stage done" href="a-estimate.html"><span class="n">5</span>Estimate</a>
+      <a class="stage active" href="a-planning.html"><span class="n">6</span>Planning</a>
     </nav>
+    <script src="shared/stages.js"></script>
     <div class="hdr-actions">
+      <button class="iconbtn" title="Search commands"><i data-icon="search"></i></button>
       <button class="iconbtn" data-theme-toggle title="Dark mode"></button>
-      <a class="btn" href="a-workshop.html?from=planning"><i data-icon="stock" data-size="16"></i>My workshop</a>
-      <button class="btn primary" data-toast="Printing the plan with labels, tools and steps"><i data-icon="print" data-size="16"></i>Print plan</button>
+      <button class="btn"><i data-icon="share" data-size="16"></i>Share</button>
     </div>
   </header>
 
@@ -327,7 +328,6 @@
     if (plan.mode === "mine") parts.push(built.blocked.length ? `<span class="warn"><b>${built.blocked.length}</b> step blocked</span>` : `<span>All steps possible</span>`);
     else parts.push(`Tools to get <b>${built.toBuy.length}</b> · about <b>€${built.cost.toLocaleString("en")}</b>`);
     $("facts").innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
-    $("subtitle").textContent = `Planning · ${built.rows.filter((r) => !r.skipped).length} steps · ${plan.mode === "mine" ? "with your workshop" : "with ideal tools"}`;
   }
 
   // ---------- Centre: one step ----------
@@ -487,7 +487,8 @@
       <div class="card"><h3>Your workshop</h3>
         <div class="wsum"><div class="stat"><span>Tools</span><b>${presetName()} · ${Object.keys(shop.owned).length}</b></div><div class="stat"><span>Prefer</span><b>${sty.name}</b></div><div class="stat"><span>Experience</span><b>${lvl.name}</b></div></div>
         <p class="note">Times are adjusted for your experience. The workshop is shared by every project.</p>
-        <a class="btn" href="a-workshop.html?from=planning" style="margin-top:12px;width:100%;justify-content:center">${icon("stock", 15)}Edit my workshop</a></div>`;
+        <a class="btn" href="a-workshop.html?from=planning" style="margin-top:12px;width:100%;justify-content:center">${icon("stock", 15)}Edit my workshop</a></div>
+      <div class="actions sticky"><button class="btn primary" data-toast="Printing the plan with labels, tools and steps">${icon("print", 15)}Print plan</button></div>`;
   }
 
   // ---------- Setup banner: shown until the guided workshop setup is finished ----------
