@@ -264,15 +264,14 @@ impl BenchUpApp {
         .gap(ui.spacing().icon_spacing)
         .right_text(egui::menu::SubMenuButton::arrow_atom(None));
         egui::menu::SubMenuButton::from_button(button)
-            .config(
-                egui::menu::MenuConfig::new()
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
-            )
+            .config(MenuPress::submenu_config(ui))
             .ui(ui, |ui| {
                 Self::menu_style(ui.style_mut());
                 ui.set_width(264.);
                 self.reference_volume_controls(ui);
-            });
+            })
+            .0
+            .menu_press_target();
     }
 
     pub(super) fn reference_volume_controls(&mut self, ui: &mut egui::Ui) {

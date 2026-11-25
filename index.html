@@ -57,20 +57,21 @@
       (() => {
         const workspace = document.getElementById("benchup-workspace");
         const canvas = document.getElementById("benchup-canvas");
-        // Cancel browser gestures only for contacts that begin in a model pane.
+        // Cancel browser gestures only for contacts that begin in the viewport.
         // Keep egui's event propagation and sidebar/text-input gestures intact.
         const modelTouches = new Set();
-        const inModelPane = (touch) => {
+        const inViewport = (touch) => {
+          const rect = JSON.parse(canvas.getAttribute("data-model-viewport") || "null");
+          if (!rect) return false;
           const bounds = canvas.getBoundingClientRect();
           const x = (touch.clientX - bounds.left) * canvas.clientWidth / bounds.width;
           const y = (touch.clientY - bounds.top) * canvas.clientHeight / bounds.height;
-          const rects = JSON.parse(canvas.getAttribute("data-model-viewports") || "[]");
-          return rects.some(([left, top, right, bottom]) =>
-            x >= left && x <= right && y >= top && y <= bottom);
+          const [left, top, right, bottom] = rect;
+          return x >= left && x <= right && y >= top && y <= bottom;
         };
         canvas.addEventListener("touchstart", (event) => {
           for (const touch of event.changedTouches) {
-            if (inModelPane(touch)) modelTouches.add(touch.identifier);
+            if (inViewport(touch)) modelTouches.add(touch.identifier);
           }
           if (modelTouches.size) event.preventDefault();
         }, { capture: true, passive: false });
@@ -197,7 +198,7 @@
         };
         canvas.addEventListener("pointerup", event => {
           if (event.button === 0 && isWalking()
-              && canvas.dataset.walkInputEnabled === "true" && inModelPane(event)) {
+              && canvas.dataset.walkInputEnabled === "true" && inViewport(event)) {
             void captureWalkPointer();
             void captureWalkKeyboard();
           }

@@ -395,7 +395,6 @@ impl BenchUpApp {
             || self.release_notes.open
             || self.object_creation.is_some()
             || self.object_rename.is_some()
-            || self.viewports.renaming.is_some()
             || self.text_editor.is_some()
             || self.tool == Tool::Walk
             || !self.general_settings.space_mouse.enabled;
@@ -413,6 +412,7 @@ impl BenchUpApp {
         if axes.idle() || viewport.min_element() < 1. {
             return;
         }
+        self.interrupt_view_transition(ctx);
         let now = ctx.input(|i| i.time);
         let dt = self
             .space_mouse

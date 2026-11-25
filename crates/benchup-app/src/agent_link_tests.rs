@@ -496,7 +496,7 @@ fn taking_control_makes_changes_wait_until_access_is_granted_or_released() {
     let mut setup = Setup::paired();
     setup.call("create_board", board("Side", 0.));
     let now = clock();
-    assert!(setup.app.agent_link.editing(now), "the status bar offers Take control");
+    assert!(setup.app.agent_link.editing(now), "the toolbar offers Take control");
 
     setup.app.agent_link.take_control();
     assert_eq!(setup.app.agent_link.control, Control::Designer);

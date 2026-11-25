@@ -222,7 +222,9 @@ impl BenchUpApp {
             Self::menu_item_button(ui, label, icon)
                 .right_text(egui::menu::SubMenuButton::arrow_atom(None)),
         )
-        .ui(ui, content);
+        .ui(ui, content)
+        .0
+        .menu_press_target();
     }
 
     pub(super) fn menu_checkbox(
@@ -245,13 +247,25 @@ impl BenchUpApp {
         );
         let mut response = row.inner;
         let padding_response = row.response.interact(egui::Sense::click());
-        if padding_response.clicked() && !response.clicked() {
+        let press = padding_response.menu_press_target();
+        let released = press == Some(MenuPress::Released);
+        if (padding_response.clicked() || released) && !response.clicked() {
             *checked = !*checked;
             response.mark_changed();
         }
+        if released && egui::menu::find_menu_root(ui)
+            .info.tags.get_downcast::<egui::menu::MenuConfig>(egui::menu::MenuConfig::MENU_CONFIG_TAG)
+            .is_some_and(|config| config.close_behavior == egui::PopupCloseBehavior::CloseOnClick)
+        {
+            ui.close();
+        }
         let response = response.union(padding_response);
-        if response.hovered() || response.has_focus() || response.is_pointer_button_down_on() {
-            let visuals = ui.style().interact(&response);
+        if press.is_some() || response.hovered() || response.has_focus() || response.is_pointer_button_down_on() {
+            let visuals = if press.is_some() {
+                &ui.visuals().widgets.hovered
+            } else {
+                ui.style().interact(&response)
+            };
             ui.painter().set(
                 background,
                 egui::Shape::rect_filled(
@@ -327,7 +341,7 @@ impl BenchUpApp {
                         .format_shortcut(&egui::KeyboardShortcut::new(modifiers, key)),
                 );
             }
-            if ui.add_enabled(enabled, button).clicked() {
+            if ui.add_enabled(enabled, button).menu_activated() {
                 action = Some(command);
                 ui.close();
             }

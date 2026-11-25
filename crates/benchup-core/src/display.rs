@@ -91,6 +91,8 @@ pub struct DisplaySettings {
     pub fog_start: f64,
     pub fog_end: f64,
     pub background: [u8; 3],
+    /// Use the sky and ground backdrop in the viewport.
+    pub environment_horizon: bool,
     pub sky: bool,
     pub ground: bool,
     pub sky_color: [u8; 3],
@@ -150,7 +152,8 @@ impl Default for DisplaySettings {
             fog: false,
             fog_start: 10.,
             fog_end: 50.,
-            background: [240, 242, 234],
+            background: [244; 3],
+            environment_horizon: false,
             sky: true,
             ground: true,
             sky_color: [153, 190, 215],

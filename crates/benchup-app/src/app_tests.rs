@@ -852,9 +852,9 @@ fn shape_tools_create_faces_and_undo_as_one_operation() {
 #[test]
 fn drawing_menu_switches_tools_and_remembers_the_choice() {
     let mut h = Harness::new();
-    let rail = egui::pos2(38., 169.);
     for tool in Tool::DRAWING {
-        h.click(rail);
+        let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+        h.click(text_position(&output, h.app.drawing_tool.label()));
         let output = h.frame(vec![], egui::Modifiers::NONE);
         for option in Tool::DRAWING {
             assert_menu_icon(&output, option.label());
@@ -873,7 +873,7 @@ fn rail_separator_positions(output: &egui::FullOutput) -> Vec<Pos2> {
     fn collect(shape: &egui::Shape, positions: &mut Vec<Pos2>) {
         match shape {
             egui::Shape::LineSegment { points, .. }
-                if points[0].y == points[1].y && points[0].x == 10. && points[1].x == 66. =>
+                if points[0].x == points[1].x && points[1].y - points[0].y == 42. =>
             {
                 positions.push(points[0] + (points[1] - points[0]) * 0.5);
             }
@@ -885,7 +885,7 @@ fn rail_separator_positions(output: &egui::FullOutput) -> Vec<Pos2> {
     }
     let mut positions = Vec::new();
     for shape in &output.shapes { collect(&shape.shape, &mut positions); }
-    positions.sort_by(|a, b| a.y.total_cmp(&b.y));
+    positions.sort_by(|a, b| a.x.total_cmp(&b.x));
     positions
 }
 
@@ -894,6 +894,7 @@ fn tool_rail_context_menu_adds_and_removes_separators_without_activating_tools()
     // Cover a plain tool and a group with a hover flyout.
     for tool in [Tool::Move, Tool::Line] {
         let mut h = Harness::new();
+        h.app.tool_rail_separators.clear();
         let output = h.frame(vec![], egui::Modifiers::NONE);
         let point = text_position(&output, tool.label());
         let menu = open_context_menu(&mut h, point);
@@ -904,8 +905,8 @@ fn tool_rail_context_menu_adds_and_removes_separators_without_activating_tools()
 
         let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
         let separator = rail_separator_positions(&output)[0];
-        // The whole separator row, including its side margin, offers removal.
-        let menu = open_context_menu(&mut h, egui::pos2(3., separator.y));
+        // The separator's column offers removal even above the visible line.
+        let menu = open_context_menu(&mut h, egui::pos2(separator.x, separator.y - 25.));
         h.click(menu_text_position(&menu, tr!("tools.remove_separator")));
         assert!(h.app.tool_rail_separators.is_empty());
         assert_eq!(h.app.tool, Tool::Select);
@@ -917,14 +918,13 @@ fn tool_rail_context_menu_adds_and_removes_separators_without_activating_tools()
 #[test]
 fn tool_rail_blank_space_context_menu_adds_outer_separators() {
     let mut h = Harness::new();
-    h.size.y = 2200.;
-    let output = h.frame(vec![], egui::Modifiers::NONE);
-    let first_tool = text_position(&output, Tool::Select.label());
-    // The top frame margin and the blank space below all tools are interactive.
-    for (point, slot) in [
-        (egui::pos2(3., first_tool.y - 45.), 0),
-        (egui::pos2(38., 2100.), Tool::RAIL.len()),
-    ] {
+    h.app.tool_rail_separators.clear();
+    // The frame margins before the first and after the last tool are interactive.
+    for (first, slot) in [(true, 0), (false, Tool::RAIL.len())] {
+        h.frame(vec![], egui::Modifiers::NONE);
+        let rail = h.app.tool_rail_rect(h.app.viewport).unwrap();
+        let point = if first { rail.left_center() + Vec2::X * 3. }
+            else { rail.right_center() - Vec2::X * 3. };
         let menu = open_context_menu(&mut h, point);
         h.click(menu_text_position(&menu, tr!("tools.add_separator")));
         assert!(h.app.tool_rail_separators.contains(&slot));
@@ -934,24 +934,23 @@ fn tool_rail_blank_space_context_menu_adds_outer_separators() {
 }
 
 #[test]
-fn separators_drag_up_down_and_to_the_end_without_activating_tools() {
+fn separators_drag_left_right_and_to_the_end_without_activating_tools() {
     for (source, target_tool, before) in [
         (0, Tool::Move, false),
         (3, Tool::Select, true),
         (0, Tool::FollowMe, false),
     ] {
         let mut h = Harness::new();
-        h.size.y = 2200.;
         h.app.tool_rail_separators = vec![source];
         let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
         let start = rail_separator_positions(&output)[0];
         let label = if target_tool == Tool::FollowMe { tr!("follow_me.advanced_tools") } else { target_tool.label() };
-        let end = text_position(&output, label) - egui::vec2(0., if before { 20. } else { 0. });
+        let end = text_position(&output, label) + egui::vec2(if before { -20. } else { 20. }, 0.);
         let insertion = h.app.tool_rail_order.iter().position(|&tool| tool == target_tool).unwrap()
             + usize::from(!before);
         let order = h.app.tool_rail_order.clone();
         h.pointer(start, egui::PointerButton::Primary, true, false);
-        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 0.))], egui::Modifiers::NONE);
         h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
         assert!(egui::DragAndDrop::has_payload_of_type::<RailSeparatorDrag>(&h.ctx));
         assert_eq!(h.app.tool_rail_separators, vec![source], "preview must not change saved positions");
@@ -971,9 +970,9 @@ fn separator_drag_cancellation_and_occupied_boundaries_preserve_the_layout() {
         h.app.tool_rail_separators = vec![0, 1];
         let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
         let start = rail_separator_positions(&output)[0];
-        let end = if cancel { egui::pos2(500., 400.) } else { text_position(&output, Tool::Select.label()) };
+        let end = if cancel { egui::pos2(500., 400.) } else { text_position(&output, Tool::Select.label()) + Vec2::X * 20. };
         h.pointer(start, egui::PointerButton::Primary, true, false);
-        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 12.))], egui::Modifiers::NONE);
+        h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(12., 0.))], egui::Modifiers::NONE);
         h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
         h.pointer(end, egui::PointerButton::Primary, false, false);
         assert_eq!(h.app.tool_rail_separators, vec![0, 1]);
@@ -988,9 +987,9 @@ fn dragging_rail_tools_preserves_separator_boundaries() {
     h.app.tool_rail_separators = vec![1, 3];
     let output = h.frame(vec![], egui::Modifiers::NONE);
     let start = text_position(&output, Tool::Move.label()) - egui::vec2(0., 12.);
-    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    let end = text_position(&output, Tool::Select.label()) - Vec2::X * 20.;
     h.pointer(start, egui::PointerButton::Primary, true, false);
-    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start - Vec2::X * 12.)], egui::Modifiers::NONE);
     h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
     h.pointer(end, egui::PointerButton::Primary, false, false);
     assert_eq!(h.app.tool_rail_order[0], Tool::Move);
@@ -1004,9 +1003,9 @@ fn dragging_a_rail_tool_reorders_without_activating_it() {
     let mut h = Harness::new();
     let output = h.frame(vec![], egui::Modifiers::NONE);
     let start = text_position(&output, "Move") - egui::vec2(0., 12.);
-    let end = text_position(&output, "Select") - egui::vec2(0., 20.);
+    let end = text_position(&output, "Select") - Vec2::X * 20.;
     h.pointer(start, egui::PointerButton::Primary, true, false);
-    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start - Vec2::X * 12.)], egui::Modifiers::NONE);
     h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
     h.pointer(end, egui::PointerButton::Primary, false, false);
     assert_eq!(h.app.tool_rail_order[0], Tool::Move);
@@ -1101,9 +1100,9 @@ fn dragging_a_tool_group_reorders_without_reactivating_its_tool() {
     h.app.set_tool(Tool::Select);
     let output = h.frame(vec![], egui::Modifiers::NONE);
     let start = text_position(&output, Tool::Circle.label()) - egui::vec2(0., 12.);
-    let end = text_position(&output, Tool::Select.label()) - egui::vec2(0., 20.);
+    let end = text_position(&output, Tool::Select.label()) - Vec2::X * 20.;
     h.pointer(start, egui::PointerButton::Primary, true, false);
-    h.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., -12.))], egui::Modifiers::NONE);
+    h.frame(vec![egui::Event::PointerMoved(start - Vec2::X * 12.)], egui::Modifiers::NONE);
     h.frame(vec![egui::Event::PointerMoved(end)], egui::Modifiers::NONE);
     h.pointer(end, egui::PointerButton::Primary, false, false);
     assert_eq!(h.app.tool_rail_order[0], Tool::Line);
@@ -1134,8 +1133,10 @@ fn toolbar_order_and_measurement_flyout_defaults_and_remembers_the_choice() {
         .iter()
         .map(|label| text_position(&output, label))
         .collect();
-    assert!(positions.iter().all(|pos| pos.x < 76.));
-    assert!(positions.windows(2).all(|pair| pair[0].y < pair[1].y));
+    let rail = h.app.tool_rail_rect(h.app.viewport).unwrap();
+    assert!(positions.iter().all(|&pos| rail.contains(pos)));
+    assert!(positions.windows(2).all(|pair| pair[0].x < pair[1].x));
+    assert_eq!(rail_separator_positions(&output).len(), 2);
     assert_eq!(h.app.measurement_tool, Tool::Dimensions);
     assert_eq!(h.app.solid_tool, Tool::Union);
     let rail = text_position(&output, "Dimensions");
@@ -1159,6 +1160,44 @@ fn toolbar_order_and_measurement_flyout_defaults_and_remembers_the_choice() {
     h.key(Key::A);
     assert_eq!(h.app.measurement_tool, Tool::Protractor);
     assert!(h.app.doc.model.edges.is_empty());
+}
+
+#[test]
+fn floating_toolbar_fits_the_viewport_and_scrolls_without_zooming_the_model() {
+    let mut h = Harness::new();
+    h.app.inspector = false;
+    h.size.x = 600.;
+    h.frame(vec![], egui::Modifiers::NONE);
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let rail = h.app.tool_rail_rect(h.app.viewport).unwrap();
+    let hint = text_position(&output, Tool::Select.instructions());
+    assert!((hint.x - rail.center().x).abs() < 1.);
+    assert!(hint.y < rail.top());
+    assert!(h.app.viewport.contains_rect(rail));
+    assert!(h.app.compass_center().unwrap().y + COMPASS_RADIUS < rail.top());
+
+    let camera = h.app.doc.camera.clone();
+    h.frame(
+        vec![
+            egui::Event::PointerMoved(rail.center()),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                phase: egui::TouchPhase::Move,
+                source: egui::MouseWheelSource::Unknown,
+                delta: egui::vec2(0., -10000.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+        egui::Modifiers::NONE,
+    );
+    assert_eq!(h.app.doc.camera, camera);
+    assert_eq!(h.app.tool, Tool::Select);
+    let output = h.frame(vec![egui::Event::PointerGone], egui::Modifiers::NONE);
+    let button = text_position(&output, Tool::WoodGlue.label());
+    assert!(rail.contains(button));
+    h.click(button);
+    assert_eq!(h.app.tool, Tool::WoodGlue);
+    assert!(h.app.doc.history.is_empty());
 }
 
 #[test]
@@ -3305,7 +3344,7 @@ fn text_position(output: &egui::FullOutput, label: &str) -> Pos2 {
     fn locate(shape: &egui::Shape, label: &str) -> Option<Pos2> {
         match shape {
             egui::Shape::Text(text) if text.galley.job.text == label => {
-                Some(text.pos + text.galley.size() * 0.5)
+                Some(text.pos + text.galley.rect.center().to_vec2())
             }
             egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| locate(shape, label)),
             _ => None,
@@ -3322,7 +3361,7 @@ fn menu_text_position(output: &egui::FullOutput, label: &str) -> Pos2 {
     fn locate(shape: &egui::Shape, label: &str) -> Option<Pos2> {
         match shape {
             egui::Shape::Text(text) if text.galley.job.text == label => {
-                Some(text.pos + text.galley.size() * 0.5)
+                Some(text.pos + text.galley.rect.center().to_vec2())
             }
             egui::Shape::Vec(shapes) => shapes.iter().rev().find_map(|shape| locate(shape, label)),
             _ => None,
@@ -3341,11 +3380,11 @@ fn assert_menu_icon(output: &egui::FullOutput, label: &str) {
     let text = output
         .shapes
         .iter()
+        .rev()
         .find_map(|shape| match &shape.shape {
             egui::Shape::Text(text)
                 if text.galley.job.text == label
-                    && (text.pos.y - center.y).abs() < 16.
-                    && text.pos.x > 76. =>
+                    && (text.pos.y - center.y).abs() < 16. =>
             {
                 Some(text)
             }
@@ -3374,6 +3413,81 @@ fn open_context_menu(h: &mut Harness, point: Pos2) -> egui::FullOutput {
 }
 
 #[test]
+fn clicking_the_open_app_bar_menu_keeps_it_open() {
+    let mut h = Harness::new();
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    let file = text_position(&output, tr!("app.file"));
+
+    h.click(file);
+    h.frame(vec![], egui::Modifiers::NONE);
+    h.click(file);
+    let menu = h.frame(vec![], egui::Modifiers::NONE);
+    let import = menu_text_position(&menu, tr!("app.import"));
+
+    h.frame(vec![egui::Event::PointerMoved(import)], egui::Modifiers::NONE);
+    let submenu = h.frame(vec![], egui::Modifiers::NONE);
+    menu_text_position(&submenu, tr!("app.sketchup_skp"));
+
+    h.click(file);
+    let submenu = h.frame(vec![], egui::Modifiers::NONE);
+    menu_text_position(&submenu, tr!("app.sketchup_skp"));
+
+    h.click(h.app.viewport.center());
+    assert!(!egui::Popup::is_any_open(&h.ctx));
+}
+
+#[test]
+fn dragging_from_an_app_bar_title_opens_the_menu_and_activates_on_release() {
+    for switch_menu in [false, true] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let help = text_position(&output, tr!("app.help"));
+        let title = if switch_menu {
+            text_position(&output, tr!("app.file"))
+        } else {
+            help
+        };
+
+        h.pointer(title, egui::PointerButton::Primary, true, false);
+        assert!(egui::Popup::is_any_open(&h.ctx));
+        if switch_menu {
+            h.frame(vec![egui::Event::PointerMoved(help)], egui::Modifiers::NONE);
+        }
+        let menu = h.frame(vec![], egui::Modifiers::NONE);
+        let shortcuts = menu_text_position(&menu, tr!("app.keyboard_shortcuts"));
+        h.frame(vec![egui::Event::PointerMoved(shortcuts)], egui::Modifiers::NONE);
+        assert!(!h.app.help);
+        h.pointer(shortcuts, egui::PointerButton::Primary, false, false);
+        assert!(h.app.help);
+        assert!(!egui::Popup::is_any_open(&h.ctx));
+    }
+}
+
+#[test]
+fn app_bar_press_can_select_in_a_submenu_or_release_outside() {
+    for select_item in [false, true] {
+        let mut h = Harness::new();
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        let view = text_position(&output, tr!("app.view"));
+        let initial_cuts = h.app.doc.display.section_cuts;
+
+        h.pointer(view, egui::PointerButton::Primary, true, false);
+        let menu = h.frame(vec![], egui::Modifiers::NONE);
+        let sections = menu_text_position(&menu, tr!("view_controls.sections"));
+        h.frame(vec![egui::Event::PointerMoved(sections)], egui::Modifiers::NONE);
+        let submenu = h.frame(vec![], egui::Modifiers::NONE);
+        let cuts = menu_text_position(&submenu, tr!("view_controls.section_cuts"));
+        let target = if select_item { cuts } else { h.app.viewport.center() };
+
+        h.frame(vec![egui::Event::PointerMoved(target)], egui::Modifiers::NONE);
+        assert_eq!(h.app.doc.display.section_cuts, initial_cuts);
+        h.pointer(target, egui::PointerButton::Primary, false, false);
+        assert_eq!(h.app.doc.display.section_cuts, initial_cuts ^ select_item);
+        assert_eq!(egui::Popup::is_any_open(&h.ctx), select_item);
+    }
+}
+
+#[test]
 fn menus_block_background_hover_and_restore_it_after_closing() {
     for context_menu in [true, false] {
         let mut h = Harness::new();
@@ -3381,7 +3495,8 @@ fn menus_block_background_hover_and_restore_it_after_closing() {
             let point = h.app.viewport.center();
             open_context_menu(&mut h, point)
         } else {
-            h.click(egui::pos2(38., 169.));
+            let output = h.frame(vec![], egui::Modifiers::NONE);
+            h.click(text_position(&output, Tool::Line.label()));
             h.frame(vec![], egui::Modifiers::NONE)
         };
         let target = if context_menu {
@@ -6207,16 +6322,14 @@ fn library_placement_creates_linked_instance_supports_cancel_and_undo() {
 }
 
 #[test]
-fn view_sidebar_buttons_set_projection_and_all_standard_views_without_resizing() {
+fn view_sidebar_buttons_set_projection_without_resizing() {
     let mut h = Harness::new();
     h.ctx.style_mut_of(h.ctx.theme(), |s| s.animation_time = 0.);
     h.size.y = 4000.;
     h.frame(vec![], egui::Modifiers::NONE);
     let width = h.app.viewport.right();
-    for title in ["Camera", "Standard views"] {
-        let output = h.frame(vec![], egui::Modifiers::NONE);
-        h.click(text_position(&output, title));
-    }
+    let output = h.frame(vec![], egui::Modifiers::NONE);
+    h.click(text_position(&output, "Camera"));
     for (label, projection) in [
         ("Parallel", benchup_core::Projection::Parallel),
         ("Perspective", benchup_core::Projection::Perspective),
@@ -6225,16 +6338,7 @@ fn view_sidebar_buttons_set_projection_and_all_standard_views_without_resizing()
         h.click(text_position(&output, label));
         assert_eq!(h.app.doc.camera.projection, projection);
     }
-    let target = h.app.doc.camera.target;
-    let distance = h.app.doc.camera.distance;
-    for view in benchup_core::StandardView::ALL {
-        let output = h.frame(vec![], egui::Modifiers::NONE);
-        h.click(text_position(&output, view.label()));
-        assert_eq!(h.app.doc.camera.standard_view(), Some(view));
-        assert_eq!(h.app.doc.camera.target, target);
-        assert_eq!(h.app.doc.camera.distance, distance);
-        assert!((h.app.viewport.right() - width).abs() < 0.1);
-    }
+    assert!((h.app.viewport.right() - width).abs() < 0.1);
     assert!(h.app.project.modified);
 }
 
@@ -7230,7 +7334,7 @@ fn wood_glue_pointer_clicks_and_automatic_selection_record_one_edit_each() {
     h.app.doc.camera = Camera::default();
     let output = h.frame(vec![], egui::Modifiers::NONE);
     let button = text_position(&output, Tool::WoodGlue.label());
-    assert!(button.x < 76.);
+    assert!(h.app.tool_rail_rect(h.app.viewport).unwrap().contains(button));
     h.click(button);
     assert_eq!(h.app.tool, Tool::WoodGlue);
     assert!(!egui::Popup::is_any_open(&h.ctx));
@@ -7320,7 +7424,7 @@ fn router_rail_tool_routes_clicked_edges_and_reopens_existing_cuts() {
         };
         let output = h.frame(vec![], egui::Modifiers::NONE);
         let button = text_position(&output, Tool::Router.label());
-        assert!(button.x < 76.);
+        assert!(h.app.tool_rail_rect(h.app.viewport).unwrap().contains(button));
         h.click(button);
         assert!(!egui::Popup::is_any_open(&h.ctx));
         assert_eq!(h.app.tool, Tool::Router);

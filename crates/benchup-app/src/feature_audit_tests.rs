@@ -56,6 +56,7 @@ pub(super) fn render_cases() -> Vec<RenderCase> {
                 "section_fill" => "section_fill",
                 "shadows" => "shadows",
                 "fog" => "fog",
+                "environment_horizon" => "environment_horizon",
                 "sky" => "sky",
                 "ground" => "ground",
                 key => panic!("Uncovered display option: {key}"),
@@ -237,12 +238,9 @@ pub(super) fn render_workspace(name: &str) -> BenchUpApp {
             app.doc.display.fog = true;
             app.doc.display.fog_start = 0.;
         }
-        "background" => {
-            app.doc.display.sky = false;
-            app.doc.display.ground = false;
-        }
-        "sky" | "ground" | "sky_color" | "ground_color" | "horizon_color" => {
-            app.doc.camera.pitch = 0.15
+        "environment_horizon" | "sky" | "ground" | "sky_color" | "ground_color" | "horizon_color" => {
+            app.doc.display.environment_horizon = true;
+            app.doc.camera.pitch = 0.15;
         }
         _ => {}
     }
@@ -306,6 +304,9 @@ fn options_workspace() -> Harness {
 
 fn check_option(key: &str, label: &str) {
     let mut h = options_workspace();
+    if matches!(key, "sky" | "ground") {
+        h.app.doc.display.environment_horizon = true;
+    }
     let model = h.app.doc.model.clone();
     let before = serde_json::to_value(&h.app.doc.display).unwrap()[key]
         .as_bool()
@@ -419,6 +420,20 @@ option!(option_shadows, "shadows", "Display shadows");
 option!(option_fog, "fog", "Display fog");
 option!(option_sky, "sky", "Sky");
 option!(option_ground, "ground", "Ground");
+
+#[test]
+fn environment_mode_changes_without_modifying_the_project() {
+    let mut h = options_workspace();
+    assert!(!h.app.doc.display.environment_horizon);
+    let mut expected = h.app.doc.display.clone();
+    for (label, horizon) in [("Sky and ground", true), ("Plain", false)] {
+        let output = h.frame(vec![], egui::Modifiers::NONE);
+        h.click(sidebar_position(&h, &output, label));
+        expected.environment_horizon = horizon;
+        assert_eq!(h.app.doc.display, expected);
+        assert!(!h.app.project.modified);
+    }
+}
 
 fn check_face_style(style: benchup_core::FaceStyle) {
     let mut h = options_workspace();
@@ -869,6 +884,7 @@ fn color_button_position(
 
 fn edit_environment_color(key: &str) {
     let mut h = options_workspace();
+    h.app.doc.display.environment_horizon = key != "background";
     let before = serde_json::to_value(&h.app.doc.display).unwrap()[key].clone();
     let actual =
         crate::environment::for_theme(&h.app.doc.display, h.ctx.global_style().visuals.dark_mode);

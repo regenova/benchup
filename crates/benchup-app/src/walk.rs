@@ -137,7 +137,6 @@ impl BenchUpApp {
             || self.account.open
             || self.object_creation.is_some()
             || self.object_rename.is_some()
-            || self.viewports.renaming.is_some()
             || self.text_editor.is_some()
             || self.joinery.open
             || self.fasteners.open

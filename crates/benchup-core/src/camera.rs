@@ -11,6 +11,9 @@ pub struct Camera {
     pub projection: Projection,
     /// Vertical field of view in radians; also sets the parallel view scale.
     pub fov: f64,
+    /// Perspective weight for a transient viewport frame, from parallel (0) to perspective (1).
+    #[serde(skip)]
+    pub projection_blend: Option<f64>,
 }
 impl Default for Camera {
     fn default() -> Self {
@@ -21,6 +24,7 @@ impl Default for Camera {
             pitch: 0.62,
             projection: Projection::default(),
             fov: Self::FOV,
+            projection_blend: None,
         }
     }
 }
@@ -147,6 +151,9 @@ impl Camera {
         }
     }
     pub fn toward_eye(&self, point: DVec3) -> DVec3 {
+        if let Some(weight) = self.projection_blend {
+            return (self.eye() - self.target) + (self.target - point) * weight;
+        }
         match self.projection {
             Projection::Perspective => self.eye() - point,
             Projection::Parallel => self.eye() - self.target,
@@ -170,20 +177,18 @@ impl Camera {
     /// Alternative depth precision without changing the screen projection.
     pub fn matrix_with_clip_planes(&self, size: DVec2, near: f64, far: f64) -> DMat4 {
         let aspect = (size.x / size.y.max(1.0)).max(0.01);
-        let projection = match self.projection {
-            Projection::Perspective => DMat4::perspective_rh(self.fov, aspect, near, far),
-            Projection::Parallel => {
-                let half_height = self.distance * (self.fov * 0.5).tan();
-                let half_width = half_height * aspect;
-                DMat4::orthographic_rh(
-                    -half_width,
-                    half_width,
-                    -half_height,
-                    half_height,
-                    near,
-                    far,
-                )
-            }
+        let parallel = || {
+            let half_height = self.distance * (self.fov * 0.5).tan();
+            let half_width = half_height * aspect;
+            DMat4::orthographic_rh(-half_width, half_width, -half_height, half_height, near, far)
+        };
+        let perspective = || DMat4::perspective_rh(self.fov, aspect, near, far);
+        let projection = match (self.projection_blend, self.projection) {
+            // At the orbit target, clip-space w is distance for perspective and
+            // 1 for parallel. Match them there before blending the matrices.
+            (Some(weight), _) => perspective() * weight + parallel() * (self.distance * (1. - weight)),
+            (None, Projection::Perspective) => perspective(),
+            (None, Projection::Parallel) => parallel(),
         };
         projection * DMat4::look_at_rh(self.eye(), self.target, self.up())
     }
@@ -196,6 +201,7 @@ impl Camera {
             matrix: self.matrix_with_clip_planes(size, near, far),
             inverse: std::cell::OnceCell::new(),
             eye: self.eye(),
+            blended_ray: self.projection_blend.map(|weight| (self.target, weight)),
             parallel_direction: (self.projection == Projection::Parallel)
                 .then(|| (self.target - self.eye()).normalize()),
             size,
@@ -300,6 +306,7 @@ pub struct CameraView {
     matrix: DMat4,
     inverse: std::cell::OnceCell<DMat4>,
     eye: DVec3,
+    blended_ray: Option<(DVec3, f64)>,
     parallel_direction: Option<DVec3>,
     size: DVec2,
 }
@@ -325,7 +332,7 @@ impl CameraView {
             return None;
         }
         let ndc = p.truncate() / p.w;
-        if self.parallel_direction.is_some() && ndc.z < 0. {
+        if (self.parallel_direction.is_some() || self.blended_ray.is_some()) && ndc.z < 0. {
             return None;
         }
         Some(DVec3::new(
@@ -468,7 +475,7 @@ impl CameraView {
             * DVec4::new(
                 ndc.x,
                 ndc.y,
-                if self.parallel_direction.is_some() {
+                if self.parallel_direction.is_some() || self.blended_ray.is_some() {
                     0.
                 } else {
                     0.5
@@ -476,7 +483,12 @@ impl CameraView {
                 1.0,
             );
         let world = world.truncate() / world.w;
-        if let Some(direction) = self.parallel_direction {
+        if let Some((target, weight)) = self.blended_ray {
+            Ray {
+                origin: world,
+                direction: (target - self.eye + (world - target) * weight).normalize(),
+            }
+        } else if let Some(direction) = self.parallel_direction {
             Ray {
                 origin: world,
                 direction,
@@ -493,6 +505,27 @@ impl CameraView {
 #[cfg(test)]
 mod projection_tests {
     use super::*;
+
+    #[test]
+    fn projection_blend_preserves_target_scale_and_rays() {
+        let size = DVec2::new(1200., 800.);
+        let camera = Camera::default();
+        let on_target_plane = camera.target + camera.right();
+        let off_target_plane = on_target_plane + (camera.eye() - camera.target).normalize() * 2.;
+        let target_plane_pixel = camera.project(on_target_plane, size).unwrap();
+        let perspective_pixel = camera.project(off_target_plane, size).unwrap();
+        let mut previous_x = target_plane_pixel.x;
+        for weight in [0., 0.25, 0.5, 0.75, 1.] {
+            let frame = Camera { projection_blend: Some(weight), ..camera.clone() };
+            let pixel = frame.project(off_target_plane, size).unwrap();
+            assert!(pixel.x + 1e-10 >= previous_x && pixel.x <= perspective_pixel.x + 1e-10);
+            previous_x = pixel.x;
+            assert!(frame.project(on_target_plane, size).unwrap().distance(target_plane_pixel) < 1e-10);
+            let ray = frame.ray(pixel, size);
+            assert!((off_target_plane - ray.origin).cross(ray.direction).length() < 1e-10);
+            assert_eq!(serde_json::to_value(&frame).unwrap(), serde_json::to_value(&camera).unwrap());
+        }
+    }
 
     #[test]
     fn close_perspective_zoom_keeps_moving_slowly_along_pointer_ray() {
@@ -689,6 +722,7 @@ mod projection_tests {
             inverse: std::cell::OnceCell::new(),
             eye: DVec3::ZERO,
             parallel_direction: None,
+            blended_ray: None,
             size,
         };
         let inside = [

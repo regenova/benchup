@@ -187,12 +187,12 @@ impl BenchUpApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(tr!("common.remove"))
                             .on_hover_text(tr!("projects.remove_from_recent_projects"))
-                            .clicked()
+                            .menu_activated()
                         {
                             remove = Some(index);
                         }
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            if ui.add(Self::menu_item_button(ui, label, None).wrap()).on_hover_text(detail).clicked() {
+                            if ui.add(Self::menu_item_button(ui, label, None).wrap()).on_hover_text(detail).menu_activated() {
                                 chosen = Some(index);
                             }
                         });
@@ -202,6 +202,7 @@ impl BenchUpApp {
             if let Some(index) = remove {
                 self.project.recent.remove(index);
                 ctx.request_repaint();
+                ui.close();
             } else if let Some(index) = chosen {
                 self.request_project(Action::Recent(index), ctx);
                 ui.close();
@@ -229,6 +230,7 @@ impl BenchUpApp {
         doc.display.group_emphasis = self.doc.display.group_emphasis;
         doc.display.grain_direction = self.doc.display.grain_direction;
         doc.display.router_preview = self.doc.display.router_preview;
+        doc.display.environment_horizon = self.doc.display.environment_horizon;
         // Snapping targets are app preferences, including when an older project
         // carries the former geometry master switch in its document.
         doc.snap_to_geometry =
@@ -238,8 +240,8 @@ impl BenchUpApp {
         storage::invalidate_selection_source();
         self.doc = doc;
         self.doc_epoch += 1;
-        self.viewports
-            .reframe_project(&self.doc.camera, &self.doc.viewport_cameras);
+        self.view_transition = None;
+        self.touch_zoom = Default::default();
         self.selected = Self::restore_document_selection(&mut self.doc);
         self.outliner_anchor = None;
         self.hover = None;
@@ -444,7 +446,6 @@ impl BenchUpApp {
             return;
         }
         self.sync_stock_materials(ctx);
-        self.sync_viewport_cameras();
         self.sync_selection();
         if let Some(link) = &mut self.doc.shared_project {
             link.file_updated_at = sharing::now_timestamp();
@@ -473,7 +474,7 @@ impl BenchUpApp {
                 && self.doc.model.connections.is_empty()
                 && self.history_preview.is_none() && self.modeling.is_none()
                 && self.joint_highlight_preview_key().is_none())
-                .then(|| self.viewports.capture_resident(
+                .then(|| self.scene_cache.capture_resident(
                     &super::screenshot_dialog::capture_display(&self.doc, ctx.global_style().visuals.dark_mode),
                     self.render_model.shared(), self.render_model.revision(),
                 )).flatten().map(|scene| (scene, crate::screenshots::visible_points_with_entities(&self.doc.model, &self.entity_cache)));
@@ -606,9 +607,7 @@ impl BenchUpApp {
                 #[cfg(target_arch = "wasm32")]
                 let reloading = false;
                 if reloading {
-                    self.sync_viewport_cameras();
                     doc.camera = self.doc.camera.clone();
-                    doc.viewport_cameras = self.doc.viewport_cameras.clone();
                 }
                 self.replace_project(*doc, path, ctx);
                 if !reloading {

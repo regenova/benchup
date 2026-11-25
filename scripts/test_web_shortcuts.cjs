@@ -22,7 +22,7 @@ function createWorkspace({keyboardSupported = true, pointerSupported = true, leg
         dataset: {walkActive: 'false', walkInputEnabled: 'true', walkPlaced: 'true'},
         clientWidth: 1000, clientHeight: 500,
         getBoundingClientRect: () => ({left: 0, top: 0, width: 1000, height: 500}),
-        getAttribute: key => key === 'data-model-viewports' ? '[[0,0,1000,500]]' : null,
+        getAttribute: key => key === 'data-model-viewport' ? '[0,0,1000,500]' : null,
         focus() {},
         addEventListener(type, callback) { listen(canvasListeners, type, callback); },
         dispatchEvent(event) {

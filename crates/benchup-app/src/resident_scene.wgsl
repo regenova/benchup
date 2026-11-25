@@ -92,11 +92,8 @@ fn surface_vertex(position: vec3<f32>, normal: vec3<f32>, anchor: vec3<f32>, col
     let state=interaction_state(interaction);
     let factors=preview_factors(state);
     var n = normalize(normal / factors);
-    var toward_eye = camera.eye.xyz - preview_point(anchor,state);
-    if camera.flags.y != 0.0 {
-        // Perspective division is disabled, but lighting still faces the eye.
-        toward_eye = camera.direction.xyz;
-    }
+    let toward_eye = mix(camera.eye.xyz - preview_point(anchor,state),
+        camera.direction.xyz * max(camera.direction.w, 0.005), camera.flags.y);
     if dot(n, toward_eye) < 0.0 { n = -n; }
     var material=color;
     var surface=finish;

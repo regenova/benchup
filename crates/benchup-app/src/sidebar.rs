@@ -61,7 +61,6 @@ pub(super) struct InspectorPreferences {
     general: settings::GeneralSettings,
     visible: bool,
     width: f32,
-    tool_rail_width: f32,
     docking: Option<docking::DockLayout>,
     component_filter: String,
     outliner_filter: String,
@@ -85,7 +84,6 @@ pub(super) struct InspectorPreferences {
     last_seen_release_notes: Option<String>,
     display: Option<DisplaySettings>,
     camera: Option<CameraPreferences>,
-    viewports: viewports::Preferences,
     screenshot: crate::screenshots::Settings,
     recent_projects: Vec<projects::RecentProject>,
     import_format: String,
@@ -110,7 +108,6 @@ impl Default for InspectorPreferences {
             general: Default::default(),
             visible: true,
             width: 300.,
-            tool_rail_width: 76.,
             docking: None,
             component_filter: String::new(),
             outliner_filter: String::new(),
@@ -122,7 +119,7 @@ impl Default for InspectorPreferences {
             orbit_origin: OrbitOrigin::default(),
             tool_rail_order: Tool::RAIL.to_vec(),
             tool_rail_order_revision: 0,
-            tool_rail_separators: Vec::new(),
+            tool_rail_separators: tool_rail::DEFAULT_SEPARATORS.to_vec(),
             snapping: None,
             cutting_plan: CuttingPlanPreferences::default(),
             time_estimates: Default::default(),
@@ -134,7 +131,6 @@ impl Default for InspectorPreferences {
             last_seen_release_notes: None,
             display: None,
             camera: None,
-            viewports: viewports::Preferences::default(),
             screenshot: Default::default(),
             recent_projects: Vec::new(),
             import_format: "skp".into(),
@@ -249,7 +245,10 @@ mod guide_preference_tests {
     #[test]
     fn tool_rail_separators_default_and_restore_without_model_edits() {
         let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
-        assert!(legacy.tool_rail_separators.is_empty());
+        assert_eq!(legacy.tool_rail_separators, tool_rail::DEFAULT_SEPARATORS);
+        let legacy_with_width: InspectorPreferences =
+            serde_json::from_str(r#"{"tool_rail_width":148,"tool_rail_separators":[]}"#).unwrap();
+        assert!(legacy_with_width.tool_rail_separators.is_empty());
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
@@ -310,22 +309,6 @@ mod guide_preference_tests {
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         app.restore_inspector_preferences(&ctx, Some(&storage));
         assert_eq!(app.tool_rail_separators, vec![0, 2]);
-    }
-
-    #[test]
-    fn tool_rail_width_defaults_and_saves_without_model_edits() {
-        let legacy: InspectorPreferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(legacy.tool_rail_width, 76.);
-        let ctx = egui::Context::default();
-        let mut app = BenchUpApp::with_document(Document::default(), None, true);
-        let mut storage = Storage::default();
-        app.tool_rail_width = 148.;
-        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
-        assert!(storage.flushed);
-        assert!(!app.project.modified);
-        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
-        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
-        assert_eq!(restored.tool_rail_width, 148.);
     }
 
     #[test]
@@ -1063,11 +1046,6 @@ impl BenchUpApp {
         } else {
             300.
         };
-        self.tool_rail_width = if preferences.tool_rail_width.is_finite() {
-            preferences.tool_rail_width.clamp(76., 320.)
-        } else {
-            76.
-        };
         self.component_filter = preferences.component_filter.clone();
         self.outliner_filter = preferences.outliner_filter.clone();
         self.shortcut_filter = preferences.shortcut_filter.clone();
@@ -1108,11 +1086,6 @@ impl BenchUpApp {
         if let Some(camera) = &preferences.camera {
             camera.restore(&mut self.doc.camera);
         }
-        self.viewports = viewports::Workspace::restore(
-            &preferences.viewports,
-            &mut self.doc.camera,
-            &self.doc.viewport_cameras,
-        );
         if self.tool == Tool::Walk {
             self.walk.original_camera = Some(self.doc.camera.clone());
         }
@@ -1153,7 +1126,6 @@ impl BenchUpApp {
             general: self.general_settings.clone(),
             visible: self.inspector,
             width: self.inspector_width,
-            tool_rail_width: self.tool_rail_width,
             // Capture the effective layout even before the inspector first renders.
             docking: InspectorLayout::restore(
                 self.inspector_layout.dock.as_ref(),
@@ -1195,7 +1167,6 @@ impl BenchUpApp {
             last_seen_release_notes: self.release_notes.last_seen_version.clone(),
             display: Some(self.doc.display.clone()),
             camera: Some(CameraPreferences::capture(&self.doc.camera)),
-            viewports: self.viewports.capture(&self.doc.camera),
             screenshot: self.screenshot.settings.clone(),
             recent_projects: self.project.recent.clone(),
             import_format: self.project.import_format.clone(),
@@ -1257,8 +1228,7 @@ impl BenchUpApp {
         {
             self.save_inspector_preferences(storage);
         }
-        // Selection alone must survive an immediate reload, without marking
-        // the model modified or waiting for the document autosave delay.
+        // Preserve selection changes immediately, even without a model edit.
         if self.sync_selection() {
             if self.dirty_since.is_some() || self.storage_recovery {self.persist();}
             else {match storage::save_selection(&self.doc) {Ok(())=>self.save_error=None,Err(error)=>self.save_error=Some(error)}}
@@ -4027,6 +3997,37 @@ mod preference_tests {
     }
 
     #[test]
+    fn environment_mode_defaults_to_plain_and_persists_without_model_edit() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = SavedPreferences::default();
+        storage.set_string(
+            PREFERENCE_KEY,
+            "(display:Some((sky:false,ground:true)))".into(),
+        );
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert!(!app.doc.display.environment_horizon);
+        assert!(!app.doc.display.sky);
+        for horizon in [true, false] {
+            storage.flushed = false;
+            app.doc.display.environment_horizon = horizon;
+            app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+            assert!(storage.flushed);
+            assert!(!app.project.modified);
+            assert!(app.dirty_since.is_none());
+
+            let restored_ctx = egui::Context::default();
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&restored_ctx, Some(&storage));
+            assert_eq!(restored.doc.display.environment_horizon, horizon);
+            let mut other = Document::default();
+            other.display.environment_horizon = !horizon;
+            restored.replace_project(other, None, &restored_ctx);
+            assert_eq!(restored.doc.display.environment_horizon, horizon);
+        }
+    }
+
+    #[test]
     fn sidebar_preferences_save_immediately_and_restore_without_a_model_edit() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
@@ -4056,7 +4057,6 @@ mod preference_tests {
             ("fog", true),
             ("view", false),
             ("view_camera", true),
-            ("view_standard_views", true),
             ("outliner_object/42", true),
         ] {
             let id = egui::Id::unique(key);
@@ -4987,6 +4987,29 @@ mod preference_tests {
     }
 
     #[test]
+    fn preferences_with_retired_view_layout_keep_the_camera_and_inspector_width() {
+        let mut storage = SavedPreferences::default();
+        storage.set_string(PREFERENCE_KEY, r#"(
+            width: 372.0,
+            camera: Some((yaw: 0.5, pitch: 0.25)),
+            viewports: (
+                layout: Split(id: 2, horizontal: true, ratio: 0.5,
+                    first: Pane(id: 0, tabs: [0], selected: 0),
+                    second: Pane(id: 1, tabs: [1], selected: 1)),
+                active: 1,
+                names: {1: "Plan"},
+            ),
+        )"#.into());
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let ctx = egui::Context::default();
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert_eq!(app.inspector_width, 372.);
+        assert_eq!((app.doc.camera.yaw, app.doc.camera.pitch), (0.5, 0.25));
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(!storage.get_string(PREFERENCE_KEY).unwrap().contains("viewports:"));
+    }
+
+    #[test]
     fn view_preferences_restore_groups_without_copying_another_models_framing() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
@@ -5000,7 +5023,6 @@ mod preference_tests {
         for (key, open) in [
             ("view", false),
             ("view_camera", true),
-            ("view_standard_views", true),
         ] {
             set_section_open(&ctx, key, open);
         }
@@ -5024,10 +5046,6 @@ mod preference_tests {
             ui.push_id("floating_view", |ui| {
                 assert_eq!(restored_header_open(ui, "view", true), Some(false));
                 assert_eq!(restored_header_open(ui, "view_camera", false), Some(true));
-                assert_eq!(
-                    restored_header_open(ui, "view_standard_views", false),
-                    Some(true)
-                );
             });
         });
         let mut preferences = refreshed.current_inspector_preferences(&refreshed_ctx);
@@ -5264,7 +5282,6 @@ fn inspector_icon_color(ui: &egui::Ui, id: &str) -> Color32 {
         "tags" => ([160, 111, 22], [230, 190, 104]),
         "display" => ([198, 76, 58], [246, 142, 125]),
         "view" | "view_camera" => ([48, 111, 173], [131, 185, 239]),
-        "view_standard_views" => ([17, 129, 133], [103, 207, 211]),
         "edge_style" | "connections/fasteners" => ([88, 109, 135], [159, 181, 209]),
         "sections" => ([176, 67, 113], [237, 142, 181]),
         "shadows" => ([183, 92, 19], [242, 170, 100]),
@@ -6134,6 +6151,7 @@ impl BenchUpApp {
             };
         }
         before.grain_direction = self.doc.display.grain_direction;
+        before.environment_horizon = self.doc.display.environment_horizon;
         if before != self.doc.display {
             self.changed(ui.ctx());
         }

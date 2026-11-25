@@ -51,8 +51,7 @@
 | Pan | **Hold Shift while orbiting**, including middle-drag |
 | Zoom | Mouse wheel; anchors at the pointer on the camera target plane |
 | Fit all geometry | Fit view button |
-| Standard view | Click an axis on the compass: Top, Bottom, Front, Back, Left, or Right |
-| New view | **+** after the view tabs above the viewport |
+| Switch views | **3D**, **Front**, **Side**, or **Top** in the upper-left corner of the viewport |
 | Focus on Edited Group | Enabled by default. View → Focus on Edited Group toggles the group/component currently being edited solid and everything else in muted wireframe, regardless of selection. Has no visual effect outside a group/component |
 | Toggle right sidebar | Tab, or the model inspector button |
 | Ground, sky, and horizon colors | Model inspector → Display → Environment; color pickers, Sky/Ground toggles, and reset colors |
@@ -66,9 +65,7 @@ Orbiting always uses the combined bounding-box center of all objects, including 
 
 Settings → Tools defines named reference volumes with width (X), depth (Y), and height (Z) in the workspace's length units. Add or remove entries there. View → Reference volume, below Sections, lists those entries: select one to show it, select it again to hide it, or select another to switch. Only one volume is visible at a time. The box is centered on the origin with its base at Z = 0. Face portions beyond its bounds receive a transparent red tint and trigger a warning. Entries and dimensions are remembered across projects. Reference volumes are not model geometry and are never exported. Assign or clear **Toggle reference volume** in Settings → Shortcuts management; it is unassigned by default.
 
-Click an axis label on the compass to look along it: −Y is the Front view, +X Right, +Y Back, −X Left, +Z Top, and −Z Bottom. The front of a model faces −Y. The sidebar's **Camera** section chooses Perspective or Parallel (orthographic) projection, sets the field of view in perspective (15–100°), and offers **Fit model**, **Fit selection**, and **Reset camera**.
-
-The tabs above the viewport are views of the same model. Each view keeps its own camera, while the model, selection, and undo history are shared; tools act in the active view. Click **+** to add a view that starts from the current camera. Drag a tab to an edge of a viewport to split the workspace, or to its center to stack it there as a tab. Right-click a tab to rename or close it; the last view cannot be closed. Each view's camera is saved in the project file. The layout, view names, and the active view are application preferences, so they are remembered across restarts but do not travel with the file.
+The viewport animates when you switch views. **3D** uses perspective, while **Front**, **Side**, and **Top** use orthographic projection. **Front** looks from −Y, **Side** from +X, and **Top** from +Z. Drag the compass to orbit. The sidebar's **Camera** section sets projection and perspective field of view (15–100°) and offers **Fit model**, **Fit selection**, and **Reset camera**.
 
 For a 3Dconnexion SpaceMouse, open Settings → Navigation and select **3D Mouse**. Tilt or twist the cap to orbit, slide it to pan, and push or pull it to zoom. The Fit button frames the model. Both navigation types share the Orbit, Pan, and Zoom controls and **Invert tilt and twist**, **Invert pan**, and **Invert zoom** options. Each type keeps its own saved values. For Mouse/Trackpad, inversion applies to orbit drags, panning, and wheel or pinch zoom.
 

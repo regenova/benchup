@@ -275,7 +275,6 @@ impl BenchUpApp {
         &self,
         ui: &egui::Ui,
         response: &egui::Response,
-        active: bool,
     ) {
         let painter = ui
             .painter()
@@ -288,8 +287,7 @@ impl BenchUpApp {
                     .ctx()
                     .input(|i| i.pointer.hover_pos())
                     .is_some_and(|pos| handle.rect.contains(pos));
-            let dragging = active
-                && self
+            let dragging = self
                     .section_drag
                     .as_ref()
                     .is_some_and(|drag| drag.axis == handle.axis);
@@ -423,24 +421,12 @@ mod tests {
     }
 
     #[test]
-    fn section_handle_routes_drag_to_pressed_view_and_keeps_model_tools_idle() {
+    fn section_handle_drag_keeps_camera_and_model_tools_idle() {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         app.doc.display.section_planes = true;
         app.doc.display.section_cuts = true;
         app.doc.display.section_axes = [true, false, false];
-        let preferences = serde_json::from_value(serde_json::json!({
-            "layout": {"Split": {"id":2,"horizontal":true,"ratio":0.5,
-                "first":{"Pane":{"id":0,"tabs":[0],"selected":0}},
-                "second":{"Pane":{"id":1,"tabs":[1],"selected":1}}}},
-            "active":0,"next_id":3
-        }))
-        .unwrap();
-        let mut other_camera = Camera::default();
-        other_camera.set_standard_view(benchup_core::StandardView::Right);
-        let saved =
-            std::collections::BTreeMap::from([(0, app.doc.camera.clone()), (1, other_camera)]);
-        app.viewports = viewports::Workspace::restore(&preferences, &mut app.doc.camera, &saved);
         let output = frame(&mut app, &ctx, vec![]);
         let handle = output
             .shapes
@@ -448,34 +434,32 @@ mod tests {
             .rev()
             .find_map(|shape| {
                 if let egui::Shape::Text(text) = &shape.shape {
-                    if text.galley.job.text == "X" && text.pos.x > 500. {
+                    if text.galley.job.text == "X" {
                         return Some(text.pos + text.galley.size() * 0.5);
                     }
                 }
                 None
             })
-            .expect("right viewport section handle");
+            .expect("viewport section handle");
         frame(&mut app, &ctx, button(handle, true));
         assert!(app.section_drag.is_some());
         assert!(app.gesture.is_none());
         let selected = app.selected.clone();
         let camera = app.doc.camera.clone();
-        let moved = handle - egui::vec2(0., 50.);
+        let drag = app.section_drag.as_ref().unwrap();
+        let moved = handle + drag.screen_axis * 50.;
+        let previous_offset = drag.offset;
         frame(&mut app, &ctx, vec![egui::Event::PointerMoved(moved)]);
-        assert!(app.doc.display.section_offsets[0] > 1.);
+        assert_ne!(app.doc.display.section_offsets[0], previous_offset);
         assert_eq!(
             app.doc.display.section_limits()[0],
             Some(app.doc.display.section_offsets[0])
         );
-        // A drag stays with its original viewport even across another pane.
+        // The drag keeps its handle when the pointer moves away.
         frame(
             &mut app,
             &ctx,
             vec![egui::Event::PointerMoved(egui::pos2(200., moved.y))],
-        );
-        assert_eq!(
-            serde_json::to_value(app.viewports.capture(&app.doc.camera)).unwrap()["active"],
-            1
         );
         assert_eq!(app.doc.camera, camera);
         assert_eq!(app.selected, selected);
