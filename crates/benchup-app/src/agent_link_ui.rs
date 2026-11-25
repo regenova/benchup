@@ -1,4 +1,4 @@
-//! Settings → Agent connection, the status-bar control indicator and the
+//! Settings → Agent connection, the toolbar control indicator and the
 //! dialog that asks the designer to grant or deny access.
 use super::*;
 use crate::inspector_table::inspector_field;

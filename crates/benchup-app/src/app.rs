@@ -3089,6 +3089,7 @@ impl BenchUpApp {
                         }
                         ui.add(egui::Separator::default().vertical().spacing(12.));
                     }
+                    self.agent_status_chip(ui);
                     let suggestion_icon = egui::Atom::paint(egui::vec2(18., 18.), |ui, args| {
                         icons::line_icon(ui.painter(), args.rect.center(), "suggest_feature", args.fallback_text_color);
                     });
@@ -3405,106 +3406,97 @@ impl BenchUpApp {
         };
         message.into()
     }
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
+    fn toolbar_precision(&mut self, ui: &mut egui::Ui) {
+        if self.tool == Tool::Text
+            || (self.doc.display.dimension_input_overlay && !self.tool.is_measuring())
+        {
+            return;
+        }
         let colors = Palette::for_ui(ui);
-        let ctx = ui.ctx().clone();
-        egui::Panel::bottom("status")
-            .exact_size(42.)
-            .frame(
-                egui::Frame::new()
-                    .fill(colors.paper)
-                    .inner_margin(egui::Margin::symmetric(16, 5)),
+        if self.tool.is_measuring() && !self.measurement_precision_available() {
+            if let Some(value) = self.measurement_value() {
+                ui.text_label(RichText::new(value).monospace().strong());
+                let label = if self.tool == Tool::Protractor {
+                    tr!("app.angle")
+                } else {
+                    tr!("app.distance")
+                };
+                ui.text_label(
+                    RichText::new(label).size(12.).color(colors.muted),
+                );
+            }
+            return;
+        }
+        if !self.precision_available() {
+            return;
+        }
+
+        let rectangular = matches!(self.tool, Tool::Rectangle | Tool::Image);
+        let hint = if self.measurement_precision_available() {
+            self.measurement_value().unwrap_or_default()
+        } else if let Some(edit) = &self.modeling {
+            match self.tool {
+                Tool::Scale => format!("{:.3}", edit.value),
+                Tool::Rotate => self.doc.display.units.format_angle(edit.value),
+                _ => self.doc.display.units.format_length(edit.value),
+            }
+        } else if self.last_move_copy.is_some() {
+            "/3 or 3x".into()
+        } else if self.drawing.is_some() && rectangular {
+            "5m,50mm".into()
+        } else if self.drawing.is_some() {
+            "5cm".into()
+        } else if let (Some(a), Some(b)) = (self.line_start, self.snap) {
+            self.doc.display.units.format_length(a.distance(b.point))
+        } else {
+            self.doc.display.units.format_length(0.)
+        };
+        let width = (ui.available_width() * 0.5).min(if rectangular { 300. } else { 212. });
+        let tooltip = if matches!(self.tool, Tool::Rotate | Tool::Protractor) {
+            tr!(
+                "app.enter_an_angle_or_formula_such_as_90",
+                self.doc.display.units.angle.label()
             )
-            .show(ui, |ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if self.tool == Tool::Text { return; }
-                        // The floating boxes on the geometry replace this field;
-                        // it returns when they are turned off in View options.
-                        if self.doc.display.dimension_input_overlay && !self.tool.is_measuring() { return; }
-                        if self.tool.is_measuring() && !self.measurement_precision_available() {
-                            ui.text_label(
-                                RichText::new(
-                                    self.measurement_value().unwrap_or_else(|| "—".into()),
-                                )
-                                .monospace()
-                                .strong(),
-                            );
-                            ui.text_label(
-                                RichText::new(if self.tool == Tool::Protractor {
-                                    tr!("app.angle")
-                                } else {
-                                    tr!("app.distance")
-                                })
-                                .size(12.)
-                                .color(colors.muted),
-                            );
-                            return;
-                        }
-                        if self.tool == Tool::Scale {
-                            ui.text_label(RichText::new(tr!("app.scale_factor_symbol")).color(colors.muted));
-                        }
-                        if self.tool == Tool::PushPull && let Some(edit) = &self.modeling {
-                            let value = precision::modeling_value_with_units(
-                                self.tool, &self.length_input, self.doc.display.units,
-                            ).unwrap_or(edit.value);
-                            ui.text_label(RichText::new(self.push_pull_readout(edit, value)).monospace());
-                        }
-                        let available = self.precision_available();
-                        let hint = if self.measurement_precision_available() {
-                            self.measurement_value().unwrap_or_default()
-                        } else if let Some(edit) = &self.modeling {
-                            if self.tool == Tool::Scale { format!("{:.3}", edit.value) } else if self.tool == Tool::Rotate { self.doc.display.units.format_angle(edit.value) } else { self.doc.display.units.format_length(edit.value) }
-                        } else if self.last_move_copy.is_some() {
-                            "/3 or 3x".into()
-                        } else if self.drawing.is_some() && matches!(self.tool, Tool::Rectangle | Tool::Image) {
-                            "5m,50mm".into()
-                        } else if self.drawing.is_some() {
-                            "5cm".into()
-                        } else if let (Some(a), Some(b)) = (self.line_start, self.snap) {
-                            self.doc.display.units.format_length(a.distance(b.point))
-                        } else {
-                            self.doc.display.units.format_length(0.)
-                        };
-                        let field = ui.add_enabled(
-                            available,
-                            egui::TextEdit::singleline(&mut self.length_input)
-                                .id(egui::Id::unique("precision_input"))
-                                .desired_width(if matches!(self.tool, Tool::Rectangle | Tool::Image) { 300. } else { 212. })
-                                .font(egui::TextStyle::Monospace)
-                                .hint_text(hint)
-                                .char_limit(precision::MAX_INPUT_LEN)
-                                .margin(egui::vec2(9., 6.)),
-                        ).on_hover_text(if matches!(self.tool, Tool::Rotate | Tool::Protractor) {
-                            tr!("app.enter_an_angle_or_formula_such_as_90", self.doc.display.units.angle.label())
-                        } else {
-                            tr!("app.use_lengths_or_formulas_60cm_89mm_1m_20cm", self.doc.display.units.length.label())
-                        });
-                        if (field.has_focus() || field.lost_focus())
-                            && ctx.input(|i| i.key_pressed(Key::Enter))
-                        {
-                            if self.measurement_precision_available() {
-                                self.commit_measurement_value(&ctx);
-                            } else if self.modeling.is_some() {
-                                self.commit_modeling(&ctx);
-                            } else if self.last_move_copy.is_some() {
-                                self.commit_move_array(&ctx);
-                            } else if self.drawing.is_some() {
-                                self.commit_drawing(&ctx);
-                            } else {
-                                self.commit_line(&ctx, true);
-                            }
-                            field.surrender_focus();
-                        }
-                        ui.text_label(
-                            RichText::new(self.precision_field_label())
-                            .size(12.)
-                            .color(colors.muted),
-                        );
-                    });
-                    self.agent_status_chip(ui);
-                });
-            });
+        } else {
+            tr!(
+                "app.use_lengths_or_formulas_60cm_89mm_1m_20cm",
+                self.doc.display.units.length.label()
+            )
+        };
+        let field = ui
+            .add(
+                egui::TextEdit::singleline(&mut self.length_input)
+                    .id(egui::Id::unique("precision_input"))
+                    .desired_width(width)
+                    .font(egui::TextStyle::Monospace)
+                    .hint_text(hint)
+                    .char_limit(precision::MAX_INPUT_LEN)
+                    .margin(egui::vec2(9., 6.)),
+            )
+            .on_hover_text(tooltip);
+        let ctx = ui.ctx();
+        if (field.has_focus() || field.lost_focus()) && ctx.input(|i| i.key_pressed(Key::Enter)) {
+            if self.measurement_precision_available() {
+                self.commit_measurement_value(ctx);
+            } else if self.modeling.is_some() {
+                self.commit_modeling(ctx);
+            } else if self.last_move_copy.is_some() {
+                self.commit_move_array(ctx);
+            } else if self.drawing.is_some() {
+                self.commit_drawing(ctx);
+            } else {
+                self.commit_line(ctx, true);
+            }
+            field.surrender_focus();
+        }
+        if let Some(readout) = self.dimension_note() {
+            ui.text_label(RichText::new(readout).monospace());
+        }
+        ui.text_label(
+            RichText::new(self.precision_field_label())
+                .size(12.)
+                .color(colors.muted),
+        );
     }
     fn tool_tooltip(&self, response: egui::Response, tool: Tool) -> egui::Response {
         response.on_hover_ui(|ui| {
@@ -6815,6 +6807,7 @@ impl BenchUpApp {
                                     self.paint_menu(ui);
                                     ui.separator();
                                     self.walk_button(ui);
+                                    self.toolbar_precision(ui);
                                     ui.allocate_ui_with_layout(
                                         ui.available_size(),
                                         egui::Layout::left_to_right(egui::Align::Center),
@@ -6997,7 +6990,6 @@ impl eframe::App for BenchUpApp {
         }
         let theme_before = ctx.options(|options| options.theme_preference);
         self.top_bar(ui);
-        self.status_bar(ui);
         let inspector_order_before = self.inspector_order;
         self.inspector_panel(ui);
         self.finish_image_adjustment(&ctx);

@@ -1,7 +1,7 @@
 //! Floating dimension inputs drawn on the geometry being sized.
 //!
 //! Typed characters already flow into `length_input` without focusing the
-//! status-bar field. These boxes mirror that buffer (or the live value when
+//! toolbar field. These boxes mirror that buffer (or the live value when
 //! nothing is typed) centered on the edge that the value changes, so the user
 //! sees where the dimension lands. Rectangles show one box per side; Tab
 //! switches which side receives typing. The boxes are display-only: a second
@@ -41,7 +41,7 @@ struct DimensionBox {
 const POINT_GAP: f32 = 24.;
 
 impl BenchUpApp {
-    /// Label shared by the status-bar field and the floating box.
+    /// Label shared by the toolbar field and the floating box.
     pub(super) fn precision_field_label(&self) -> &'static str {
         match self.tool {
             Tool::Scale => tr!("app.factor"),

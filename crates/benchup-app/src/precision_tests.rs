@@ -380,7 +380,7 @@ fn circles_and_polygons_accept_a_radius_with_units() {
 #[test]
 fn rectangle_dimensions_can_be_entered_in_the_focused_measurements_field() {
     let mut h = Harness::new();
-    // The status-bar field is shown when floating dimension boxes are off.
+    // The toolbar field is shown when floating dimension boxes are off.
     h.app.doc.display.dimension_input_overlay = false;
     h.key(Key::R);
     h.click(h.at(DVec3::ZERO));
